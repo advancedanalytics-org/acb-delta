@@ -8,7 +8,7 @@
  * When those are agreed, change this file and the mock fixtures; screens follow via TS errors.
  */
 
-export type VbplStatus = 'processing' | 'awaiting_review' | 'done'
+export type VbplStatus = 'processing' | 'awaiting_review' | 'done' | 'failed'
 
 export interface Vbpl {
   id: string
@@ -22,6 +22,8 @@ export interface Vbpl {
   status: VbplStatus
   impactCount: number
   pendingCount: number
+  /** Why the analysis failed; set only when status is 'failed'. */
+  error?: string
 }
 
 export interface InternalDocument {
@@ -52,7 +54,8 @@ export interface Impact {
   changeClause: string
   citation: string
   affectedText: string
-  page: number
+  /** Null until PDF ingestion (HUY-02) gives chunks a page; no highlight is drawn then. */
+  page: number | null
   bboxes: BBox[]
   type: ImpactType
   severity: Severity
