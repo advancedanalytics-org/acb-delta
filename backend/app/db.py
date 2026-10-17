@@ -26,3 +26,16 @@ def ping_database() -> None:
         ).scalar()
         if not has_vector:
             raise RuntimeError("pgvector extension is not installed")
+
+
+@lru_cache
+def get_sessionmaker():
+    from sqlalchemy.orm import sessionmaker
+
+    return sessionmaker(bind=get_engine(), expire_on_commit=False)
+
+
+def get_db():
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        yield session

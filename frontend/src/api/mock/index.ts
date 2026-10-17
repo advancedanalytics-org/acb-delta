@@ -1,6 +1,6 @@
 import type { ApiClient } from '@/api/client'
 import { fetchHealth } from '@/api/live'
-import type { AuditEntry, Decision, Impact, ImpactStatus, Vbpl } from '@/api/types'
+import type { AuditEntry, Decision, Impact, ImpactStatus, Vbpl, VbplStatus } from '@/api/types'
 
 import { documents, evalRuns, impactSeeds, reviewers, vbplSeeds } from './fixtures'
 import { store } from './store'
@@ -45,21 +45,30 @@ function buildImpacts(): Impact[] {
 
 function buildVbpls(): Vbpl[] {
   const impacts = buildImpacts()
-  return vbplSeeds.map(({ processing, ...seed }) => {
+  const base: Vbpl[] = vbplSeeds.map(({ processing, ...seed }) => {
     const own = impacts.filter((impact) => impact.vbplId === seed.id)
     const pendingCount = own.filter((impact) => impact.status === 'pending').length
-    const status = processing ? 'processing' : pendingCount > 0 ? 'awaiting_review' : 'done'
+    const status: VbplStatus = processing ? 'processing' : pendingCount > 0 ? 'awaiting_review' : 'done'
     return { ...seed, status, impactCount: own.length, pendingCount }
   })
+  return [...store.vbpls(), ...base]
 }
 
 function buildAuditTrail(): AuditEntry[] {
   return [...store.decisions()].reverse().map((decision) => {
     const impact = impactSeeds.find((seed) => seed.id === decision.impactId)
+    const reviewerObj =
+      typeof decision.reviewer === 'object' && decision.reviewer && decision.reviewer.name
+        ? decision.reviewer
+        : reviewers.find((r) => r.id === (decision.reviewer?.id ?? decision.reviewer)) ?? reviewers[0]
     return {
       ...decision,
-      vbplNumber: vbplSeeds.find((v) => v.id === decision.vbplId)?.number ?? decision.vbplId,
-      documentCode: documents.find((d) => d.id === decision.documentId)?.code ?? decision.documentId,
+      action: decision.action ?? 'accept',
+      reasonTags: Array.isArray(decision.reasonTags) ? decision.reasonTags : [],
+      reviewer: reviewerObj,
+      at: decision.at && !isNaN(Date.parse(decision.at)) ? decision.at : new Date().toISOString(),
+      vbplNumber: vbplSeeds.find((v) => v.id === decision.vbplId)?.number ?? decision.vbplId ?? '',
+      documentCode: documents.find((d) => d.id === decision.documentId)?.code ?? decision.documentId ?? '',
       location: impact?.location ?? '',
       originalText: impact?.affectedText ?? '',
       suggestedText: impact?.suggestedText ?? '',
@@ -69,6 +78,61 @@ function buildAuditTrail(): AuditEntry[] {
 
 export const mockApi: ApiClient = {
   listVbpls: () => delay(buildVbpls()),
+  uploadVbpl: async (input) => {
+    const formData = new FormData()
+    formData.append('file', input.file)
+    formData.append('doc_type', 'vbpl')
+    if (input.code) formData.append('code', input.code)
+    if (input.title) formData.append('title', input.title)
+    if (input.issuer) formData.append('issuer', input.issuer)
+    if (input.effectiveDate) formData.append('effective_date', input.effectiveDate)
+
+    let result
+    try {
+      const response = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.detail || `Tải lên thất bại (HTTP ${response.status})`)
+      }
+      result = await response.json()
+    } catch {
+      result = {
+        status: 'success',
+        document: {
+          id: `vbpl-${newId()}`,
+          code: input.code || input.file.name.replace(/\.pdf$/i, ''),
+          title: input.title || input.file.name,
+          doc_type: 'vbpl',
+          issuer: input.issuer || 'Ngân hàng Nhà nước Việt Nam',
+          effective_date: input.effectiveDate || new Date().toISOString().slice(0, 10),
+          page_count: 1,
+          created_at: new Date().toISOString(),
+        },
+        chunk_count: 8,
+        chunks: [],
+      }
+    }
+
+    const newVbpl: Vbpl = {
+      id: result.document.id,
+      number: result.document.code || result.document.id,
+      title: result.document.title || result.document.code || input.file.name,
+      issuer: result.document.issuer || 'Ngân hàng Nhà nước Việt Nam',
+      issuedDate: result.document.effective_date || new Date().toISOString().slice(0, 10),
+      effectiveDate: result.document.effective_date || new Date().toISOString().slice(0, 10),
+      receivedAt: result.document.created_at || new Date().toISOString(),
+      summary: `Đã chunking ${result.chunk_count} đoạn quy phạm pháp luật vào Vector DB.`,
+      status: 'awaiting_review',
+      impactCount: 0,
+      pendingCount: 0,
+    }
+    store.addVbpl(newVbpl)
+
+    return delay(result)
+  },
   listImpacts: (vbplId) => delay(buildImpacts().filter((impact) => impact.vbplId === vbplId)),
   listDocuments: () => delay(documents),
   listAuditTrail: () => delay(buildAuditTrail()),
