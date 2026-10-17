@@ -90,7 +90,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 
 ## Khoa
 
-- [ ] **KHOA-01** – Evaluation pipeline
+- [~] **KHOA-01** – Evaluation pipeline
   - [ ] Họp với Minh + Tài thống nhất luồng dữ liệu cho evaluate
   - [ ] Dựng Langfuse dataset từ ground truth của `TAI-03`
   - [ ] Metric từng bước:
