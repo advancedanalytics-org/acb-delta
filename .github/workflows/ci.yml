@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only one self-hosted runner: cancel superseded runs for the same PR/branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: PR title format
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check conventional commit format with task ID
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='feat|fix|docs|chore|refactor|test|ci|perf|build|style'
+          ids='(TAI|KHOA|HUY|MINH)-[0-9]{2}'
+          if [[ ! "$TITLE" =~ ^($types)(\($ids\))?!?:\ .+ ]]; then
+            echo "::error::PR title '$TITLE' must look like 'feat(HUY-02): short description'"
+            exit 1
+          fi
+          if [[ "$TITLE" =~ ^(feat|fix) && ! "$TITLE" =~ \($ids\) ]]; then
+            echo "::error::feat/fix PRs need a task ID scope from PLAN.md, e.g. 'feat(HUY-02): ...'"
+            exit 1
+          fi
+          echo "PR title OK: $TITLE"
+
+  build-test:
+    name: Build & test
+    # Never run untrusted fork code on the self-hosted runner.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64, aamacrunner]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+
+      # --- Python (runs only once the repo has a Python project) ---
+      - name: Set up Python
+        if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps into a workspace venv
+        if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e ".[dev]" || pip install -e .; fi
+          pip install pytest
+
+      - name: Run Python tests
+        if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
+        run: |
+          source .venv/bin/activate
+          # Exit code 5 = no tests collected yet; treat as pass.
+          pytest -q || { code=$?; [ "$code" -eq 5 ] && echo "No Python tests yet." || exit "$code"; }
+
+      # --- Node (runs only once the repo has a package.json) ---
+      - name: Set up Node
+        if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install, lint, test, build (Node)
+        if: hashFiles('package.json') != ''
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run lint --if-present
+          npm test --if-present
+          npm run build --if-present
+
+      - name: Nothing to build yet
+        if: hashFiles('pyproject.toml', 'requirements*.txt', 'package.json') == ''
+        run: echo "No Python or Node project detected yet; CI passes once checkout works."
