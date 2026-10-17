@@ -56,12 +56,12 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 
 ## Tài
 
-- [ ] **TAI-01** – Agent gợi ý chỉnh sửa (LangGraph)
-  - [ ] Node `extract_changes`: tách điều khoản mới / sửa đổi / bãi bỏ từ VBPL (structured output)
-  - [ ] Fan-out theo từng thay đổi (LangGraph `Send`) → gọi retrieve + rerank (dùng `MINH-01`)
-  - [ ] Node `judge_impact`: có bị ảnh hưởng không, loại (mâu thuẫn / tham chiếu lỗi thời / nghĩa vụ mới), mức độ, lý do, đoạn trích dẫn
-  - [ ] Node `draft_amendment`: văn bản gốc → văn bản đề xuất
-  - [ ] Pydantic schema cho output mọi node LLM
+- [~] **TAI-01** – Agent gợi ý chỉnh sửa (LangGraph)
+  - [x] Node `extract_changes`: tách điều khoản mới / sửa đổi / bãi bỏ từ VBPL (structured output)
+  - [x] Fan-out theo từng thay đổi (LangGraph `Send`) → gọi retrieve qua adapter `agent/agent/retriever.py` (tạm khớp từ khoá trên corpus demo; retrieve + rerank thật thuộc `MINH-01`)
+  - [x] Node `judge_impact`: có bị ảnh hưởng không, loại (mâu thuẫn / tham chiếu lỗi thời / nghĩa vụ mới), mức độ, lý do, đoạn trích dẫn
+  - [x] Node `draft_amendment`: văn bản gốc → văn bản đề xuất
+  - [x] Pydantic schema cho output mọi node LLM
 - [ ] **TAI-02** – HITL
   - [ ] Graph chạy hết (không dùng `interrupt()`); backend lưu impact vào Postgres trạng thái `pending`, quyết định Accept / Edit / Reject / Undo ghi qua API
   - [ ] Bảng Postgres lưu quyết định: thay đổi, chunk, output model, hành động, text đã sửa, reason tag, người duyệt (audit trail)
