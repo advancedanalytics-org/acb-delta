@@ -26,7 +26,7 @@ Glossary:
 
 ## Commands
 
-Stack: Python 3.12 + `uv` (`backend/`, `agent/`), Node 22 + npm (`frontend/`), Docker Compose for the whole stack. No Makefile; use these commands directly.
+Stack: Python 3.12 + `uv` (`backend/`, `agent/`), Node 22 + npm (`frontend/`), Docker Compose for the whole stack. No Makefile. `./scripts/run.sh up|down|status|logs|reset|test` wraps the commands below; the plain commands always work too.
 
 | Task | Command |
 |---|---|
