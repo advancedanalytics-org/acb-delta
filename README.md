@@ -8,9 +8,10 @@ When a new legal document (VBPL) is issued, AI finds the internal bank documents
 Needs Docker (Compose v2).
 
 ```sh
-cp .env.example .env          # then replace every CHANGEME
-docker compose up -d --build --wait
+./scripts/run.sh up           # first run creates .env with generated passwords, then starts everything
 ```
+
+Same with plain Compose: `cp .env.example .env` (replace every `CHANGEME`), then `docker compose up -d --build --wait`.
 
 | Service | URL |
 |---|---|
@@ -19,7 +20,14 @@ docker compose up -d --build --wait
 | Agent (AgentBase contract) | http://localhost:8080/health · `POST /invoke` |
 | MinIO console | http://127.0.0.1:9001 |
 
-Status `docker compose ps` · logs `docker compose logs -f <service>` · stop `docker compose down` (keeps data) · reset data `docker compose down -v`.
+| `./scripts/run.sh …` | Does |
+|---|---|
+| `up` | Create `.env` if missing, build, start, wait until healthy, print URLs |
+| `status` | Service health + readiness |
+| `logs [service]` | Follow logs |
+| `down` | Stop (keeps data) |
+| `reset` | Stop and delete all data (asks first) |
+| `test` | Lint + tests for backend, agent, frontend (no Docker needed) |
 
 ## Layout
 
@@ -29,6 +37,7 @@ Status `docker compose ps` · logs `docker compose logs -f <service>` · stop `d
 | `agent/` | LangGraph graph on port 8080 (AgentBase Runtime contract), 4 stub nodes | TAI-01, MINH-01 (`retrieve`) |
 | `frontend/` | Vite + React UI prototype, all HUY-01 screens | HUY-01 (live API wiring) |
 | `db/init/` | Postgres init SQL (enables pgvector) | |
+| `scripts/run.sh` | Run / stop / test the stack | |
 | `scripts/demo-data/` | Generates the demo PDFs and highlight positions | |
 
 ## UI prototype runs on demo data
