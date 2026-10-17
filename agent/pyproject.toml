@@ -1,0 +1,27 @@
+[project]
+name = "acb-delta-agent"
+version = "0.1.0"
+description = "LangGraph impact-analysis agent served on the AgentBase Runtime contract (port 8080)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "langgraph>=1.0",
+    "langchain-openai>=1.0",
+    "langfuse>=3.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.8", "httpx>=0.27"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

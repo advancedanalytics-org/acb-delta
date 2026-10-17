@@ -1,0 +1,183 @@
+{
+  "_note": "Fictional internal documents for the UI prototype. Source for scripts/demo-data/generate_demo_pdfs.py. Not real bank data.",
+  "documents": [
+    {
+      "id": "doc-cv-01",
+      "code": "QĐ-CV-01",
+      "title": "Quy định cho vay đối với khách hàng cá nhân",
+      "department": "Khối Khách hàng cá nhân",
+      "version": "3.2",
+      "effectiveDate": "2025-03-01",
+      "articles": [
+        {
+          "heading": "Điều 1. Phạm vi điều chỉnh",
+          "paragraphs": [
+            "Quy định này hướng dẫn hoạt động cho vay đối với khách hàng cá nhân tại Ngân hàng, được xây dựng căn cứ Thông tư số 39/2016/TT-NHNN ngày 30/12/2016 của Ngân hàng Nhà nước Việt Nam.",
+            "Các nội dung không được quy định tại văn bản này thực hiện theo quy định của pháp luật và các văn bản nội bộ có liên quan."
+          ]
+        },
+        {
+          "heading": "Điều 2. Đối tượng áp dụng",
+          "paragraphs": [
+            "Các đơn vị kinh doanh, Trung tâm phê duyệt tín dụng và cán bộ quan hệ khách hàng tham gia quy trình cho vay khách hàng cá nhân.",
+            "Khách hàng cá nhân là công dân Việt Nam từ đủ 18 tuổi, có năng lực hành vi dân sự đầy đủ và có nguồn thu nhập ổn định."
+          ]
+        },
+        {
+          "heading": "Điều 3. Thời hạn cho vay",
+          "paragraphs": [
+            "1. Thời hạn cho vay tiêu dùng không có tài sản bảo đảm tối đa là 84 tháng.",
+            "2. Thời hạn cho vay mua nhà ở tối đa là 35 năm, phù hợp với khả năng trả nợ của khách hàng.",
+            "3. Thời hạn cho vay cụ thể được ghi trong hợp đồng tín dụng và không vượt quá thời hạn hoạt động còn lại của tài sản bảo đảm, nếu có."
+          ]
+        },
+        {
+          "heading": "Điều 4. Hạn mức cho vay không có tài sản bảo đảm",
+          "paragraphs": [
+            "Hạn mức cho vay tiêu dùng không có tài sản bảo đảm tối đa là 500 triệu đồng đối với một khách hàng.",
+            "Trung tâm phê duyệt tín dụng xác định hạn mức cụ thể dựa trên kết quả chấm điểm tín dụng nội bộ và thu nhập đã được xác minh của khách hàng."
+          ]
+        },
+        {
+          "heading": "Điều 5. Giải ngân",
+          "paragraphs": [
+            "1. Khoản vay được giải ngân qua kênh trực tuyến sau khi khách hàng xác thực bằng mã OTP gửi qua tin nhắn.",
+            "2. Chứng từ giải ngân được lưu tại đơn vị kinh doanh trong suốt thời hạn khoản vay.",
+            "3. Đơn vị kinh doanh kiểm tra mục đích sử dụng vốn trong vòng 30 ngày kể từ ngày giải ngân đối với khoản vay từ 100 triệu đồng trở lên."
+          ]
+        },
+        {
+          "heading": "Điều 6. Lãi suất chậm trả",
+          "paragraphs": [
+            "Lãi suất áp dụng đối với dư nợ gốc bị quá hạn do Ngân hàng quy định, tối đa bằng 200% lãi suất cho vay trong hạn.",
+            "Lãi chậm trả được tính trên số dư nợ gốc quá hạn tương ứng với thời gian chậm trả."
+          ]
+        },
+        {
+          "heading": "Điều 7. Điều chỉnh lãi suất",
+          "paragraphs": [
+            "Khi điều chỉnh lãi suất cho vay, Ngân hàng thông báo cho khách hàng chậm nhất 02 ngày làm việc trước ngày áp dụng.",
+            "Biên độ điều chỉnh lãi suất được quy định trong hợp đồng tín dụng và công bố tại điểm giao dịch."
+          ]
+        },
+        {
+          "heading": "Điều 8. Hiệu lực thi hành",
+          "paragraphs": [
+            "Quy định này có hiệu lực kể từ ngày 01/03/2025 và thay thế Quy định số QĐ-CV-01 phiên bản 3.1."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "doc-kyc-02",
+      "code": "QT-KYC-02",
+      "title": "Quy trình nhận biết và xác minh khách hàng",
+      "department": "Phòng Tuân thủ",
+      "version": "2.0",
+      "effectiveDate": "2024-09-15",
+      "articles": [
+        {
+          "heading": "Điều 1. Mục đích",
+          "paragraphs": [
+            "Quy trình này hướng dẫn các bước nhận biết, xác minh và cập nhật thông tin khách hàng nhằm thực hiện các yêu cầu về phòng, chống rửa tiền.",
+            "Quy trình áp dụng cho mọi kênh giao dịch, bao gồm quầy giao dịch, ứng dụng ngân hàng số và đối tác thu thập hồ sơ."
+          ]
+        },
+        {
+          "heading": "Điều 2. Thu thập thông tin",
+          "paragraphs": [
+            "Cán bộ giao dịch thu thập họ tên, số định danh cá nhân, nghề nghiệp và địa chỉ liên hệ của khách hàng.",
+            "Đối với khách hàng là người nước ngoài, cán bộ giao dịch thu thập thêm số hộ chiếu, quốc tịch và thời hạn thị thực."
+          ]
+        },
+        {
+          "heading": "Điều 3. Xác minh danh tính",
+          "paragraphs": [
+            "Đối với giao dịch mở tài khoản trực tuyến, danh tính khách hàng được xác minh bằng ảnh chụp giấy tờ tùy thân.",
+            "Trường hợp thông tin không khớp, hệ thống chuyển hồ sơ sang cán bộ kiểm soát để xác minh thủ công."
+          ]
+        },
+        {
+          "heading": "Điều 4. Cập nhật thông tin",
+          "paragraphs": [
+            "Thông tin khách hàng được rà soát và cập nhật định kỳ 24 tháng một lần.",
+            "Khi phát hiện thông tin thay đổi, cán bộ giao dịch cập nhật vào hệ thống trong vòng 05 ngày làm việc."
+          ]
+        },
+        {
+          "heading": "Điều 5. Lưu trữ hồ sơ",
+          "paragraphs": [
+            "Hồ sơ nhận biết khách hàng được lưu trữ tối thiểu 05 năm kể từ ngày đóng tài khoản.",
+            "Hồ sơ điện tử được sao lưu tại trung tâm dữ liệu dự phòng theo quy định về an toàn thông tin."
+          ]
+        },
+        {
+          "heading": "Điều 6. Báo cáo giao dịch đáng ngờ",
+          "paragraphs": [
+            "Giao dịch đáng ngờ được báo cáo cho Phòng Tuân thủ trong vòng 03 ngày làm việc kể từ khi phát hiện.",
+            "Phòng Tuân thủ đánh giá và quyết định việc báo cáo cơ quan có thẩm quyền."
+          ]
+        },
+        {
+          "heading": "Điều 7. Trách nhiệm thực hiện",
+          "paragraphs": [
+            "Giám đốc chi nhánh chịu trách nhiệm tổ chức thực hiện Quy trình này tại đơn vị.",
+            "Phòng Tuân thủ chịu trách nhiệm hướng dẫn, kiểm tra và đề xuất sửa đổi Quy trình khi pháp luật thay đổi."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "doc-the-03",
+      "code": "CS-THE-03",
+      "title": "Chính sách lãi suất và phí dịch vụ thẻ tín dụng",
+      "department": "Trung tâm Thẻ",
+      "version": "1.4",
+      "effectiveDate": "2025-01-10",
+      "articles": [
+        {
+          "heading": "Điều 1. Phạm vi áp dụng",
+          "paragraphs": [
+            "Chính sách này áp dụng cho thẻ tín dụng do Ngân hàng phát hành cho khách hàng cá nhân, căn cứ Thông tư số 18/2024/TT-NHNN về hoạt động thẻ ngân hàng.",
+            "Biểu phí chi tiết được ban hành kèm theo Chính sách này và công bố công khai."
+          ]
+        },
+        {
+          "heading": "Điều 2. Lãi suất thẻ tín dụng",
+          "paragraphs": [
+            "Lãi suất áp dụng cho dư nợ thẻ tín dụng tối đa 36%/năm, được công bố tại điểm giao dịch và trên website.",
+            "Khách hàng thanh toán toàn bộ dư nợ sao kê trước ngày đến hạn được miễn lãi cho các giao dịch mua sắm."
+          ]
+        },
+        {
+          "heading": "Điều 3. Thông báo thay đổi",
+          "paragraphs": [
+            "Mọi thay đổi về lãi suất và phí được thông báo trên website Ngân hàng trước 07 ngày kể từ ngày áp dụng.",
+            "Khách hàng không đồng ý với thay đổi có quyền yêu cầu chấm dứt sử dụng thẻ."
+          ]
+        },
+        {
+          "heading": "Điều 4. Phí chậm thanh toán",
+          "paragraphs": [
+            "Phí chậm thanh toán bằng 6% số tiền thanh toán tối thiểu chưa thanh toán, tối thiểu 149.000 đồng.",
+            "Phí chậm thanh toán được ghi nhận trên sao kê của kỳ tiếp theo."
+          ]
+        },
+        {
+          "heading": "Điều 5. Nhắc nợ và thu hồi nợ",
+          "paragraphs": [
+            "Ngân hàng được liên hệ nhắc nợ khách hàng từ 07 giờ đến 21 giờ hằng ngày.",
+            "Nội dung nhắc nợ không được xúc phạm danh dự, nhân phẩm của khách hàng và người có liên quan."
+          ]
+        },
+        {
+          "heading": "Điều 6. Giải quyết khiếu nại",
+          "paragraphs": [
+            "Khiếu nại về giao dịch thẻ được giải quyết trong thời hạn 45 ngày làm việc kể từ ngày nhận được khiếu nại.",
+            "Kết quả giải quyết khiếu nại được thông báo cho khách hàng bằng văn bản hoặc qua ứng dụng ngân hàng số."
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -21,8 +21,26 @@ Glossary:
 ## Source of truth
 
 - **`PLAN.md`** — task list, owners, dependencies, and agreed decisions. Always read it before starting work.
-- **`README.md`** — one-line project summary.
-- No tech stack, build, or test commands are chosen yet. When the team picks them, add a **Commands** section below (install / run / test / lint) in the same PR that introduces them. Do not guess commands that are not in the repo.
+- **`README.md`** — project summary, quick start, repo layout.
+- When you add or change a command, update **Commands** below in the same PR. Do not guess commands that are not in the repo.
+
+## Commands
+
+Stack: Python 3.12 + `uv` (`backend/`, `agent/`), Node 22 + npm (`frontend/`), Docker Compose for the whole stack. No Makefile; use these commands directly.
+
+| Task | Command |
+|---|---|
+| Configure | `cp .env.example .env`, then replace every `CHANGEME` |
+| Start everything | `docker compose up -d --build --wait` |
+| Status / logs | `docker compose ps` · `docker compose logs -f <service>` |
+| Stop (keep data) / reset data | `docker compose down` · `docker compose down -v` |
+| Backend test + lint | `cd backend && uv run pytest && uv run ruff check . && uv run ruff format --check .` |
+| Agent test + lint | `cd agent && uv run pytest && uv run ruff check . && uv run ruff format --check .` |
+| Frontend lint + build | `cd frontend && npm ci && npm run lint && npm run build` |
+| Frontend dev server | `cd frontend && npm run dev` (port 5173, proxies `/api` to `localhost:8000`) |
+| Regenerate demo PDFs | `uv run --with pymupdf python scripts/demo-data/generate_demo_pdfs.py` |
+
+Tests and lint need no Docker. Ports: UI 3000, API 8000, agent 8080 (fixed by AgentBase), Postgres 5432 and MinIO 9000/9001 on `127.0.0.1` only; override in `.env`.
 
 ## Team and ownership
 
@@ -75,6 +93,7 @@ Status markers: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (
 
 - `.github/workflows/ci.yml` runs on every PR to `main` and every push to `main`, on the org's self-hosted runner `aamacrunner` (macOS, ARM64).
 - It checks the PR title format, then runs Python checks if `pyproject.toml`/`requirements.txt` exists and Node checks if `package.json` exists. When you add a stack, make sure its tests run there (`pytest`, or `npm test` / `npm run lint`).
+- **Known gap:** those checks only look at the repo root, so `backend/`, `agent/` and `frontend/` are not built or tested in CI yet. CI changes are deferred until the `aamacrunner` Mac Mini is fixed (`plans/261017-1103-project-skeleton/phase-05-ci-cd-on-org-runner.md`). Until then, run the **Commands** checks locally before opening a PR.
 - The runner is persistent and shared, not a fresh VM: never write outside the workspace, install global packages, or leave background processes running from CI steps.
 - PRs from forks do not run on the self-hosted runner, for security.
 
