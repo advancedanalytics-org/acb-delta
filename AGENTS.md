@@ -26,11 +26,38 @@ Glossary:
 
 ## Commands
 
-Stack: Python 3.12 + `uv` (`backend/`, `agent/`), Node 22 + npm (`frontend/`), Docker Compose for the whole stack. No Makefile. `./scripts/run.sh up|down|status|logs|reset|test` wraps the commands below; the plain commands always work too.
+Stack: Python 3.12 + `uv` (`backend/`, `agent/`), Node 22 + npm (`frontend/`), Docker Compose for the whole stack. No Makefile.
+
+### Run script (preferred)
+
+`scripts/run.sh` is the entry point for running and checking the stack. Run it from any directory; it works with macOS bash 3.2.
+
+| Command | What it does | Exit code |
+|---|---|---|
+| `./scripts/run.sh up` | Creates `.env` from `.env.example` if missing (random hex passwords, mode 600), checks ports, builds, starts, waits until every service is healthy, prints status + URLs | non-zero if Docker is missing/stopped, `.env` still has `CHANGEME`, a port is held by another program, or a service is unhealthy |
+| `./scripts/run.sh status` | `docker compose ps` + `/api/health/ready` JSON | 0 even when degraded: read the JSON |
+| `./scripts/run.sh logs [service]` | Follows logs (`-f`) | blocks until interrupted |
+| `./scripts/run.sh down` | Stops containers, keeps data | |
+| `./scripts/run.sh reset` | Deletes the Postgres + MinIO volumes after the user types `reset` | interactive |
+| `./scripts/run.sh test` | ruff + pytest in `backend/` and `agent/`, `npm ci` + lint + build in `frontend/`; no Docker | non-zero on the first failure |
+
+Rules for agents using it:
+
+- Before `up`, run `status`. If the stack is already running, reuse it; `up` on a running stack is safe and rebuilds changed services.
+- If `up` reports a busy port, find the owner from the printed `lsof` lines. Stop it only if you started it; otherwise ask your human. Never change ports to get around it.
+- `logs` never returns on its own. Use `docker compose logs --tail 100 <service>` for a one-shot read.
+- Never run `reset` (or `docker compose down -v`) unless your human asked: it deletes all local data. It needs typed input, so it cannot run unattended anyway.
+- Run `down` when your task no longer needs the stack.
+- Run `test` before opening a PR; CI does not cover these folders yet (see **CI**).
+- Never print `.env` contents; it holds generated passwords.
+
+### Plain commands
+
+The script wraps these; they always work too.
 
 | Task | Command |
 |---|---|
-| Configure | `cp .env.example .env`, then replace every `CHANGEME` |
+| Configure | `cp .env.example .env`, then replace every `CHANGEME` (letters and digits only) |
 | Start everything | `docker compose up -d --build --wait` |
 | Status / logs | `docker compose ps` · `docker compose logs -f <service>` |
 | Stop (keep data) / reset data | `docker compose down` · `docker compose down -v` |
@@ -40,7 +67,7 @@ Stack: Python 3.12 + `uv` (`backend/`, `agent/`), Node 22 + npm (`frontend/`), D
 | Frontend dev server | `cd frontend && npm run dev` (port 5173, proxies `/api` to `localhost:8000`) |
 | Regenerate demo PDFs | `uv run --with pymupdf python scripts/demo-data/generate_demo_pdfs.py` |
 
-Tests and lint need no Docker. Ports: UI 3000, API 8000, agent 8080 (fixed by AgentBase), Postgres 5432 and MinIO 9000/9001 on `127.0.0.1` only; override in `.env`.
+Ports: UI 3000, API 8000, agent 8080 (fixed by AgentBase), Postgres 5432 and MinIO 9000/9001 on `127.0.0.1` only; override with the `*_PORT` values in `.env`.
 
 ## Team and ownership
 
