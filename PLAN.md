@@ -56,30 +56,30 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 
 ## Tài
 
-- [ ] **TAI-01** – Agent gợi ý chỉnh sửa (LangGraph)
-  - [ ] Node `extract_changes`: tách điều khoản mới / sửa đổi / bãi bỏ từ VBPL (structured output)
-  - [ ] Fan-out theo từng thay đổi (LangGraph `Send`) → gọi retrieve + rerank (dùng `MINH-01`)
-  - [ ] Node `judge_impact`: có bị ảnh hưởng không, loại (mâu thuẫn / tham chiếu lỗi thời / nghĩa vụ mới), mức độ, lý do, đoạn trích dẫn
-  - [ ] Node `draft_amendment`: văn bản gốc → văn bản đề xuất
-  - [ ] Pydantic schema cho output mọi node LLM
+- [~] **TAI-01** – Agent gợi ý chỉnh sửa (LangGraph)
+  - [x] Node `extract_changes`: tách điều khoản mới / sửa đổi / bãi bỏ từ VBPL (structured output)
+  - [x] Fan-out theo từng thay đổi (LangGraph `Send`) → gọi retrieve qua adapter `agent/agent/retriever.py` (tạm khớp từ khoá trên corpus demo; retrieve + rerank thật thuộc `MINH-01`)
+  - [x] Node `judge_impact`: có bị ảnh hưởng không, loại (mâu thuẫn / tham chiếu lỗi thời / nghĩa vụ mới), mức độ, lý do, đoạn trích dẫn
+  - [x] Node `draft_amendment`: văn bản gốc → văn bản đề xuất
+  - [x] Pydantic schema cho output mọi node LLM
 - [ ] **TAI-02** – HITL
-  - [ ] `interrupt()` trong graph, resume bằng quyết định Accept / Edit / Reject
+  - [ ] Graph chạy hết (không dùng `interrupt()`); backend lưu impact vào Postgres trạng thái `pending`, quyết định Accept / Edit / Reject / Undo ghi qua API
   - [ ] Bảng Postgres lưu quyết định: thay đổi, chunk, output model, hành động, text đã sửa, reason tag, người duyệt (audit trail)
   - [ ] API FastAPI cho accept / edit / reject
-- [ ] **TAI-03** – Tài liệu VBPL & fake dữ liệu văn bản nội bộ
-  - [ ] Thu thập VBPL mẫu (bản cũ + bản sửa đổi)
-  - [ ] Sinh văn bản nội bộ giả lập theo format đã chốt (`MINH-02`), xuất DOCX → PDF
-  - [ ] **Cài cố ý các điểm mâu thuẫn** và ghi lại → ground truth cho eval (`KHOA-01`)
+- [x] **TAI-03** – Tài liệu VBPL & fake dữ liệu văn bản nội bộ
+  - [x] Thu thập VBPL mẫu (bản cũ + bản sửa đổi)
+  - [x] Sinh văn bản nội bộ giả lập theo format đã chốt (`MINH-02`), xuất DOCX → PDF
+  - [x] **Cài cố ý các điểm mâu thuẫn** và ghi lại → ground truth cho eval (`KHOA-01`)
 - [ ] **TAI-04** – Slide (gồm slide roadmap DPO / fine-tune)
 - [ ] **TAI-05** – Thuyết trình + kịch bản demo
-- [~] **TAI-06** – Deploy Phase 1: server team
+- [x] **TAI-06** – Deploy Phase 1: server team — dừng ở stack local; không dựng server team vì có tài khoản GreenNode, phần còn lại chuyển sang `TAI-07`
   - [x] `docker-compose.yml`: postgres-pgvector, minio, agent (port 8080), fastapi, frontend. Langfuse dùng Cloud (không container); embedding server chờ chốt model (`MINH-01`)
   - [x] `.env.example` liệt kê đủ biến cấu hình (DB, LLM, embedding, S3, Langfuse); không commit `.env`
-  - [ ] Endpoint LLM OpenAI-compatible (qua LiteLLM proxy nếu có)
-  - [ ] Script `seed` (nạp VBPL + mock) và `reindex` (re-embed toàn bộ)
   - [x] Healthcheck cho từng service; README chạy 1 lệnh (`docker compose up -d --build --wait`)
 - [ ] **TAI-07** – Deploy Phase 2: chuyển sang GreenNode (khi có tài khoản)
   - [ ] Tạo Service Account IAM, cấp quyền AgentBase
+  - [ ] Endpoint LLM OpenAI-compatible trên MaaS (chuyển từ `TAI-06`)
+  - [ ] Script `seed` (nạp VBPL + mock) và `reindex` (re-embed toàn bộ) (chuyển từ `TAI-06`)
   - [ ] Kiểm tra catalog MaaS: có model embedding / LLM đang dùng không
   - [ ] Wrap agent bằng `greennode-agentbase`, build image → Container Registry → Agent Runtime
   - [ ] vDB PostgreSQL + bật pgvector, migrate dữ liệu (`pg_dump` / `pg_restore`)
@@ -164,6 +164,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 - **Document format tài liệu mock** (MINH-02): _chưa chốt_
 - **Schema chunk / metadata** (MINH-01): _chưa chốt_
 - **Model embedding** (MINH-01): _chưa chốt_ — phải chạy được cả trên server team và GreenNode MaaS
-- **Endpoint LLM Phase 1** (TAI-06): _chưa chốt_
+- **Endpoint LLM** (TAI-07): GreenNode MaaS. Trước khi có tài khoản, code chỉ đọc `OPENAI_BASE_URL` + `LLM_MODEL` nên dùng tạm bất kỳ endpoint OpenAI-compatible nào; bỏ server team Phase 1
+- **HITL** (TAI-02): không dùng `interrupt()`. Graph chạy hết, impact lưu Postgres trạng thái `pending`, mỗi quyết định (accept / edit / reject / undo) là một dòng mới trong bảng quyết định (không sửa đè) → nguồn dữ liệu cho audit trail và `KHOA-02`
 - **Luồng dữ liệu Evaluate + enrich test set** (KHOA-01): _chưa chốt_
 - **Luồng dữ liệu feedback loop** (KHOA-02): _chưa chốt_

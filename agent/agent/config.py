@@ -8,11 +8,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # OpenAI-compatible LLM endpoint (vLLM / LiteLLM in Phase 1, GreenNode MaaS in Phase 2).
-    # Unused by the stub nodes; TAI-01 reads these when it adds LLM calls.
+    # OpenAI-compatible LLM endpoint (any provider now, GreenNode MaaS later). Read only in llm.py.
     openai_base_url: str = ""
     openai_api_key: str = ""
     llm_model: str = ""
+    # "json_schema" or "function_calling", for providers that reject JSON-schema output.
+    llm_structured_method: str = "json_schema"
+
+    # Skeleton retriever corpus (demo-documents.json format). Empty = no candidates.
+    corpus_path: str = ""
+    # Caps LLM calls per run: changes kept from the VBPL, candidates judged per change.
+    max_changes: int = 10
+    retrieve_k: int = 5
 
     # Langfuse Cloud. Tracing is on only when both keys are set.
     langfuse_public_key: str = ""
