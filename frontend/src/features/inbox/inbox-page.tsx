@@ -1,18 +1,17 @@
-import { ArrowRight, Search, Upload } from 'lucide-react'
+import { ArrowRight, Search } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 
 import type { VbplStatus } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/query-states'
 import { VbplStatusBadge } from '@/components/status-badges'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useVbpls } from '@/hooks/queries'
 import { formatDate } from '@/lib/format'
 import { vbplStatusLabel } from '@/lib/labels'
+import { UploadVbplDialog } from './upload-vbpl-dialog'
 
 type Filter = 'all' | VbplStatus
 
@@ -52,18 +51,7 @@ export function InboxPage() {
             {data ? `${data.length} văn bản mới từ NHNN · ${pendingTotal} tác động chờ duyệt` : 'Đang tải văn bản'}
           </p>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Wrapper keeps the tooltip reachable while the button is disabled. */}
-            <span tabIndex={0} className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-              <Button disabled>
-                <Upload aria-hidden />
-                Tải lên VBPL
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>Cần luồng xử lý HUY-02</TooltipContent>
-        </Tooltip>
+        <UploadVbplDialog />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

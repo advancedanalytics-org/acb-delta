@@ -123,3 +123,35 @@ export interface HealthReport {
   status: 'ok' | 'degraded'
   checks: Record<string, string>
 }
+
+export interface UploadVbplInput {
+  file: File
+  code?: string
+  title?: string
+  issuer?: string
+  effectiveDate?: string
+}
+
+export interface IngestDocumentResult {
+  status: string
+  document: {
+    id: string
+    code?: string
+    title?: string
+    doc_type: string
+    issuer?: string
+    effective_date?: string
+    page_count: number
+    pdf_url?: string
+    created_at?: string
+  }
+  chunk_count: number
+  chunks: Array<{
+    id: string
+    article_path?: string
+    page: number
+    bbox: BBox[]
+    text: string
+  }>
+}
+

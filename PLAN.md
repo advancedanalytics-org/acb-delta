@@ -121,12 +121,12 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [ ] Màn hình **Evaluation dashboard**: metric theo bước, so sánh trước / sau feedback
   - [ ] Màn hình **Audit trail**
   - [ ] Chất lượng production: skeleton, empty state, toast có Undo, optimistic update, user switcher
-- [ ] **HUY-02** – Luồng xử lý dữ liệu NHNN
-  - [ ] PDF → text bằng PyMuPDF, giữ `page` + `bbox`
-  - [ ] Chunk theo cấu trúc pháp lý (Chương / Mục / Điều / Khoản / Điểm)
-  - [ ] Gắn metadata theo schema đã chốt (`MINH-01`)
-  - [ ] Embedding qua MaaS → ghi vào pgvector
-  - [ ] Upload PDF gốc lên vStorage
+- [x] **HUY-02** – Luồng xử lý dữ liệu NHNN
+  - [x] PDF → text bằng PyMuPDF, giữ `page` + `bbox`
+  - [x] Chunk theo cấu trúc pháp lý (Chương / Mục / Điều / Khoản / Điểm)
+  - [x] Gắn metadata theo schema đã chốt (`MINH-01`)
+  - [x] Embedding qua MaaS → ghi vào pgvector (sử dụng LangChain `langchain-postgres` và `langchain-openai`)
+  - [x] Upload PDF gốc lên vStorage / MinIO S3
 
 ## Minh
 

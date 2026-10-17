@@ -14,7 +14,7 @@ import { useCurrentUser } from '@/hooks/use-current-user'
 import { formatDate } from '@/lib/format'
 import { actionLabel } from '@/lib/labels'
 
-import { ImpactDetail, type DecisionRequest } from './impact-detail'
+import type { DecisionRequest } from './impact-detail'
 import { ImpactList, type StatusFilter } from './impact-list'
 import { PdfViewer } from './pdf-viewer'
 import { ShortcutHelpDialog } from './shortcut-help-dialog'
@@ -69,9 +69,13 @@ export function ReviewPage() {
     if (next) select(next.id)
   }
 
-  const onDecide = async (impact: Impact, request: DecisionRequest) => {
+  const onDecide = async (impact: Impact, request: DecisionRequest, autoAdvance = false) => {
     if (!reviewer) return
-    advanceFrom(impact)
+    if (autoAdvance) {
+      advanceFrom(impact)
+    } else {
+      select(impact.id)
+    }
     try {
       const decision = await decide.mutateAsync({
         input: { impactId: impact.id, reviewerId: reviewer.id, ...request },
@@ -80,7 +84,7 @@ export function ReviewPage() {
       })
       toast.success(`${actionLabel[request.action]}: ${impact.location}`, {
         description: selectedDoc ? `${selectedDoc.code}` : undefined,
-        duration: 5000,
+        duration: 3000,
         action: {
           label: 'Hoàn tác',
           onClick: () => {
@@ -94,7 +98,13 @@ export function ReviewPage() {
     }
   }
 
-  useReviewShortcuts({ j: () => step(1), k: () => step(-1), '?': () => setHelpOpen(true) })
+  useReviewShortcuts({
+    j: () => step(1),
+    k: () => step(-1),
+    a: () => selected && onDecide(selected, { action: 'accept', reasonTags: [] }),
+    r: () => selected && onDecide(selected, { action: 'reject', reasonTags: [] }),
+    '?': () => setHelpOpen(true),
+  })
 
   const error = vbpls.error ?? impacts.error ?? documents.error
   if (error) {
@@ -174,7 +184,7 @@ export function ReviewPage() {
           className="flex-1 justify-center"
         />
       ) : (
-        <div className="grid min-h-0 flex-1 max-lg:overflow-auto lg:grid-cols-[280px_minmax(0,1fr)_380px] xl:grid-cols-[300px_minmax(0,1fr)_420px] max-lg:[&>*]:h-[70dvh]">
+        <div className="grid min-h-0 flex-1 max-lg:overflow-auto lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)] max-lg:[&>*]:h-[70dvh]">
           <aside aria-label="Danh sách tác động" className="min-h-0 border-r bg-card">
             <ImpactList
               impacts={visible}
@@ -193,21 +203,11 @@ export function ReviewPage() {
                 impacts={all.filter((impact) => impact.documentId === selectedDoc.id)}
                 selectedId={selected?.id}
                 onSelect={select}
-              />
-            )}
-          </section>
-          <aside aria-label="Chi tiết tác động" className="min-h-0 border-l bg-card">
-            {selected && (
-              <ImpactDetail
-                key={`${selected.id}-${selected.decision?.id ?? 'none'}`}
-                impact={selected}
-                document={selectedDoc}
-                onDecide={(request) => onDecide(selected, request)}
-                // One decision at a time: a double click or fast key presses must not decide unread impacts.
+                onDecide={(impact, request) => onDecide(impact, request)}
                 disabled={!reviewer || decide.isPending}
               />
             )}
-          </aside>
+          </section>
         </div>
       )}
 
@@ -223,19 +223,13 @@ function ReviewSkeleton() {
         <Skeleton className="h-10 flex-1" />
         <Skeleton className="h-10 w-48" />
       </div>
-      <div className="grid flex-1 grid-cols-[300px_1fr_420px] gap-4 p-4">
+      <div className="grid flex-1 grid-cols-[300px_1fr] gap-4 p-4">
         <div className="space-y-2">
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="h-20" />
           ))}
         </div>
         <Skeleton className="h-full" />
-        <div className="space-y-3">
-          <Skeleton className="h-8" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-32" />
-        </div>
       </div>
     </div>
   )

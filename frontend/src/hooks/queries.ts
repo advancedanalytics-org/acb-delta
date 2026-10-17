@@ -9,6 +9,7 @@ import type {
   ImpactStatus,
   InternalDocument,
   Reviewer,
+  UploadVbplInput,
   Vbpl,
 } from '@/api/types'
 
@@ -129,7 +130,12 @@ export function useDecide() {
       writeImpact(qc, {
         ...impact,
         status: STATUS_BY_ACTION[input.action],
-        finalText: input.action === 'edit' ? input.editedText : input.action === 'accept' ? impact.suggestedText : undefined,
+        finalText:
+          input.action === 'edit'
+            ? input.editedText
+            : input.action === 'accept'
+              ? (input.editedText ?? impact.finalText ?? impact.suggestedText)
+              : undefined,
         decision: optimistic,
       })
       const entry: AuditEntry = {
@@ -174,3 +180,14 @@ export function useResetDemo() {
   const qc = useQueryClient()
   return useMutation({ mutationFn: api.resetDemo, onSuccess: () => qc.invalidateQueries() })
 }
+
+export function useUploadVbpl() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: UploadVbplInput) => api.uploadVbpl(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.vbpls })
+    },
+  })
+}
+

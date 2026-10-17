@@ -2,13 +2,13 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
-  getExpandedRowModel,
   getSortedRowModel,
   useReactTable,
+  type ExpandedState,
   type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDownUp, ChevronRight, Download, History } from 'lucide-react'
-import { Fragment, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 
 import type { AuditEntry, DecisionAction } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/query-states'
@@ -45,30 +45,44 @@ const columns = [
   }),
   column.accessor('at', {
     header: 'Thời gian',
-    cell: (info) => <span className="whitespace-nowrap">{formatDateTime(info.getValue())}</span>,
+    cell: (info) => {
+      const val = info.getValue()
+      if (!val) return <span className="text-muted-foreground">-</span>
+      try {
+        return <span className="whitespace-nowrap">{formatDateTime(val)}</span>
+      } catch {
+        return <span className="whitespace-nowrap text-muted-foreground">{val}</span>
+      }
+    },
   }),
-  column.accessor((entry) => entry.reviewer.name, {
+  column.accessor((entry) => entry.reviewer?.name ?? 'Chưa xác định', {
     id: 'reviewer',
     header: 'Người duyệt',
     cell: ({ row }) => (
       <div className="leading-tight">
-        <p>{row.original.reviewer.name}</p>
-        <p className="text-xs text-muted-foreground">{row.original.reviewer.role}</p>
+        <p>{row.original.reviewer?.name ?? 'Chưa xác định'}</p>
+        <p className="text-xs text-muted-foreground">{row.original.reviewer?.role ?? ''}</p>
       </div>
     ),
   }),
-  column.accessor('vbplNumber', { header: 'VBPL' }),
+  column.accessor('vbplNumber', {
+    header: 'VBPL',
+    cell: (info) => info.getValue() || <span className="text-muted-foreground">-</span>,
+  }),
   column.accessor('documentCode', {
     header: 'Văn bản nội bộ',
     cell: ({ row }) => (
       <div className="leading-tight">
-        <p>{row.original.documentCode}</p>
-        <p className="text-xs text-muted-foreground">{row.original.location}</p>
+        <p>{row.original.documentCode || '-'}</p>
+        <p className="text-xs text-muted-foreground">{row.original.location || ''}</p>
       </div>
     ),
   }),
-  column.accessor('action', { header: 'Hành động', cell: (info) => <ActionBadge action={info.getValue()} /> }),
-  column.accessor((entry) => entry.reasonTags.join(', '), {
+  column.accessor('action', {
+    header: 'Hành động',
+    cell: (info) => <ActionBadge action={info.getValue() || 'accept'} />,
+  }),
+  column.accessor((entry) => (Array.isArray(entry.reasonTags) ? entry.reasonTags.join(', ') : ''), {
     id: 'reasons',
     header: 'Lý do',
     enableSorting: false,
@@ -79,23 +93,29 @@ const columns = [
 function toCsv(rows: AuditEntry[]): string {
   const header = ['Thời gian', 'Người duyệt', 'Vai trò', 'VBPL', 'Văn bản nội bộ', 'Vị trí', 'Hành động', 'Lý do', 'Nội dung gốc', 'Nội dung được duyệt']
   // A leading = + - @ makes Excel evaluate the cell as a formula; prefix with ' to keep it text.
-  const escape = (value: string) => `"${value.replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`
-  const lines = rows.map((r) =>
-    [
-      formatDateTime(r.at),
-      r.reviewer.name,
-      r.reviewer.role,
-      r.vbplNumber,
-      r.documentCode,
-      r.location,
-      actionLabel[r.action],
-      r.reasonTags.join('; '),
-      r.originalText,
-      r.action === 'reject' ? '' : (r.editedText ?? r.suggestedText),
+  const escape = (value: unknown) => `"${(value ?? '').toString().replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`
+  const lines = rows.map((r) => {
+    let atStr = ''
+    try {
+      atStr = r.at ? formatDateTime(r.at) : ''
+    } catch {
+      atStr = r.at ?? ''
+    }
+    return [
+      atStr,
+      r.reviewer?.name ?? '',
+      r.reviewer?.role ?? '',
+      r.vbplNumber ?? '',
+      r.documentCode ?? '',
+      r.location ?? '',
+      actionLabel[r.action] ?? r.action ?? '',
+      Array.isArray(r.reasonTags) ? r.reasonTags.join('; ') : '',
+      r.originalText ?? '',
+      r.action === 'reject' ? '' : (r.editedText ?? r.suggestedText ?? ''),
     ]
       .map(escape)
-      .join(','),
-  )
+      .join(',')
+  })
   // BOM so Excel opens Vietnamese text as UTF-8.
   return '﻿' + [header.map(escape).join(','), ...lines].join('\r\n')
 }
@@ -116,28 +136,38 @@ export function AuditPage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [sorting, setSorting] = useState<SortingState>([{ id: 'at', desc: true }])
+  const [expanded, setExpanded] = useState<ExpandedState>({})
 
-  const rows = (data ?? []).filter((entry) => {
-    // Local calendar day (sv-SE formats as YYYY-MM-DD) to compare with the date inputs.
-    const day = new Date(entry.at).toLocaleDateString('sv-SE')
-    return (
-      (action === 'all' || entry.action === action) &&
-      (reviewerId === 'all' || entry.reviewer.id === reviewerId) &&
-      (!from || day >= from) &&
-      (!to || day <= to)
-    )
-  })
+  const rows = useMemo(() => {
+    return (data ?? []).filter((entry) => {
+      let day = ''
+      try {
+        if (entry.at) {
+          const d = new Date(entry.at)
+          if (!isNaN(d.getTime())) day = d.toLocaleDateString('sv-SE')
+        }
+      } catch {
+        day = ''
+      }
+      const entryReviewerId = entry.reviewer?.id ?? ''
+      return (
+        (action === 'all' || entry.action === action) &&
+        (reviewerId === 'all' || entryReviewerId === reviewerId) &&
+        (!from || day >= from) &&
+        (!to || day <= to)
+      )
+    })
+  }, [data, action, reviewerId, from, to])
 
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting },
+    state: { sorting, expanded },
     onSortingChange: setSorting,
+    onExpandedChange: setExpanded,
     getRowId: (row) => row.id,
-    getRowCanExpand: () => true,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getExpandedRowModel: getExpandedRowModel(),
   })
 
   return (
@@ -261,7 +291,7 @@ function ExpandedEntry({ entry }: { entry: AuditEntry }) {
     return (
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Đề xuất đã bị từ chối</p>
-        <TextDiff oldValue={entry.originalText} newValue={entry.suggestedText} className="bg-card" />
+        <TextDiff oldValue={entry.originalText || ''} newValue={entry.suggestedText || ''} className="bg-card" />
       </div>
     )
   }
@@ -270,7 +300,7 @@ function ExpandedEntry({ entry }: { entry: AuditEntry }) {
       <p className="text-xs font-medium text-muted-foreground">
         {entry.action === 'edit' ? 'Nội dung gốc → nội dung người duyệt đã sửa' : 'Nội dung gốc → đề xuất đã chấp nhận'}
       </p>
-      <TextDiff oldValue={entry.originalText} newValue={entry.editedText ?? entry.suggestedText} className="bg-card" />
+      <TextDiff oldValue={entry.originalText || ''} newValue={entry.editedText || entry.suggestedText || ''} className="bg-card" />
     </div>
   )
 }

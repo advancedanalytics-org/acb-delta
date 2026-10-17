@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     agent_url: str = "http://localhost:8080"
     s3_endpoint: str = "http://localhost:9000"
     s3_bucket: str = "documents"
+    s3_access_key: str = "acb"
+    s3_secret_key: str = "acb"
+    embedding_base_url: str = ""
+    embedding_model: str = ""
+    embedding_api_key: str = ""
+    embedding_dim: int = 1024
+    storage_local_dir: str = "/tmp/acb_delta/storage"
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
 

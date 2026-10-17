@@ -7,14 +7,17 @@ import type {
   EvalRun,
   HealthReport,
   Impact,
+  IngestDocumentResult,
   InternalDocument,
   Reviewer,
+  UploadVbplInput,
   Vbpl,
 } from '@/api/types'
 
 /** Everything the screens need from the backend. Mock and live implement the same interface. */
 export interface ApiClient {
   listVbpls(): Promise<Vbpl[]>
+  uploadVbpl(input: UploadVbplInput): Promise<IngestDocumentResult>
   listImpacts(vbplId: string): Promise<Impact[]>
   listDocuments(): Promise<InternalDocument[]>
   /** Newest first. */
