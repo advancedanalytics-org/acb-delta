@@ -1,80 +1,168 @@
-# Kế hoạch dự án – AI đánh giá tác động VBPL lên văn bản nội bộ
+# Kế hoạch dự án – Document Evaluation for Legal Transformation Analysis
+
+> AI Hackathon – Bank Summit · Đánh giá tác động của VBPL mới lên văn bản nội bộ
 
 ## Quy ước theo dõi
 
 - `[ ]` chưa làm · `[~]` đang làm · `[x]` hoàn thành · `[!]` bị chặn (ghi lý do bên cạnh)
-- Mỗi task có **ID** (vd. `TAI-01`). Ghi ID vào commit message / PR title để dễ truy vết, vd. `feat(HUY-02): chunking PDF NHNN`.
+- Mỗi task có **ID** (vd. `TAI-01`). Ghi ID vào commit message / PR title, vd. `feat(HUY-02): chunk theo Điều/Khoản`.
 - Cập nhật trạng thái bằng cách sửa checkbox trong file này và commit cùng thay đổi liên quan.
-- Task phụ thuộc nhau được ghi ở mục **Phụ thuộc**. Không bắt đầu task bị chặn khi task phụ thuộc chưa xong (hoặc chưa thống nhất).
+- Task phụ thuộc nhau được ghi ở mục **Phụ thuộc**.
+
+---
+
+## Quyết định kỹ thuật
+
+Triển khai 2 giai đoạn: **Phase 1** chạy trên server riêng của team trong lúc chờ tài khoản GreenNode, **Phase 2** chuyển sang GreenNode. Mọi thành phần Phase 1 phải đổi được sang Phase 2 **chỉ bằng biến môi trường**, không sửa code.
+
+| Hạng mục | Phase 1 – Server team | Phase 2 – GreenNode | Cách giữ tương thích |
+|---|---|---|---|
+| Database + Vector DB | Container `pgvector/pgvector` (Postgres + pgvector) | **vDB PostgreSQL** + pgvector | Cùng major version Postgres; migrate bằng `pg_dump` / `pg_restore`; `DATABASE_URL` |
+| Agent | Container LangGraph, HTTP port **8080** | **AgentBase Agent Runtime** | Viết sẵn theo hợp đồng AgentBase (container, port 8080); lớp wrap `greennode-agentbase` thêm ở Phase 2 |
+| LLM | Endpoint OpenAI-compatible (vLLM local hoặc provider khác) | **GreenNode MaaS** | Chỉ gọi qua `OPENAI_BASE_URL` + `LLM_MODEL`; khuyến nghị đặt LiteLLM proxy phía trước |
+| Embedding | Cùng model sẽ dùng ở Phase 2, chạy local (vd. BGE-M3 qua TEI) | **GreenNode MaaS** (nếu có model đó) | **Chốt model trước khi index**; đổi model = phải re-embed toàn bộ (có script `reindex`) |
+| Lưu PDF | **MinIO** (S3-compatible) | **vStorage** | Client S3 + `S3_ENDPOINT` |
+| Monitor / Eval | **Langfuse** self-host (docker compose) | Langfuse trên vServer (hoặc Cloud) | `LANGFUSE_HOST`; export dataset / prompt khi chuyển |
+| Backend API | **FastAPI** | **FastAPI** trên vServer | Không đổi |
+| Frontend | **React + TS + Vite**, **shadcn/ui + Tailwind** | Như Phase 1, trên vServer | `VITE_API_URL` |
+| Cache | ~~Redis~~ | ~~Redis~~ | Bỏ; chỉ thêm nếu cần job queue cho ingestion |
+| Hạ tầng | 1 file `docker-compose.yml` cho toàn bộ | vServer (FE + FastAPI + Langfuse) · AgentBase · vDB · MaaS | Không dùng VKS |
+
+Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bbox` cho từng chunk) · PDF viewer `react-pdf-highlighter-extended` · diff `react-diff-viewer-continued` · TanStack Query/Table · Recharts · font Be Vietnam Pro / Inter.
+
+**Rủi ro khi chuyển phase:**
+- MaaS không có đúng model embedding đang dùng → phải re-embed và chạy lại eval retrieval.
+- Model LLM trên MaaS khác Phase 1 → prompt và kết quả eval có thể lệch; chạy lại `KHOA-01` sau khi chuyển.
+- Dữ liệu demo nằm trên server team → không được để dữ liệu thật của ngân hàng trên đó, chỉ dữ liệu mock.
+
+### Phạm vi
+
+- **Làm thật:** ingestion có bbox, graph đánh giá tác động, màn hình review, log HITL, 1 lượt eval trước/sau feedback.
+- **Giả lập / bỏ qua:** auth (dùng user switcher), corpus văn bản nội bộ, PDF scan/OCR (mock tạo từ DOCX → PDF có text layer), multi-tenant.
+- **"RLHF"** = feedback loop: few-shot động từ quyết định HITL (demo được) + export dữ liệu preference cho DPO (roadmap). Trên slide gọi là *learning from human feedback*.
 
 ---
 
 ## Tổng quan theo người phụ trách
 
-| Người | Mảng chính | Số task |
-|---|---|---|
-| Tài | Gợi ý chỉnh sửa, HITL, dữ liệu, trình bày, deploy | 6 |
-| Khoa | Evaluate, RLHF | 2 |
-| Huy | UI, pipeline xử lý dữ liệu NHNN | 2 |
-| Minh | Vector DB (embed + search + metadata), format tài liệu mock | 2 |
+| Người | Mảng chính |
+|---|---|
+| Tài | Agent gợi ý chỉnh sửa, HITL, dữ liệu mock + ground truth, slide, thuyết trình, deploy GreenNode |
+| Khoa | Evaluation pipeline, feedback loop (RLHF) |
+| Huy | UI (4 màn hình), pipeline xử lý PDF NHNN |
+| Minh | pgvector: embed + search + metadata, format tài liệu mock |
 
 ---
 
 ## Tài
 
-- [ ] **TAI-01** – Gợi ý chỉnh sửa
-- [ ] **TAI-02** – HITL (Human-in-the-loop)
-- [ ] **TAI-03** – Tìm tài liệu VBPL & fake dữ liệu văn bản nội bộ
-  - [ ] Thu thập tài liệu VBPL mẫu
-  - [ ] Tạo dữ liệu văn bản nội bộ giả lập theo format đã thống nhất (xem `MINH-02`)
-- [ ] **TAI-04** – Slide
-- [ ] **TAI-05** – Thuyết trình
-- [ ] **TAI-06** – Deploy
+- [ ] **TAI-01** – Agent gợi ý chỉnh sửa (LangGraph)
+  - [ ] Node `extract_changes`: tách điều khoản mới / sửa đổi / bãi bỏ từ VBPL (structured output)
+  - [ ] Fan-out theo từng thay đổi (LangGraph `Send`) → gọi retrieve + rerank (dùng `MINH-01`)
+  - [ ] Node `judge_impact`: có bị ảnh hưởng không, loại (mâu thuẫn / tham chiếu lỗi thời / nghĩa vụ mới), mức độ, lý do, đoạn trích dẫn
+  - [ ] Node `draft_amendment`: văn bản gốc → văn bản đề xuất
+  - [ ] Pydantic schema cho output mọi node LLM
+- [ ] **TAI-02** – HITL
+  - [ ] `interrupt()` trong graph, resume bằng quyết định Accept / Edit / Reject
+  - [ ] Bảng Postgres lưu quyết định: thay đổi, chunk, output model, hành động, text đã sửa, reason tag, người duyệt (audit trail)
+  - [ ] API FastAPI cho accept / edit / reject
+- [ ] **TAI-03** – Tài liệu VBPL & fake dữ liệu văn bản nội bộ
+  - [ ] Thu thập VBPL mẫu (bản cũ + bản sửa đổi)
+  - [ ] Sinh văn bản nội bộ giả lập theo format đã chốt (`MINH-02`), xuất DOCX → PDF
+  - [ ] **Cài cố ý các điểm mâu thuẫn** và ghi lại → ground truth cho eval (`KHOA-01`)
+- [ ] **TAI-04** – Slide (gồm slide roadmap DPO / fine-tune)
+- [ ] **TAI-05** – Thuyết trình + kịch bản demo
+- [ ] **TAI-06** – Deploy Phase 1: server team
+  - [ ] `docker-compose.yml`: postgres-pgvector, minio, langfuse, embedding server, agent (port 8080), fastapi, frontend
+  - [ ] `.env.example` liệt kê đủ biến cấu hình (DB, LLM, embedding, S3, Langfuse); không commit `.env`
+  - [ ] Endpoint LLM OpenAI-compatible (qua LiteLLM proxy nếu có)
+  - [ ] Script `seed` (nạp VBPL + mock) và `reindex` (re-embed toàn bộ)
+  - [ ] Healthcheck cho từng service; README chạy 1 lệnh
+- [ ] **TAI-07** – Deploy Phase 2: chuyển sang GreenNode (khi có tài khoản)
+  - [ ] Tạo Service Account IAM, cấp quyền AgentBase
+  - [ ] Kiểm tra catalog MaaS: có model embedding / LLM đang dùng không
+  - [ ] Wrap agent bằng `greennode-agentbase`, build image → Container Registry → Agent Runtime
+  - [ ] vDB PostgreSQL + bật pgvector, migrate dữ liệu (`pg_dump` / `pg_restore`)
+  - [ ] PDF từ MinIO → vStorage
+  - [ ] vServer: frontend + FastAPI + Langfuse
+  - [ ] Chuyển biến môi trường sang MaaS; re-embed nếu đổi model
+  - [ ] Chạy lại eval (`KHOA-01`) để xác nhận không bị tụt metric
 
 ## Khoa
 
-- [ ] **KHOA-01** – Luồng Evaluate
+- [ ] **KHOA-01** – Evaluation pipeline
   - [ ] Họp với Minh + Tài thống nhất luồng dữ liệu cho evaluate
-  - [ ] Thống nhất cơ chế enrich test set
-  - [ ] Hiện thực luồng evaluate
-- [ ] **KHOA-02** – Luồng RLHF
-  - [ ] Họp với Tài thống nhất luồng dữ liệu cho RLHF
-  - [ ] Hiện thực luồng RLHF
+  - [ ] Dựng Langfuse dataset từ ground truth của `TAI-03`
+  - [ ] Metric từng bước:
+    - [ ] Tách thay đổi: Precision / Recall
+    - [ ] Retrieval: Recall@k, MRR
+    - [ ] Phát hiện tác động: Precision / Recall / F1 (ưu tiên Recall)
+    - [ ] Gợi ý chỉnh sửa: LLM-as-judge rubric (đúng, sửa tối thiểu, nhất quán pháp lý) + tỉ lệ accept từ HITL
+    - [ ] Hệ thống: độ trễ, chi phí / văn bản (AgentBase Usage)
+  - [ ] Cơ chế enrich test set: mỗi reject / edit từ HITL tự động thành dataset item mới
+  - [ ] Script chạy experiment và xuất bảng kết quả cho dashboard (`HUY-01`)
+- [ ] **KHOA-02** – Feedback loop (RLHF)
+  - [ ] Họp với Tài thống nhất luồng dữ liệu
+  - [ ] Vòng ngắn: lấy quyết định accept / edit làm few-shot động cho `judge_impact` và `draft_amendment`; reject làm ví dụ âm
+  - [ ] Đo metric trước / sau feedback (số liệu cho demo)
+  - [ ] Vòng dài: export cặp preference (chosen / rejected) dạng dataset DPO
 
 ## Huy
 
 - [ ] **HUY-01** – UI
+  - [ ] Khởi tạo Vite + React + TS + Tailwind + shadcn/ui, design token màu trạng thái, dark mode, font hỗ trợ tiếng Việt
+  - [ ] Màn hình **Review workspace** (ưu tiên số 1)
+    - [ ] Trái: danh sách impact theo văn bản nội bộ, badge mức độ
+    - [ ] Giữa: PDF viewer với highlight theo bbox, màu theo trạng thái (pending / accepted / rejected), click card → scroll tới highlight
+    - [ ] Phải: điều khoản VBPL mới vs đoạn bị ảnh hưởng, lý do, diff đề xuất, nút Accept / Edit / Reject + reason chip
+    - [ ] Phím tắt `A` / `E` / `R`, `J` / `K`
+  - [ ] Màn hình **Inbox**: danh sách VBPL mới, trạng thái xử lý, số impact chờ duyệt
+  - [ ] Màn hình **Evaluation dashboard**: metric theo bước, so sánh trước / sau feedback
+  - [ ] Màn hình **Audit trail**
+  - [ ] Chất lượng production: skeleton, empty state, toast có Undo, optimistic update, user switcher
 - [ ] **HUY-02** – Luồng xử lý dữ liệu NHNN
-  - [ ] PDF → text
-  - [ ] text → chunk
-  - [ ] chunk → embedding
+  - [ ] PDF → text bằng PyMuPDF, giữ `page` + `bbox`
+  - [ ] Chunk theo cấu trúc pháp lý (Chương / Mục / Điều / Khoản / Điểm)
+  - [ ] Gắn metadata theo schema đã chốt (`MINH-01`)
+  - [ ] Embedding qua MaaS → ghi vào pgvector
+  - [ ] Upload PDF gốc lên vStorage
 
 ## Minh
 
-- [ ] **MINH-01** – Nghiên cứu luồng embed + search + metadata dữ liệu nội bộ trên vector DB
+- [ ] **MINH-01** – Embed + search + metadata trên pgvector
+  - [ ] Chọn và test model embedding tiếng Việt trên MaaS
+  - [ ] Chốt schema chunk: `doc_id, doc_type, issuer, effective_date, article_path, page, bbox, text, embedding`
+  - [ ] Hybrid search: vector + keyword (Postgres full-text), filter theo metadata
+  - [ ] Rerank (tùy chọn nếu còn thời gian)
+  - [ ] Đóng gói thành tool / hàm retrieve cho agent (`TAI-01`)
 - [ ] **MINH-02** – Làm việc với Tài để thống nhất document format cho tài liệu mock
 
 ---
 
 ## Phụ thuộc & điểm đồng bộ
 
-| Task | Phụ thuộc / cần phối hợp | Ghi chú |
+| Task | Phụ thuộc / phối hợp | Ghi chú |
 |---|---|---|
-| TAI-03 (fake dữ liệu nội bộ) | MINH-02 | Cần chốt format trước khi sinh dữ liệu mock |
-| KHOA-01 | Minh, Tài | Thống nhất luồng dữ liệu evaluate + enrich test set |
-| KHOA-02 | TAI-02 | Dữ liệu feedback từ HITL là đầu vào cho RLHF |
-| MINH-01 | HUY-02 | Dùng chung chiến lược chunk/embedding và schema metadata |
-| TAI-01 | MINH-01, HUY-02 | Gợi ý chỉnh sửa cần search được VBPL + văn bản nội bộ |
-| TAI-04, TAI-05 | Các luồng chính chạy được end-to-end | Slide & demo |
-| TAI-06 | HUY-01 + các luồng backend | Deploy bản tích hợp |
+| TAI-03 (mock data) | MINH-02 | Chốt format trước khi sinh dữ liệu |
+| HUY-02 (metadata) | MINH-01 (schema) | Dùng chung schema chunk |
+| TAI-01 (retrieve) | MINH-01, HUY-02 | Cần dữ liệu đã index |
+| KHOA-01 | TAI-03, MINH-01 | Ground truth + retrieval để đo |
+| KHOA-02 | TAI-02 | Dữ liệu quyết định HITL là đầu vào |
+| HUY-01 (highlight) | HUY-02 (bbox), TAI-02 (API) | |
+| HUY-01 (eval dashboard) | KHOA-01 | Format kết quả experiment |
+| TAI-04, TAI-05 | Luồng chính chạy end-to-end | |
+| Mọi task code | TAI-06 | Cần môi trường Phase 1 chạy được để tích hợp |
+| TAI-07 | Tài khoản GreenNode, TAI-06 | Chạy lại KHOA-01 sau khi chuyển |
 
 ---
 
 ## Quyết định đã thống nhất
 
-> Ghi lại kết quả các buổi thống nhất để cả nhóm tham chiếu.
+> Ghi kết quả các buổi thống nhất để cả nhóm tham chiếu.
 
 - **Document format tài liệu mock** (MINH-02): _chưa chốt_
-- **Luồng dữ liệu Evaluate + cơ chế enrich test set** (KHOA-01): _chưa chốt_
-- **Luồng dữ liệu RLHF** (KHOA-02): _chưa chốt_
-- **Schema metadata trên vector DB** (MINH-01): _chưa chốt_
+- **Schema chunk / metadata** (MINH-01): _chưa chốt_
+- **Model embedding** (MINH-01): _chưa chốt_ — phải chạy được cả trên server team và GreenNode MaaS
+- **Endpoint LLM Phase 1** (TAI-06): _chưa chốt_
+- **Luồng dữ liệu Evaluate + enrich test set** (KHOA-01): _chưa chốt_
+- **Luồng dữ liệu feedback loop** (KHOA-02): _chưa chốt_
