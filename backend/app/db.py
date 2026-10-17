@@ -1,8 +1,12 @@
 """Database engine shared by all routers."""
 
+from collections.abc import Iterator
 from functools import lru_cache
+from typing import Annotated
 
+from fastapi import Depends
 from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.orm import Session
 
 from app.config import get_settings
 
@@ -35,7 +39,10 @@ def get_sessionmaker():
     return sessionmaker(bind=get_engine(), expire_on_commit=False)
 
 
-def get_db():
+def get_db() -> Iterator[Session]:
     session_factory = get_sessionmaker()
     with session_factory() as session:
         yield session
+
+
+SessionDep = Annotated[Session, Depends(get_db)]

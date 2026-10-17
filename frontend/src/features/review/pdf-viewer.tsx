@@ -104,7 +104,7 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
 
   const pageWidth = Math.min(Math.max(width - 2 * PAGE_GAP, 0), MAX_PAGE_WIDTH)
   const selected = impacts.find((impact) => impact.id === selectedId)
-  const selectedPageReady = selected ? Boolean(pointWidths[selected.page]) : false
+  const selectedPageReady = selected?.page != null ? Boolean(pointWidths[selected.page]) : false
 
   useEffect(() => {
     if (!selectedPageReady) return
@@ -114,7 +114,7 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
 
   // When selection changes, anchor hover card to the selected impact
   useEffect(() => {
-    if (!selected || !selectedPageReady) return
+    if (!selected || selected.page == null || !selectedPageReady) return
     const scale = pointWidths[selected.page] ? pageWidth / pointWidths[selected.page] : 0
     if (scale > 0 && selected.bboxes.length > 0) {
       const firstBox = selected.bboxes[0]
