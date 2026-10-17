@@ -21,14 +21,14 @@ Triển khai 2 giai đoạn: **Phase 1** chạy trên server riêng của team t
 | Agent | Container LangGraph, HTTP port **8080** | **AgentBase Agent Runtime** | Viết sẵn theo hợp đồng AgentBase (container, port 8080); lớp wrap `greennode-agentbase` thêm ở Phase 2 |
 | LLM | Endpoint OpenAI-compatible (vLLM local hoặc provider khác) | **GreenNode MaaS** | Chỉ gọi qua `OPENAI_BASE_URL` + `LLM_MODEL`; khuyến nghị đặt LiteLLM proxy phía trước |
 | Embedding | Cùng model sẽ dùng ở Phase 2, chạy local (vd. BGE-M3 qua TEI) | **GreenNode MaaS** (nếu có model đó) | **Chốt model trước khi index**; đổi model = phải re-embed toàn bộ (có script `reindex`) |
-| Lưu PDF | **MinIO** (S3-compatible) | **vStorage** | Client S3 + `S3_ENDPOINT` |
-| Monitor / Eval | **Langfuse** self-host (docker compose) | Langfuse trên vServer (hoặc Cloud) | `LANGFUSE_HOST`; export dataset / prompt khi chuyển |
+| Lưu PDF | **MinIO** (S3-compatible, image `cgr.dev/chainguard/minio`) | **vStorage** | Client S3 + `S3_ENDPOINT` |
+| Monitor / Eval | **Langfuse Cloud** (gói Hobby), không chạy container | Langfuse Cloud (giữ nguyên) | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST`; để trống = tắt tracing |
 | Backend API | **FastAPI** | **FastAPI** trên vServer | Không đổi |
-| Frontend | **React + TS + Vite**, **shadcn/ui + Tailwind** | Như Phase 1, trên vServer | `VITE_API_URL` |
+| Frontend | **React + TS + Vite**, **shadcn/ui + Tailwind** | Như Phase 1, trên vServer | Gọi `/api` tương đối qua nginx; `VITE_API_MODE=mock\|live` |
 | Cache | ~~Redis~~ | ~~Redis~~ | Bỏ; chỉ thêm nếu cần job queue cho ingestion |
-| Hạ tầng | 1 file `docker-compose.yml` cho toàn bộ | vServer (FE + FastAPI + Langfuse) · AgentBase · vDB · MaaS | Không dùng VKS |
+| Hạ tầng | 1 file `docker-compose.yml` cho toàn bộ | vServer (FE + FastAPI) · Langfuse Cloud · AgentBase · vDB · MaaS | Không dùng VKS |
 
-Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bbox` cho từng chunk) · PDF viewer `react-pdf-highlighter-extended` · diff `react-diff-viewer-continued` · TanStack Query/Table · Recharts · font Be Vietnam Pro / Inter.
+Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bbox` cho từng chunk) · PDF viewer `react-pdf` + lớp highlight tự vẽ theo bbox (`react-pdf-highlighter-extended` chưa hỗ trợ React 19) · diff `react-diff-viewer-continued` · TanStack Query/Table · Recharts · font Be Vietnam Pro / Inter.
 
 **Rủi ro khi chuyển phase:**
 - MaaS không có đúng model embedding đang dùng → phải re-embed và chạy lại eval retrieval.
@@ -72,19 +72,19 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [ ] **Cài cố ý các điểm mâu thuẫn** và ghi lại → ground truth cho eval (`KHOA-01`)
 - [ ] **TAI-04** – Slide (gồm slide roadmap DPO / fine-tune)
 - [ ] **TAI-05** – Thuyết trình + kịch bản demo
-- [ ] **TAI-06** – Deploy Phase 1: server team
-  - [ ] `docker-compose.yml`: postgres-pgvector, minio, langfuse, embedding server, agent (port 8080), fastapi, frontend
-  - [ ] `.env.example` liệt kê đủ biến cấu hình (DB, LLM, embedding, S3, Langfuse); không commit `.env`
+- [~] **TAI-06** – Deploy Phase 1: server team
+  - [x] `docker-compose.yml`: postgres-pgvector, minio, agent (port 8080), fastapi, frontend. Langfuse dùng Cloud (không container); embedding server chờ chốt model (`MINH-01`)
+  - [x] `.env.example` liệt kê đủ biến cấu hình (DB, LLM, embedding, S3, Langfuse); không commit `.env`
   - [ ] Endpoint LLM OpenAI-compatible (qua LiteLLM proxy nếu có)
   - [ ] Script `seed` (nạp VBPL + mock) và `reindex` (re-embed toàn bộ)
-  - [ ] Healthcheck cho từng service; README chạy 1 lệnh
+  - [x] Healthcheck cho từng service; README chạy 1 lệnh (`docker compose up -d --build --wait`)
 - [ ] **TAI-07** – Deploy Phase 2: chuyển sang GreenNode (khi có tài khoản)
   - [ ] Tạo Service Account IAM, cấp quyền AgentBase
   - [ ] Kiểm tra catalog MaaS: có model embedding / LLM đang dùng không
   - [ ] Wrap agent bằng `greennode-agentbase`, build image → Container Registry → Agent Runtime
   - [ ] vDB PostgreSQL + bật pgvector, migrate dữ liệu (`pg_dump` / `pg_restore`)
   - [ ] PDF từ MinIO → vStorage
-  - [ ] vServer: frontend + FastAPI + Langfuse
+  - [ ] vServer: frontend + FastAPI (Langfuse giữ trên Cloud)
   - [ ] Chuyển biến môi trường sang MaaS; re-embed nếu đổi model
   - [ ] Chạy lại eval (`KHOA-01`) để xác nhận không bị tụt metric
 
@@ -110,7 +110,8 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 ## Huy
 
 - [ ] **HUY-01** – UI
-  - [ ] Khởi tạo Vite + React + TS + Tailwind + shadcn/ui, design token màu trạng thái, dark mode, font hỗ trợ tiếng Việt
+  - Đã có prototype đủ 5 màn hình chạy trên dữ liệu demo trong `frontend/` (làm cùng skeleton `TAI-06`). Phần còn lại của HUY-01: nối API thật (`VITE_API_MODE=live`, hợp đồng trong `frontend/src/api/types.ts`), PDF thật từ vStorage, hoàn thiện giao diện.
+  - [x] Khởi tạo Vite + React + TS + Tailwind + shadcn/ui, design token màu trạng thái, dark mode, font hỗ trợ tiếng Việt
   - [ ] Màn hình **Review workspace** (ưu tiên số 1)
     - [ ] Trái: danh sách impact theo văn bản nội bộ, badge mức độ
     - [ ] Giữa: PDF viewer với highlight theo bbox, màu theo trạng thái (pending / accepted / rejected), click card → scroll tới highlight
