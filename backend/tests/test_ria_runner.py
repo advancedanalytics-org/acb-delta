@@ -46,12 +46,12 @@ def run():
             "2.3": [],
         },
         findings=[
-            ("2.1", "DOC-102@v4#5.2", "VALUE_CHANGE", "high"),
+            ("RIA-aaa", "2.1", "DOC-102@v4#5.2", "VALUE_CHANGE", "high"),
             # False positive: #5.5 is labelled EQUIVALENT, it must not be reported.
-            ("2.1", "DOC-102@v4#5.5", "VALUE_CHANGE", "medium"),
-            ("2.2.b", "DOC-102@v4#4.1", "CONTRADICTION", "high"),
+            ("RIA-bbb", "2.1", "DOC-102@v4#5.5", "VALUE_CHANGE", "medium"),
+            ("RIA-ccc", "2.2.b", "DOC-102@v4#4.1", "CONTRADICTION", "high"),
             # Dropped by the adapter: EQUIVALENT is never an expected report.
-            ("2.2.a", "DOC-102@v4#4.3", "EQUIVALENT", "low"),
+            ("RIA-ddd", "2.2.a", "DOC-102@v4#4.3", "EQUIVALENT", "low"),
         ],
         latency_seconds=42.5,
     )
@@ -105,6 +105,40 @@ def test_severity_comes_from_the_finding_not_a_placeholder(item, run):
     by_clause = {i.chunk_id: i.severity for i in outcome.predicted.impacts}
     assert by_clause["DOC-102@v4#5.2"] == "high"
     assert by_clause["DOC-102@v4#5.5"] == "medium"
+
+
+def test_the_judge_reaches_labels_through_finding_id_not_a_clause_id(item, run, monkeypatch):
+    """`GET /api/vbpls/{id}/impacts` has `findingId` but no internal clause id.
+
+    Keying the reference patch on a clause id the package never sends made the judge silently score
+    nothing, so `judgeScore` stayed None even with an LLM configured. Verified against the live
+    response, whose keys are: affectedText, category, draftStatus, findingId, id, location, ...
+    """
+    from app.evaluation import ria_runner
+
+    asked = []
+
+    def fake_chat_json(system: str, user: str) -> dict:
+        asked.append(user)
+        return {"score": 4, "reason": "ok"}
+
+    # judge_score imports these inside the function, so patch them where they live.
+    monkeypatch.setattr("app.ria.llm.llm_model", lambda: "fake-model")
+    monkeypatch.setattr("app.ria.llm.chat_json", fake_chat_json)
+    run.impacts = [
+        {
+            "findingId": "RIA-aaa",
+            "draftStatus": "review_required",
+            "affectedText": "Đơn vị thực hiện rà soát hồ sơ khách hàng định kỳ 24 tháng.",
+            "patch": {"operation": "REPLACE", "oldText": "24 tháng", "newText": "12 tháng"},
+        }
+    ]
+
+    score = ria_runner.judge_score(item, run)
+
+    assert score == pytest.approx(4.0)
+    # The reference patch for #5.2 had to be found, which only works via the finding id.
+    assert "tối đa 12 tháng" in asked[0]
 
 
 def test_latency_is_carried_through_and_cost_stays_unmeasured(item, run):

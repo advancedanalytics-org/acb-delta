@@ -77,8 +77,9 @@ class RunArtifacts:
     impacts: list[dict]
     obligations: set[str] = field(default_factory=set)
     retrieval: dict[str, list[str]] = field(default_factory=dict)
-    # (obligation numbering, internal clause id, category, priority)
-    findings: list[tuple[str, str, str, str]] = field(default_factory=list)
+    # (finding id, obligation numbering, internal clause id, category, priority). The finding id is
+    # the only key the review package shares with these rows: it carries no internal clause id.
+    findings: list[tuple[str, str, str, str, str]] = field(default_factory=list)
     latency_seconds: float = 0.0
 
 
@@ -132,11 +133,11 @@ def _read_ria_tables(database_url: str, job_id: str) -> tuple[set[str], dict, li
             ):
                 ranked.setdefault(number, []).append(clause_id)
             findings = [
-                (number, clause_id, category, priority)
-                for number, clause_id, category, priority in conn.execute(
+                (finding_id, number, clause_id, category, priority)
+                for finding_id, number, clause_id, category, priority in conn.execute(
                     text(
-                        "SELECT split_part(o.source_clause_id, '#', 2), f.internal_clause_id, "
-                        "f.category, f.priority FROM impact_finding f "
+                        "SELECT f.finding_id, split_part(o.source_clause_id, '#', 2), "
+                        "f.internal_clause_id, f.category, f.priority FROM impact_finding f "
                         "JOIN obligation o ON o.obligation_id = f.obligation_id "
                         "WHERE f.job_id = :job"
                     ),
@@ -238,7 +239,7 @@ def to_outcome(item: RiaDatasetItem, run: RunArtifacts) -> ItemOutcome:
                 # compares two real labels rather than a placeholder.
                 severity=priority if priority in ("high", "medium", "low") else "medium",
             )
-            for number, clause_id, category, priority in run.findings
+            for _, number, clause_id, category, priority in run.findings
             if category != "EQUIVALENT"
         ],
         latency_seconds=run.latency_seconds,
@@ -270,9 +271,12 @@ def judge_score(item: RiaDatasetItem, run: RunArtifacts) -> float | None:
     reference = {
         f.internal_clause_id: f.reference_patch for f in item.expected_findings if f.reference_patch
     }
+    # GET /api/vbpls/{id}/impacts carries `findingId` but no internal clause id, so the labels are
+    # reached through the finding rows read from the same job.
+    clause_of_finding = {finding_id: clause_id for finding_id, _, clause_id, _, _ in run.findings}
     scores = []
     for impact in run.impacts:
-        clause_id = impact.get("chunkId")
+        clause_id = clause_of_finding.get(impact.get("findingId"))
         patch, want = impact.get("patch"), reference.get(clause_id)
         if not patch or want is None or impact.get("draftStatus") != "review_required":
             continue
