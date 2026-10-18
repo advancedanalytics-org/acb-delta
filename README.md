@@ -37,6 +37,7 @@ Same with plain Compose: `cp .env.example .env` (replace every `CHANGEME`), then
 | `agent/` | LangGraph graph on port 8080 (AgentBase Runtime contract), 4 stub nodes | TAI-01, MINH-01 (`retrieve`) |
 | `frontend/` | Vite + React UI prototype, all HUY-01 screens | HUY-01 (live API wiring) |
 | `db/init/` | Postgres init SQL (enables pgvector) | |
+| `docs/` | Longer-lived notes; data contracts shared across tasks | |
 | `scripts/run.sh` | Run / stop / test the stack | |
 | `scripts/demo-data/` | Generates the demo PDFs and highlight positions | |
 
