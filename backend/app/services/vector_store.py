@@ -105,6 +105,8 @@ class LangChainPGVectorStore:
         for c in chunks_data:
             meta = {
                 "doc_id": doc_id,
+                "doc_code": c.get("code"),
+                "doc_title": c.get("title"),
                 "doc_type": c.get("doc_type", "internal"),
                 "issuer": c.get("issuer"),
                 "effective_date": c.get("effective_date"),

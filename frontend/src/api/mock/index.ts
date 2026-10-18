@@ -98,7 +98,10 @@ export const mockApi: ApiClient = {
         throw new Error(err.detail || `Tải lên thất bại (HTTP ${response.status})`)
       }
       result = await response.json()
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && !err.message.includes('Failed to fetch')) {
+        throw err
+      }
       result = {
         status: 'success',
         document: {

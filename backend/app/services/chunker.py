@@ -69,12 +69,12 @@ def extract_metadata(doc: pymupdf.Document, default_doc_id: str | None = None) -
 
     full_first_page_text = doc[0].get_text()
 
-    # Match document code
-    code_match = re.search(r"Số(?:\s*hiệu)?[:\s]+([A-Z0-9\/\-\_]+)", full_first_page_text)
+    # Match document code (support Vietnamese letters like Đ in QĐ-CV-01 and symbols)
+    code_match = re.search(r"Số(?:\s*hiệu)?[:\s]+([a-zA-Z0-9\/\-\_\.ĐđÀ-ỹ]+)", full_first_page_text)
     if code_match:
         meta.code = code_match.group(1).strip()
         if not meta.doc_id:
-            meta.doc_id = meta.code.lower().replace("/", "-")
+            meta.doc_id = re.sub(r"[^a-zA-Z0-9_\-]+", "-", meta.code.lower()).strip("-")
 
     # Match version
     ver_match = re.search(r"Phiên bản\s*[:\s]*([0-9\.]+)", full_first_page_text)
@@ -119,6 +119,8 @@ def chunk_pdf(
     source: str | Path | bytes | BinaryIO,
     doc_id: str | None = None,
     doc_type: str = "internal",
+    code: str | None = None,
+    title: str | None = None,
     issuer: str | None = None,
     effective_date: str | None = None,
 ) -> tuple[DocumentMetadata, list[PDFChunk]]:
@@ -132,15 +134,28 @@ def chunk_pdf(
         doc = pymupdf.open(stream=stream_bytes, filetype="pdf")
 
     inferred_meta = extract_metadata(doc, default_doc_id=doc_id)
-    final_doc_id = doc_id or inferred_meta.doc_id or "doc-unknown"
-    final_issuer = issuer or inferred_meta.issuer
-    final_effective_date = effective_date or inferred_meta.effective_date
-
-    inferred_meta.doc_id = final_doc_id
+    if code:
+        inferred_meta.code = code
+    if title:
+        inferred_meta.title = title
     if issuer:
         inferred_meta.issuer = issuer
     if effective_date:
         inferred_meta.effective_date = effective_date
+
+    # Determine final doc_id
+    if doc_id:
+        final_doc_id = doc_id
+    elif inferred_meta.code:
+        final_doc_id = re.sub(r"[^a-zA-Z0-9_\-]+", "-", inferred_meta.code.lower()).strip("-")
+    elif inferred_meta.doc_id:
+        final_doc_id = inferred_meta.doc_id
+    else:
+        final_doc_id = "doc-unknown"
+
+    inferred_meta.doc_id = final_doc_id
+    final_issuer = inferred_meta.issuer
+    final_effective_date = inferred_meta.effective_date
 
     chunks: list[PDFChunk] = []
 
@@ -186,6 +201,8 @@ def chunk_pdf(
                 issuer=final_issuer,
                 effective_date=final_effective_date,
                 chunk_metadata={
+                    "document_code": inferred_meta.code,
+                    "document_title": inferred_meta.title,
                     "chapter": current_chapter,
                     "section": current_section,
                     "article_heading": current_article_heading,

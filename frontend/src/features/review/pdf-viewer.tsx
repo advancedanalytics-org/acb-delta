@@ -55,6 +55,23 @@ interface PdfViewerProps {
   disabled?: boolean
 }
 
+function getImpactBoundingBox(bboxes: [number, number, number, number][]) {
+  if (!bboxes || bboxes.length === 0) {
+    return { x0: 0, y0: 0, x1: 0, y1: 0 }
+  }
+  let x0 = bboxes[0][0]
+  let y0 = bboxes[0][1]
+  let x1 = bboxes[0][2]
+  let y1 = bboxes[0][3]
+  for (let i = 1; i < bboxes.length; i++) {
+    x0 = Math.min(x0, bboxes[i][0])
+    y0 = Math.min(y0, bboxes[i][1])
+    x1 = Math.max(x1, bboxes[i][2])
+    y1 = Math.max(y1, bboxes[i][3])
+  }
+  return { x0, y0, x1, y1 }
+}
+
 /** Mount with key={document.id}: page measurements are per document. */
 export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, disabled }: PdfViewerProps) {
   const { ref, width } = useContainerWidth()
@@ -63,6 +80,7 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
   const [pointWidths, setPointWidths] = useState<Record<number, number>>({})
   const selectedRef = useRef<HTMLDivElement>(null)
   const [hoveredInfo, setHoveredInfo] = useState<HoveredInfo | null>(null)
+  const hoveredImpactIdRef = useRef<string | null>(null)
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isEditingRef = useRef(false)
@@ -77,20 +95,25 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
   const handleMouseEnter = (
     impact: Impact,
     pageNumber: number,
-    box: [number, number, number, number],
     scale: number,
   ) => {
     clearHoverTimeout()
-    if (isEditingRef.current && hoveredInfo?.impact.id !== impact.id) {
+    // If the card is already being shown for this exact impact, KEEP IT FIXED!
+    if (hoveredImpactIdRef.current === impact.id) {
       return
     }
+    if (isEditingRef.current) {
+      return
+    }
+    hoveredImpactIdRef.current = impact.id
+    const bbox = getImpactBoundingBox(impact.bboxes)
     setHoveredInfo({
       impact,
       pageNumber,
-      top: box[1] * scale,
-      left: box[0] * scale,
-      width: (box[2] - box[0]) * scale,
-      height: (box[3] - box[1]) * scale,
+      top: bbox.y0 * scale,
+      left: bbox.x0 * scale,
+      width: (bbox.x1 - bbox.x0) * scale,
+      height: (bbox.y1 - bbox.y0) * scale,
     })
   }
 
@@ -98,6 +121,7 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
     clearHoverTimeout()
     if (isEditingRef.current) return
     hoverTimeoutRef.current = setTimeout(() => {
+      hoveredImpactIdRef.current = null
       setHoveredInfo(null)
     }, 250)
   }
@@ -114,17 +138,19 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
 
   // When selection changes, anchor hover card to the selected impact
   useEffect(() => {
-    if (!selected || selected.page == null || !selectedPageReady) return
+    if (!selected || !selectedPageReady) return
+    if (hoveredImpactIdRef.current === selected.id) return
     const scale = pointWidths[selected.page] ? pageWidth / pointWidths[selected.page] : 0
     if (scale > 0 && selected.bboxes.length > 0) {
-      const firstBox = selected.bboxes[0]
+      hoveredImpactIdRef.current = selected.id
+      const bbox = getImpactBoundingBox(selected.bboxes)
       setHoveredInfo({
         impact: selected,
         pageNumber: selected.page,
-        top: firstBox[1] * scale,
-        left: firstBox[0] * scale,
-        width: (firstBox[2] - firstBox[0]) * scale,
-        height: (firstBox[3] - firstBox[1]) * scale,
+        top: bbox.y0 * scale,
+        left: bbox.x0 * scale,
+        width: (bbox.x1 - bbox.x0) * scale,
+        height: (bbox.y1 - bbox.y0) * scale,
       })
     }
   }, [selectedId, selectedPageReady, pageWidth])
@@ -170,9 +196,9 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
                             ref={isSelected && boxIndex === 0 ? selectedRef : undefined}
                             onClick={() => {
                               onSelect(impact.id)
-                              handleMouseEnter(impact, pageNumber, [x0, y0, x1, y1], scale)
+                              handleMouseEnter(impact, pageNumber, scale)
                             }}
-                            onMouseEnter={() => handleMouseEnter(impact, pageNumber, [x0, y0, x1, y1], scale)}
+                            onMouseEnter={() => handleMouseEnter(impact, pageNumber, scale)}
                             onMouseLeave={handleMouseLeave}
                             aria-hidden
                             className={cn(
@@ -216,6 +242,7 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
                     }}
                     onClose={() => {
                       isEditingRef.current = false
+                      hoveredImpactIdRef.current = null
                       setHoveredInfo(null)
                     }}
                     onDecide={
@@ -377,7 +404,7 @@ function HoverLegalCard({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        'pointer-events-auto absolute z-40 rounded-xl border border-border/80 bg-popover/98 p-4 text-popover-foreground shadow-2xl backdrop-blur-md transition-all duration-200 animate-in fade-in-0 zoom-in-95',
+        'pointer-events-auto absolute z-40 rounded-xl border border-border/80 bg-popover/98 p-4 text-popover-foreground shadow-2xl backdrop-blur-md animate-in fade-in-0 zoom-in-95',
         isAbove && '-translate-y-full',
       )}
       style={{
@@ -445,14 +472,6 @@ function HoverLegalCard({
             Trích dẫn: {impact.citation}
           </p>
         )}
-      </div>
-
-      {/* Đoạn hiện hành trong văn bản nội bộ */}
-      <div className="mt-2.5 space-y-1">
-        <p className="text-[11px] font-medium text-muted-foreground">Đoạn hiện hành bị ảnh hưởng:</p>
-        <p className="line-clamp-2 rounded border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
-          {impact.affectedText}
-        </p>
       </div>
 
       {/* MODE 1: VIEW MODE */}

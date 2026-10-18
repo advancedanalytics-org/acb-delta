@@ -96,13 +96,22 @@ async def upload_document(
             detail="Uploaded file is empty",
         )
 
+    # Normalize optional form fields
+    clean_code = code.strip() if code and code.strip() else None
+    clean_title = title.strip() if title and title.strip() else None
+    clean_issuer = issuer.strip() if issuer and issuer.strip() else None
+    clean_effective_date = effective_date.strip() if effective_date and effective_date.strip() else None
+    clean_doc_id = doc_id.strip() if doc_id and doc_id.strip() else None
+
     try:
         inferred_meta, chunks = chunk_pdf(
             source=content,
-            doc_id=doc_id,
+            doc_id=clean_doc_id,
             doc_type=doc_type,
-            issuer=issuer,
-            effective_date=effective_date,
+            code=clean_code,
+            title=clean_title,
+            issuer=clean_issuer,
+            effective_date=clean_effective_date,
         )
     except Exception as exc:
         logger.error("Failed to parse and chunk PDF: %s", exc, exc_info=True)
@@ -111,11 +120,24 @@ async def upload_document(
             detail=f"Failed to parse and chunk PDF: {exc}",
         ) from exc
 
-    final_doc_id = doc_id or inferred_meta.doc_id or "doc-unknown"
-    final_code = code or inferred_meta.code or final_doc_id
-    final_title = title or inferred_meta.title or filename
-    final_issuer = issuer or inferred_meta.issuer
-    final_date = effective_date or inferred_meta.effective_date
+    import re
+    final_code = clean_code or inferred_meta.code or "VBPL-01"
+    if clean_doc_id:
+        final_doc_id = clean_doc_id
+    elif inferred_meta.doc_id and inferred_meta.doc_id != "doc-unknown":
+        final_doc_id = inferred_meta.doc_id
+    elif final_code:
+        final_doc_id = re.sub(r"[^a-zA-Z0-9_\-]+", "-", final_code.lower()).strip("-")
+    else:
+        final_doc_id = "doc-unknown"
+
+    final_title = clean_title or inferred_meta.title or filename.replace(".pdf", "")
+    final_issuer = (
+        clean_issuer
+        or inferred_meta.issuer
+        or ("Ngân hàng Nhà nước Việt Nam" if doc_type == "vbpl" else "Ngân hàng ACB")
+    )
+    final_date = clean_effective_date or inferred_meta.effective_date
 
     # Upload raw PDF to object storage (MinIO / vStorage / local fallback)
     storage_key = f"{final_doc_id}/{filename}"
@@ -133,6 +155,8 @@ async def upload_document(
             {
                 "chunk_id": c.chunk_id,
                 "doc_id": final_doc_id,
+                "code": final_code,
+                "title": final_title,
                 "doc_type": doc_type,
                 "issuer": final_issuer,
                 "effective_date": final_date,
@@ -141,7 +165,11 @@ async def upload_document(
                 "bbox": c.bbox,
                 "text": c.text,
                 "embedding": emb,
-                "metadata": c.chunk_metadata,
+                "metadata": {
+                    **c.chunk_metadata,
+                    "document_code": final_code,
+                    "document_title": final_title,
+                },
             }
         )
 
