@@ -69,7 +69,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [x] API FastAPI cho accept / edit / reject
   - [x] Engine A (RIA 4.0 M05 backend): `POST /api/analyses/{job_id}/review` biến finding RIA thành gói review (`vbpls` + `impacts` có patch before/after); lỗi một bản nháp không làm hỏng cả gói
   - [x] `GET /api/feedback`: nhãn HITL (quyết định còn hiệu lực) cho `KHOA-02`
-  - [~] UI review (`frontend/src/api/live`) đọc gói review: inbox đếm theo gói, trang review hiện bản sửa agent đã soạn; bỏ đường tạo impact từ finding id trong `POST /api/decisions`
+  - [x] UI review (`frontend/src/api/live`) đọc gói review: inbox đếm theo gói, trang review hiện bản sửa agent đã soạn; bỏ đường tạo impact từ finding id trong `POST /api/decisions`
   - [x] Chạy E2E thật trên model GCP (`qwen3-next-80b`): VBPL → RIA → bản nháp → quyết định → audit + feedback (`plans/reports/tester-261018-1419-ria-review-live.md`)
 - [x] **TAI-03** – Tài liệu VBPL & fake dữ liệu văn bản nội bộ
   - [x] Thu thập VBPL mẫu (bản cũ + bản sửa đổi)
