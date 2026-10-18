@@ -226,6 +226,11 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
     appendix_count = 0
     mode = "body"  # body | appendix | closing
 
+    has_attached = any(
+        re.search(r"^(QUY ĐỊNH|QUY CHẾ|QUY TRÌNH)\b", ln.text, re.IGNORECASE) for ln in lines
+    )
+    is_decision = has_attached
+
     def open_clause(numbering, level, parent, line, marker_len, heading=None):
         start = line.start + marker_len
         # Skip whitespace between the marker and the text so offsets point at real content.
@@ -240,19 +245,59 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
 
     for line in lines:
         t = line.text
+
+        if is_decision:
+            if re.match(r"^(QUY ĐỊNH|QUY CHẾ|QUY TRÌNH)\b", t, re.IGNORECASE) or (
+                article and RE_CHAPTER.match(t)
+            ):
+                is_decision = False
+                chapter = section = article = khoan = None
+                last_article = 0
+                last_khoan = 0
+                last_point = None
+                mode = "body"
+            elif (m := RE_ARTICLE.match(t)) and (
+                int(m.group(1)) == last_article + 1 or (last_article == 0 and article is None)
+            ):
+                last_article = int(m.group(1))
+                article = f"QD.{last_article}"
+                open_clause(article, "article", "QD", line, m.start(2), heading=m.group(2) or None)
+                continue
+            elif RE_CLOSING.match(t):
+                continue
+
         if mode != "appendix" and article and RE_APPENDIX.match(t):
             mode = "appendix"
         if mode == "appendix":
             if RE_APPENDIX.match(t):
                 appendix_count += 1
                 open_clause(f"PL-{appendix_count}", "appendix", None, line, 0, heading=t)
+            elif m := RE_CLAUSE.match(t):
+                open_clause(
+                    f"PL-{appendix_count}.{m.group(1)}",
+                    "clause",
+                    f"PL-{appendix_count}",
+                    line,
+                    m.start(2),
+                )
             continue
         if mode == "body" and article and RE_CLOSING.match(t):
             mode = "closing"
             open_clause("END", "closing", None, line, 0)
             continue
         if mode == "closing":
-            continue
+            if (
+                re.match(r"^(QUY ĐỊNH|QUY CHẾ|QUY TRÌNH)\b", t, re.IGNORECASE)
+                or RE_CHAPTER.match(t)
+                or (RE_ARTICLE.match(t) and int(RE_ARTICLE.match(t).group(1)) == 1)
+            ):
+                mode = "body"
+                chapter = section = article = khoan = None
+                last_article = 0
+                last_khoan = 0
+                last_point = None
+            else:
+                continue
 
         if m := RE_CHAPTER.match(t):
             chapter = m.group(1).upper()
@@ -278,7 +323,11 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
             last_point = None
             open_clause(khoan, "clause", article, line, m.start(2))
             continue
-        if article and (m := RE_POINT.match(t)) and m.group(1) == _next_letter(last_point):
+        if (
+            article
+            and (m := RE_POINT.match(t))
+            and (m.group(1) == _next_letter(last_point) or last_point is None)
+        ):
             last_point = m.group(1)
             parent = khoan or article
             open_clause(f"{parent}.{last_point}", "point", parent, line, m.start(2))

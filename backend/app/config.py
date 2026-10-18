@@ -2,13 +2,35 @@
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 
-    database_url: str = "postgresql+psycopg://acb:acb@localhost:5432/acb_delta"
+    database_url: str = ""
+    postgres_user: str = "acb"
+    postgres_password: str = "acb"
+    postgres_db: str = "acb_delta"
+    postgres_port: int = 5432
+
+    minio_root_user: str = ""
+    minio_root_password: str = ""
+
+    @model_validator(mode="after")
+    def assemble_database_url(self) -> "Settings":
+        if not self.database_url or "acb:acb@localhost" in self.database_url:
+            self.database_url = (
+                f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+                f"@127.0.0.1:{self.postgres_port}/{self.postgres_db}"
+            )
+        if self.minio_root_user and (not self.s3_access_key or self.s3_access_key == "acb"):
+            self.s3_access_key = self.minio_root_user
+        if self.minio_root_password and (not self.s3_secret_key or self.s3_secret_key == "acb"):
+            self.s3_secret_key = self.minio_root_password
+        return self
+
     agent_url: str = "http://localhost:8080"
     s3_endpoint: str = "http://localhost:9000"
     s3_bucket: str = "documents"
@@ -27,7 +49,10 @@ class Settings(BaseSettings):
     # Background workers for parse / analyze jobs (in-process; no queue in Phase 1).
     job_workers: int = 2
 
-    # Optional OpenAI-compatible LLM for impact judgement. Empty = rule-based comparison only.
+    # Optional LLM for impact judgement (gemini or openai). Empty = rule-based comparison only.
+    llm_type: str = "openai"
+    gemini_api_key: str = ""
+    google_api_key: str = ""
     openai_base_url: str = ""
     openai_api_key: str = ""
     llm_model: str = ""

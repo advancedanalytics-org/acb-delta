@@ -50,8 +50,11 @@ def vbpl_rows(session: Session, vbpl_id: str | None = None) -> list[schemas.Vbpl
     out = []
     for vbpl, impacts, pending in session.execute(query):
         status = vbpl.status
-        if status == "awaiting_review" and pending == 0:
-            status = "done"
+        if status == "awaiting_review":
+            if impacts == 0:
+                status = "not_found"
+            elif pending == 0:
+                status = "done"
         out.append(
             schemas.VbplOut.model_validate(
                 {

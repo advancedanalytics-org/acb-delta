@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -100,7 +100,9 @@ async def upload_document(
     clean_code = code.strip() if code and code.strip() else None
     clean_title = title.strip() if title and title.strip() else None
     clean_issuer = issuer.strip() if issuer and issuer.strip() else None
-    clean_effective_date = effective_date.strip() if effective_date and effective_date.strip() else None
+    clean_effective_date = (
+        effective_date.strip() if effective_date and effective_date.strip() else None
+    )
     clean_doc_id = doc_id.strip() if doc_id and doc_id.strip() else None
 
     try:
@@ -121,6 +123,7 @@ async def upload_document(
         ) from exc
 
     import re
+
     final_code = clean_code or inferred_meta.code or "VBPL-01"
     if clean_doc_id:
         final_doc_id = clean_doc_id
@@ -224,9 +227,17 @@ def list_documents(
     doc_type: str | None = None,
 ) -> list[DocumentResponse]:
     """List ingested documents, optionally filtered by doc_type."""
-    docs = vector_store.list_documents(doc_type=doc_type)
-    return [
-        DocumentResponse(
+    from typing import Any
+
+    from sqlalchemy import text
+
+    from app.db import get_engine
+
+    results_map: dict[str, DocumentResponse] = {}
+
+    # 1. Read from VectorStore (documents table)
+    for d in vector_store.list_documents(doc_type=doc_type):
+        results_map[d.id] = DocumentResponse(
             id=d.id,
             code=d.code,
             title=d.title,
@@ -234,11 +245,50 @@ def list_documents(
             issuer=d.issuer,
             effective_date=d.effective_date,
             page_count=d.page_count,
-            pdf_url=d.pdf_url,
+            pdf_url=d.pdf_url or f"/api/documents/{d.id}/pdf",
             created_at=d.created_at,
         )
-        for d in docs
-    ]
+
+    # 2. Also read from RIA document table
+    try:
+        with get_engine().connect() as conn:
+            query = (
+                "SELECT d.document_id, d.title, d.doc_type, d.owner, d.doc_number, d.issuer, "
+                "v.version_label, v.valid_from, v.page_count, d.created_at "
+                "FROM document d "
+                "LEFT JOIN document_version v ON v.document_id = d.document_id"
+            )
+            params: dict[str, Any] = {}
+            if doc_type:
+                query += " WHERE d.doc_type = :dt"
+                params["dt"] = doc_type
+            query += " ORDER BY v.created_at DESC"
+
+            rows = conn.execute(text(query), params).mappings().all()
+            for r in rows:
+                doc_id = r["document_id"]
+                if doc_id not in results_map:
+                    vf = r.get("valid_from")
+                    vf_str = (
+                        vf.isoformat()
+                        if vf and hasattr(vf, "isoformat")
+                        else (str(vf) if vf else None)
+                    )
+                    results_map[doc_id] = DocumentResponse(
+                        id=doc_id,
+                        code=r.get("doc_number") or doc_id,
+                        title=r["title"],
+                        doc_type=r["doc_type"],
+                        issuer=r.get("issuer") or r.get("owner"),
+                        effective_date=vf_str,
+                        page_count=r.get("page_count") or 1,
+                        pdf_url=f"/api/documents/{doc_id}/pdf",
+                        created_at=r["created_at"],
+                    )
+    except Exception as exc:
+        logger.debug("Could not query RIA document table for list_documents: %s", exc)
+
+    return list(results_map.values())
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)
@@ -247,22 +297,276 @@ def get_document(
     vector_store: VectorStoreDep,
 ) -> DocumentResponse:
     """Get document details by doc_id."""
+    from sqlalchemy import text
+
+    from app.db import get_engine
+
     doc = vector_store.get_document(doc_id)
-    if not doc:
+    if doc:
+        return DocumentResponse(
+            id=doc.id,
+            code=doc.code,
+            title=doc.title,
+            doc_type=doc.doc_type,
+            issuer=doc.issuer,
+            effective_date=doc.effective_date,
+            page_count=doc.page_count,
+            pdf_url=doc.pdf_url or f"/api/documents/{doc.id}/pdf",
+            created_at=doc.created_at,
+        )
+
+    # Check RIA tables
+    try:
+        with get_engine().connect() as conn:
+            r = (
+                conn.execute(
+                    text(
+                        "SELECT d.document_id, d.title, d.doc_type, d.owner, "
+                        "d.doc_number, d.issuer, v.version_label, v.valid_from, "
+                        "v.page_count, d.created_at FROM document d "
+                        "LEFT JOIN document_version v ON v.document_id = d.document_id "
+                        "WHERE d.document_id = :d ORDER BY v.created_at DESC LIMIT 1"
+                    ),
+                    {"d": doc_id},
+                )
+                .mappings()
+                .first()
+            )
+            if r:
+                vf = r.get("valid_from")
+                vf_str = (
+                    vf.isoformat() if vf and hasattr(vf, "isoformat") else (str(vf) if vf else None)
+                )
+                return DocumentResponse(
+                    id=r["document_id"],
+                    code=r.get("doc_number") or r["document_id"],
+                    title=r["title"],
+                    doc_type=r["doc_type"],
+                    issuer=r.get("issuer") or r.get("owner"),
+                    effective_date=vf_str,
+                    page_count=r.get("page_count") or 1,
+                    pdf_url=f"/api/documents/{doc_id}/pdf",
+                    created_at=r["created_at"],
+                )
+    except Exception as exc:
+        logger.debug("Could not query RIA document for %s: %s", doc_id, exc)
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Document '{doc_id}' not found",
+    )
+
+
+@router.get("/{doc_id}/pdf")
+def get_document_pdf(
+    doc_id: str,
+) -> Response:
+    """Download and stream the PDF for an internal document or regulation."""
+    from pathlib import Path
+    from typing import Any
+
+    from sqlalchemy import text
+
+    from app.db import get_engine
+    from app.services.pdf_generator import generate_pdf_for_document
+
+    data: bytes | None = None
+    doc_info: dict[str, Any] = {}
+
+    # 1. Check document_version in RIA database
+    try:
+        with get_engine().connect() as conn:
+            row = (
+                conn.execute(
+                    text(
+                        "SELECT d.title, d.doc_type, d.owner, d.doc_number, "
+                        "v.source_uri, v.file_name, v.content, v.version_label, v.valid_from "
+                        "FROM document d "
+                        "LEFT JOIN document_version v ON v.document_id = d.document_id "
+                        "WHERE d.document_id = :d ORDER BY v.created_at DESC LIMIT 1"
+                    ),
+                    {"d": doc_id},
+                )
+                .mappings()
+                .first()
+            )
+            if row:
+                doc_info = dict(row)
+                uri = row.get("source_uri")
+                if uri:
+                    if uri.startswith("s3://"):
+                        import boto3
+
+                        settings = get_settings()
+                        s3 = boto3.client(
+                            "s3",
+                            endpoint_url=settings.s3_endpoint,
+                            aws_access_key_id=(settings.s3_access_key or settings.postgres_user),
+                            aws_secret_access_key=(
+                                settings.s3_secret_key or settings.postgres_password
+                            ),
+                        )
+                        bucket, key = uri.removeprefix("s3://").split("/", 1)
+                        raw = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+                        if raw.startswith(b"%PDF-"):
+                            data = raw
+                    elif uri.startswith("file://"):
+                        p = Path(uri.removeprefix("file://"))
+                        if p.is_file():
+                            raw = p.read_bytes()
+                            if raw.startswith(b"%PDF-"):
+                                data = raw
+                    else:
+                        for base in [Path("."), Path(".."), Path("/app")]:
+                            p = base / uri
+                            if p.is_file():
+                                raw = p.read_bytes()
+                                if raw.startswith(b"%PDF-"):
+                                    data = raw
+                                    break
+    except Exception as exc:
+        logger.debug("Could not read PDF from document_version: %s", exc)
+
+    # 2. Check MinIO S3 standard keys
+    if not data:
+        try:
+            import boto3
+
+            settings = get_settings()
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=settings.s3_endpoint,
+                aws_access_key_id=settings.s3_access_key or settings.postgres_user,
+                aws_secret_access_key=settings.s3_secret_key or settings.postgres_password,
+            )
+            for key in (
+                f"internal/{doc_id}/{doc_id}.pdf",
+                f"internal/{doc_id}.pdf",
+                f"documents/{doc_id}.pdf",
+                f"{doc_id}/{doc_id}.pdf",
+                f"{doc_id}.pdf",
+            ):
+                try:
+                    obj = s3.get_object(Bucket=settings.s3_bucket, Key=key)
+                    raw = obj["Body"].read()
+                    if raw.startswith(b"%PDF-"):
+                        data = raw
+                        break
+                except Exception:
+                    continue
+        except Exception as exc:
+            logger.debug("Could not fetch PDF from MinIO: %s", exc)
+
+    # 3. Check local data directories fallback
+    if not data:
+        candidates = [
+            Path(f"data/{doc_id}.pdf"),
+            Path(f"../data/{doc_id}.pdf"),
+            Path(f"frontend/public/demo/{doc_id}.pdf"),
+            Path(f"../frontend/public/demo/{doc_id}.pdf"),
+            Path(f"frontend/public/demo/{doc_id.lower()}.pdf"),
+            Path(f"../frontend/public/demo/{doc_id.lower()}.pdf"),
+            Path(f"db/{doc_id}.pdf"),
+            Path(f"../db/{doc_id}.pdf"),
+            Path(f"app/ria/data/{doc_id}.pdf"),
+            Path(f"backend/app/ria/data/{doc_id}.pdf"),
+        ]
+        for c in candidates:
+            if c.is_file():
+                raw = c.read_bytes()
+                if raw.startswith(b"%PDF-"):
+                    data = raw
+                    break
+
+    # 4. Dynamic PDF generation fallback
+    if not data:
+        content_md: str | None = None
+        for md_path in [
+            Path(f"db/{doc_id}.md"),
+            Path(f"../db/{doc_id}.md"),
+            Path(f"app/ria/data/{doc_id}.md"),
+            Path(f"backend/app/ria/data/{doc_id}.md"),
+        ]:
+            if md_path.is_file():
+                content_md = md_path.read_text(encoding="utf-8")
+                break
+
+        if not content_md and doc_info.get("content"):
+            content_md = str(doc_info["content"])
+
+        clauses: list[dict[str, Any]] = []
+        if not content_md:
+            try:
+                with get_engine().connect() as conn:
+                    rows = (
+                        conn.execute(
+                            text(
+                                "SELECT c.clause_id, c.numbering, c.heading, c.text, c.level "
+                                "FROM clause c "
+                                "JOIN document_version v ON v.version_id = c.version_id "
+                                "WHERE v.document_id = :d ORDER BY c.ordinal ASC"
+                            ),
+                            {"d": doc_id},
+                        )
+                        .mappings()
+                        .all()
+                    )
+                    clauses = [dict(r) for r in rows]
+            except Exception as exc:
+                logger.debug("Could not fetch clauses for PDF gen: %s", exc)
+
+        if content_md or clauses or doc_info:
+            save_paths = [
+                Path(f"frontend/public/demo/{doc_id}.pdf"),
+                Path(f"data/{doc_id}.pdf"),
+            ]
+            vf = doc_info.get("valid_from")
+            vf_str = (
+                vf.isoformat() if vf and hasattr(vf, "isoformat") else (str(vf) if vf else None)
+            )
+            data = generate_pdf_for_document(
+                doc_id=doc_id,
+                title=doc_info.get("title") or doc_id,
+                content_md=content_md,
+                clauses=clauses,
+                owner=doc_info.get("owner"),
+                version=doc_info.get("version_label"),
+                effective_date=vf_str,
+                save_paths=save_paths,
+            )
+            # Cache to MinIO
+            try:
+                import boto3
+
+                settings = get_settings()
+                s3 = boto3.client(
+                    "s3",
+                    endpoint_url=settings.s3_endpoint,
+                    aws_access_key_id=settings.s3_access_key or settings.postgres_user,
+                    aws_secret_access_key=settings.s3_secret_key or settings.postgres_password,
+                )
+                s3.put_object(
+                    Bucket=settings.s3_bucket,
+                    Key=f"{doc_id}/{doc_id}.pdf",
+                    Body=data,
+                    ContentType="application/pdf",
+                )
+            except Exception as exc:
+                logger.debug("Could not cache generated PDF to MinIO: %s", exc)
+
+    if not data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document '{doc_id}' not found",
+            detail=f"PDF for document '{doc_id}' not found",
         )
-    return DocumentResponse(
-        id=doc.id,
-        code=doc.code,
-        title=doc.title,
-        doc_type=doc.doc_type,
-        issuer=doc.issuer,
-        effective_date=doc.effective_date,
-        page_count=doc.page_count,
-        pdf_url=doc.pdf_url,
-        created_at=doc.created_at,
+
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{doc_id}.pdf"',
+            "Content-Type": "application/pdf",
+        },
     )
 
 

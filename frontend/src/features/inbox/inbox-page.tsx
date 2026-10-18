@@ -11,6 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useVbpls } from '@/hooks/queries'
 import { formatDate } from '@/lib/format'
 import { vbplStatusLabel } from '@/lib/labels'
+import { cn } from '@/lib/utils'
 import { UploadVbplDialog } from './upload-vbpl-dialog'
 
 type Filter = 'all' | VbplStatus
@@ -112,15 +113,23 @@ export function InboxPage() {
                   </TableRow>
                 ))}
               {rows.map((vbpl) => {
-                const open = () => navigate(`/review/${vbpl.id}`)
+                const canOpen = vbpl.impactCount > 0 && vbpl.status !== 'not_found'
+                const open = () => {
+                  if (canOpen) navigate(`/review/${vbpl.id}`)
+                }
                 return (
                   <TableRow
                     key={vbpl.id}
                     onClick={open}
                     onKeyDown={(event) => event.key === 'Enter' && open()}
-                    tabIndex={0}
-                    aria-label={`Mở ${vbpl.number}`}
-                    className="group cursor-pointer outline-none focus-visible:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
+                    tabIndex={canOpen ? 0 : -1}
+                    aria-label={canOpen ? `Mở ${vbpl.number}` : vbpl.number}
+                    className={cn(
+                      'group outline-none',
+                      canOpen
+                        ? 'cursor-pointer focus-visible:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset'
+                        : 'cursor-default hover:bg-transparent'
+                    )}
                   >
                     <TableCell className="font-medium">{vbpl.number}</TableCell>
                     <TableCell className="whitespace-normal">
@@ -143,10 +152,12 @@ export function InboxPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <ArrowRight
-                        className="size-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5"
-                        aria-hidden
-                      />
+                      {canOpen && (
+                        <ArrowRight
+                          className="size-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5"
+                          aria-hidden
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 )

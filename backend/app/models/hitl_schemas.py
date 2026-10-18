@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
 DecisionAction = Literal["accept", "edit", "reject"]
-VbplStatus = Literal["processing", "awaiting_review", "done", "failed"]
+VbplStatus = Literal["processing", "awaiting_review", "done", "failed", "not_found"]
 ImpactStatus = Literal["pending", "accepted", "rejected"]
 
 

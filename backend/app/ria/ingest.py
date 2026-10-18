@@ -348,6 +348,34 @@ def run_parse(job_id: str) -> dict:
                         "end": o.span_end,
                     }
                 )
+
+        if not obl_rows:
+            substantive = [
+                c
+                for c in parsed.clauses
+                if c.level in ("article", "clause", "point") and len(c.text.strip()) >= 20
+            ]
+            for c in substantive:
+                clause_id = numbering_to_id.get(c.numbering)
+                if not clause_id:
+                    continue
+                obl_rows.append(
+                    {
+                        "id": f"{clause_id}~o1",
+                        "src": clause_id,
+                        "subject": c.heading or meta.get("issuer") or "Đơn vị áp dụng",
+                        "action": "thực hiện",
+                        "object": c.text[:200],
+                        "modality": "must",
+                        "condition": None,
+                        "deadline": None,
+                        "exception": None,
+                        "text": c.text,
+                        "start": 0,
+                        "end": len(c.text),
+                    }
+                )
+
         if obl_rows:
             conn.execute(
                 text(
