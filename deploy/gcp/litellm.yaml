@@ -1,12 +1,20 @@
 # LiteLLM proxy on the GCP demo VM: one OpenAI-compatible endpoint for the api and agent.
 # Vertex AI wants short-lived Google tokens, not a fixed key. LiteLLM fetches them from the VM's
-# service account (acb-delta-vm, roles/aiplatform.user, cloud-platform scope), so no key is stored.
+# service account (acb-delta-vm, roles/aiplatform.user + roles/discoveryengine.viewer,
+# cloud-platform scope), so no key is stored.
 model_list:
-  # Qwen3-Next-80B Instruct, served by Vertex AI (Model as a Service). Only the "global"
-  # location has it; us-south1 returns 404. The Instruct variant has no thinking mode.
-  - model_name: qwen3-next-80b
+  # Gemini 4 Argon, served by Vertex AI in the "global" location. It is a thinking model.
+  - model_name: gemini-4-argon
     litellm_params:
-      model: vertex_ai/qwen/qwen3-next-80b-a3b-instruct-maas
+      model: vertex_ai/gemini-4-argon
+      vertex_project: acb-delta-demo-2340
+      vertex_location: global
+
+  # Vertex AI Ranking API (Discovery Engine), exposed as a Cohere-style POST /v1/rerank, which is
+  # the shape backend/app/ria/rerank.py calls. Needs discoveryengine.googleapis.com enabled.
+  - model_name: semantic-ranker-default
+    litellm_params:
+      model: vertex_ai/semantic-ranker-default@latest
       vertex_project: acb-delta-demo-2340
       vertex_location: global
 

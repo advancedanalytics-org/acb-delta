@@ -87,12 +87,13 @@ Models on the VM come from `deploy/gcp/docker-compose.gcp.yml`, not from `.env`,
 
 | Role | Service | Model |
 |---|---|---|
-| Chat (api + agent) | `litellm` → Vertex AI, location `global` | Qwen3-Next-80B Instruct (`deploy/gcp/litellm.yaml`), called as `qwen3-next-80b`. Authenticated as the VM's service account (`roles/aiplatform.user`, `cloud-platform` scope) |
+| Chat (api + agent) | `litellm` → Vertex AI, location `global` | Gemini 4 Argon (`deploy/gcp/litellm.yaml`), called as `gemini-4-argon`. Authenticated as the VM's service account (`roles/aiplatform.user`, `cloud-platform` scope) |
+| Rerank (api) | `litellm` → Vertex AI Ranking API (Discovery Engine), location `global` | `semantic-ranker-default@latest`, called as `semantic-ranker-default` on `POST /v1/rerank`. Same service account, plus `roles/discoveryengine.viewer` |
 | Embedding (api) | `embedding`: text-embeddings-inference on CPU | `BAAI/bge-m3`, 1024 dims; weights cached in the `embeddingdata` volume |
 
 `scripts/gcp.sh deploy` writes `COMPOSE_FILE` into the VM's `.env`, so `docker compose` and `scripts/run.sh` on the VM always include that overlay. The CI deployer (`github-deployer`) needs `roles/iam.serviceAccountUser` on `acb-delta-vm` to SSH in.
 
-To call the VM's models from a laptop (e.g. a local stack), use the OpenAI-compatible endpoint `https://34-143-129-52.sslip.io/v1` with the model key from `gcp.sh login` as the bearer token: set `OPENAI_BASE_URL` and `EMBEDDING_BASE_URL` to it, `OPENAI_API_KEY` and `EMBEDDING_API_KEY` to the key, `LLM_MODEL=qwen3-next-80b`, `EMBEDDING_MODEL=BAAI/bge-m3`. Calls spend the demo project's Vertex credit and share the VM's CPU with the demo; never commit the key.
+To call the VM's models from a laptop (e.g. a local stack), use the OpenAI-compatible endpoint `https://34-143-129-52.sslip.io/v1` with the model key from `gcp.sh login` as the bearer token: set `OPENAI_BASE_URL` and `EMBEDDING_BASE_URL` to it, `OPENAI_API_KEY` and `EMBEDDING_API_KEY` to the key, `LLM_MODEL=gemini-4-argon`, `EMBEDDING_MODEL=BAAI/bge-m3`; for rerank, `RERANK_BASE_URL` = the same URL, `RERANK_API_KEY` = the key, `RERANK_MODEL=semantic-ranker-default`. Calls spend the demo project's Vertex credit and share the VM's CPU with the demo; never commit the key.
 
 Rules for agents: never print the login or `.env` in CI logs (the repo is public); never run `destroy` unless your human asked.
 

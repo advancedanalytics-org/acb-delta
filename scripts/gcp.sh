@@ -51,11 +51,11 @@ site_address() { local ip; ip="$(static_ip)"; echo "${ip//./-}.sslip.io"; }
 
 cmd_create() {
   info "Project $PROJECT ($(gcloud config get-value account 2>/dev/null)), zone $ZONE, $MACHINE"
-  gcloud services enable compute.googleapis.com aiplatform.googleapis.com "${G[@]}"
+  gcloud services enable compute.googleapis.com aiplatform.googleapis.com discoveryengine.googleapis.com "${G[@]}"
   local sa="$VM_SA@$PROJECT.iam.gserviceaccount.com" role
   gcloud iam service-accounts describe "$sa" "${G[@]}" >/dev/null 2>&1 ||
     gcloud iam service-accounts create "$VM_SA" --display-name "acb-delta demo VM" "${G[@]}"
-  for role in roles/aiplatform.user roles/logging.logWriter roles/monitoring.metricWriter; do
+  for role in roles/aiplatform.user roles/discoveryengine.viewer roles/logging.logWriter roles/monitoring.metricWriter; do
     gcloud projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$sa" --role "$role" \
       --condition=None "${G[@]}" >/dev/null
   done
@@ -139,13 +139,16 @@ cmd_deploy() {
 # Fail the deploy when a model does not answer, instead of a "healthy" stack that silently falls
 # back to rules (api) or 503s (agent). One short call each; prints no config or credentials.
 check_models() {
-  info "Checking the models: chat (Vertex AI via LiteLLM), embedding (bge-m3), agent"
+  info "Checking the models: chat + rerank (Vertex AI via LiteLLM), embedding (bge-m3), agent"
   remote "set -euo pipefail; cd $REMOTE_DIR
     sudo $COMPOSE_GCP exec -T api python -c '
-from app.ria import embeddings, llm
+from app.ria import embeddings, llm, rerank
 assert llm.llm_model(), \"LLM_MODEL is empty\"
 llm.chat_json(\"Return the JSON object {\\\"ok\\\": true}.\", \"ping\")
 print(\"chat ok:\", llm.llm_model())
+assert rerank.rerank_model(), \"RERANK_MODEL is empty\"
+rerank.rerank(\"ping\", [\"ping\"])
+print(\"rerank ok:\", rerank.rerank_model())
 dim = len(embeddings.embed([\"ping\"])[0])
 print(\"embedding ok:\", embeddings.embedding_version(), dim, \"dims\")'
     sudo $COMPOSE_GCP exec -T agent python -c '
