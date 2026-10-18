@@ -29,11 +29,14 @@ interface ImpactDetailProps {
 /** Remounted per impact (key) so edit state and reason chips reset when the selection changes. */
 export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDetailProps) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(impact.finalText ?? impact.suggestedText)
+  const [draft, setDraft] = useState(impact.finalText || impact.suggestedText || impact.affectedText)
+  // A failed or skipped draft has no AI text: the reviewer can edit or reject, not accept.
+  const hasProposal = Boolean(impact.finalText ?? impact.suggestedText)
   const [tags, setTags] = useState<string[]>([])
 
   const decide = (action: DecisionAction) => {
     if (disabled) return
+    if (action === 'accept' && !hasProposal) return
     if (action === 'edit') {
       setEditing(true)
       return
@@ -115,8 +118,13 @@ export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDet
                 </span>
               </div>
             </div>
-          ) : (
+          ) : hasProposal ? (
             <TextDiff oldValue={impact.affectedText} newValue={proposal} />
+          ) : (
+            <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+              AI chưa soạn được đề xuất{impact.draftError ? ` (${impact.draftError})` : ''}. Hãy sửa
+              trực tiếp hoặc từ chối.
+            </p>
           )}
         </Section>
 
@@ -152,7 +160,7 @@ export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDet
           </ToggleGroup>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <Button onClick={() => decide('accept')} disabled={disabled} className="h-10">
+          <Button onClick={() => decide('accept')} disabled={disabled || !hasProposal} className="h-10">
             <Check aria-hidden />
             Chấp nhận
             <Kbd>A</Kbd>

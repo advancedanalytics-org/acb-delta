@@ -46,7 +46,8 @@ def _finding(**overrides) -> dict:
         "verification": {}, "citations": ["REG-1@v1#2.1", "DOC-102@v4#5.2"], "method": "rule",
         "impacted_document_id": "DOC-102", "internal_clause_id": "DOC-102@v4#5.2",
         "obligation_text": "Phải rà soát tối đa 12 tháng.", "source_clause_id": "REG-1@v1#2.1",
-        "regulation_numbering": "2.1", "clause_numbering": "5.2", "clause_heading": None,
+        "regulation_numbering": "2.1", "regulation_number": "99/2026/TT-NHNN",
+        "clause_numbering": "5.2", "clause_heading": None,
         "parent_heading": "Điều 5. Rà soát định kỳ", "clause_text": clause,
         "clause_bbox": [[1, 50, 100, 500, 112]], "score": 0.8,
     }  # fmt: skip
@@ -80,7 +81,8 @@ def test_impact_row_maps_finding_and_patch():
     assert row["draft_status"] == "review_required" and row["draft_error"] is None
     assert (row["type"], row["severity"], row["category"]) == ("conflict", "high", "VALUE_CHANGE")
     assert row["location"] == "5.2. Điều 5. Rà soát định kỳ"
-    assert row["change_clause"] == "2.1" and row["citation"] == "tối đa 12 tháng"
+    assert row["change_clause"] == "Phải rà soát tối đa 12 tháng."
+    assert row["citation"] == "99/2026/TT-NHNN, điều khoản 2.1"
     assert (row["page"], row["bboxes"]) == (1, [[50.0, 100.0, 500.0, 112.0]])
     assert row["model_output"]["finding"]["finding_id"] == "RIA-1"
     assert row["model_output"]["draft"]["new_text"] == "tối đa 12 tháng"
@@ -461,3 +463,103 @@ def test_startup_fails_packages_whose_review_job_died(ria_client):
 
     vbpl = next(v for v in ria_client.get("/api/vbpls").json() if v["id"] == "vbpl-orphan")
     assert vbpl["status"] == "failed" and vbpl["error"] == "interrupted by API restart"
+
+
+@needs_db
+def test_regulation_review_endpoint_and_inbox_counts(ria_client, drafter):
+    job_id = _analyze(ria_client)
+    proposed = [f for f in _findings(job_id) if f["status"] == "AI_PROPOSED"]
+
+    started = ria_client.post("/api/regulations/REG-99-2026-TT-NHNN/review")
+    assert started.status_code in (200, 202), started.text
+    body = started.json()
+    assert _wait(ria_client, body["review_job_id"])["status"] == "succeeded"
+    # Latest finished analysis → the package of that job.
+    assert body == ria_client.post(f"/api/analyses/{job_id}/review").json()
+
+    inbox = next(
+        r
+        for r in ria_client.get("/api/regulations").json()
+        if r["document_id"] == "REG-99-2026-TT-NHNN"
+    )
+    assert inbox["vbpl_id"] == body["vbpl_id"]
+    assert inbox["status"] == "awaiting_review"
+    assert inbox["impact_count"] == inbox["pending_count"] == len(proposed)
+
+    impacts = ria_client.get(f"/api/vbpls/{body['vbpl_id']}/impacts").json()
+    for impact in impacts:
+        decided = ria_client.post(
+            "/api/decisions",
+            json={"impactId": impact["id"], "action": "reject", "reviewerId": "rv-anh"},
+        )
+        assert decided.status_code == 201
+    inbox = next(
+        r
+        for r in ria_client.get("/api/regulations").json()
+        if r["document_id"] == "REG-99-2026-TT-NHNN"
+    )
+    assert (inbox["status"], inbox["pending_count"]) == ("done", 0)
+
+    assert ria_client.post("/api/regulations/REG-NOPE/review").status_code == 404
+
+
+@needs_db
+def test_decision_on_a_raw_finding_id_is_404(ria_client):
+    job_id = _analyze(ria_client)
+    finding = _findings(job_id)[0]["finding_id"]
+    response = ria_client.post(
+        "/api/decisions",
+        json={"impactId": finding, "action": "accept", "reviewerId": "rv-anh"},
+    )
+    assert response.status_code == 404
+
+
+@needs_db
+def test_auto_start_builds_the_package_after_analysis(ria_client, drafter, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "review_auto_start", True)
+    job_id = _analyze(ria_client)
+    proposed = [f for f in _findings(job_id) if f["status"] == "AI_PROPOSED"]
+
+    # Already started by the analyze job: the POST finds it.
+    again = ria_client.post(f"/api/analyses/{job_id}/review")
+    assert again.status_code == 200, again.text
+    body = again.json()
+    assert _wait(ria_client, body["review_job_id"])["status"] == "succeeded"
+    impacts = ria_client.get(f"/api/vbpls/{body['vbpl_id']}/impacts").json()
+    assert {i["findingId"] for i in impacts} == {f["finding_id"] for f in proposed}
+
+
+@needs_db
+def test_inbox_and_review_while_analysis_runs_or_fails(ria_client):
+    from app.db import get_engine
+
+    job_id = _analyze(ria_client)
+    with get_engine().begin() as conn:
+        # Newest analyze job of the version: still running, then failed; no package for it.
+        conn.execute(
+            text(
+                "UPDATE job SET status = 'running', created_at = now() + interval '1 day' "
+                "WHERE job_id = :j"
+            ),
+            {"j": job_id},
+        )
+        conn.execute(text("DELETE FROM vbpls WHERE ria_job_id IS NOT NULL"))
+        conn.execute(
+            text("UPDATE job SET status = 'failed' WHERE job_type = 'analyze' AND job_id <> :j"),
+            {"j": job_id},
+        )
+    try:
+        assert ria_client.post("/api/regulations/REG-99-2026-TT-NHNN/review").status_code == 409
+        with get_engine().begin() as conn:
+            conn.execute(text("UPDATE job SET status = 'failed' WHERE job_id = :j"), {"j": job_id})
+        row = next(
+            r
+            for r in ria_client.get("/api/regulations").json()
+            if r["document_id"] == "REG-99-2026-TT-NHNN"
+        )
+        assert row["status"] == "failed" and row["error"]
+    finally:
+        with get_engine().begin() as conn:
+            conn.execute(text("UPDATE job SET status = 'succeeded' WHERE job_type = 'analyze'"))

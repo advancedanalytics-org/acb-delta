@@ -128,7 +128,9 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
 
   const pageWidth = Math.min(Math.max(width - 2 * PAGE_GAP, 0), MAX_PAGE_WIDTH)
   const selected = impacts.find((impact) => impact.id === selectedId)
-  const selectedPageReady = selected?.page != null ? Boolean(pointWidths[selected.page]) : false
+  // Clauses without a PDF location (seeded from text) open their card at the top of page 1.
+  const selectedPage = selected ? (selected.page ?? 1) : null
+  const selectedPageReady = selectedPage != null ? Boolean(pointWidths[selectedPage]) : false
 
   useEffect(() => {
     if (!selectedPageReady) return
@@ -138,11 +140,11 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
 
   // When selection changes, anchor hover card to the selected impact
   useEffect(() => {
-    if (!selected || selected.page == null || !selectedPageReady) return
-    const pageNumber = selected.page
+    if (!selected || selectedPage == null || !selectedPageReady) return
+    const pageNumber = selectedPage
     if (hoveredImpactIdRef.current === selected.id) return
     const scale = pointWidths[pageNumber] ? pageWidth / pointWidths[pageNumber] : 0
-    if (scale > 0 && selected.bboxes.length > 0) {
+    if (scale > 0) {
       hoveredImpactIdRef.current = selected.id
       const bbox = getImpactBoundingBox(selected.bboxes)
       setHoveredInfo({
@@ -328,6 +330,14 @@ function HoverLegalCard({
 
   const handleRequestAiSuggestion = async () => {
     onSelect?.(impact.id)
+    // The review package already holds the agent's verified patch; ask for a fresh rewrite only
+    // when there is no draft (failed or skipped).
+    const proposal = impact.finalText || impact.suggestedText
+    if (proposal) {
+      setDraft(proposal)
+      setMode('edit')
+      return
+    }
     setIsLoadingAi(true)
     try {
       const response = await fetch('/api/ai/suggest-edit', {

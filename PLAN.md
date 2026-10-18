@@ -69,6 +69,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [x] API FastAPI cho accept / edit / reject
   - [x] Engine A (RIA 4.0 M05 backend): `POST /api/analyses/{job_id}/review` biến finding RIA thành gói review (`vbpls` + `impacts` có patch before/after); lỗi một bản nháp không làm hỏng cả gói
   - [x] `GET /api/feedback`: nhãn HITL (quyết định còn hiệu lực) cho `KHOA-02`
+  - [x] UI review (`frontend/src/api/live`) đọc gói review: inbox đếm theo gói, trang review hiện bản sửa agent đã soạn; bỏ đường tạo impact từ finding id trong `POST /api/decisions`
   - [x] Chạy E2E thật trên model GCP (`qwen3-next-80b`): VBPL → RIA → bản nháp → quyết định → audit + feedback (`plans/reports/tester-261018-1419-ria-review-live.md`)
 - [x] **TAI-03** – Tài liệu VBPL & fake dữ liệu văn bản nội bộ
   - [x] Thu thập VBPL mẫu (bản cũ + bản sửa đổi)
@@ -173,4 +174,4 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 - **Engine phân tích tác động** (TAI-01, MINH-01, 2026-10-18): phương án **A** theo blueprint RIA 4.0 (`docs/ACB_RIA_4_0_Final_E2E_6_Modules_6_Owners.html`). RIA (M01–M03, `MINH-01`) tìm finding; agent (M04, `TAI-01`) chỉ soạn patch. M05 backend (quyết định, audit, feedback) = `TAI-02`, M05 UI = `HUY-01`, M06 = `KHOA-01/02`. Luồng `/invoke` cũ giữ nguyên tới khi `KHOA-01` chuyển sang đường RIA. Không ghi bảng `amendment` của RIA; patch nằm ở `impacts.patch`. Hợp đồng: `docs/amendment-review-contract.md`
 - **Duyệt HITL** (TAI-02): một bước duyệt (accept / edit / reject / undo) + audit append-only; duyệt nhiều cấp / maker-checker để roadmap. Redline = dữ liệu before/after trên đúng span trong API, không xuất DOCX
 - **Luồng dữ liệu Evaluate + enrich test set** (KHOA-01): _chưa chốt_
-- **Luồng dữ liệu feedback loop** (KHOA-02): _chưa chốt_
+- **Luồng dữ liệu feedback loop** (KHOA-02, chốt 2026-10-18 bởi Tài): `KHOA-02` đọc `GET /api/feedback` theo định dạng ở `docs/amendment-review-contract.md` §4 — mỗi impact một dòng theo quyết định còn hiệu lực; `edit` → (chosen = bản người sửa, rejected = đề xuất AI), `reject` → (chosen = văn bản gốc, rejected = đề xuất AI), `accept` → chosen = đề xuất AI; bản nháp lỗi/bỏ qua → rejected = null; quyết định đã undo không vào feedback

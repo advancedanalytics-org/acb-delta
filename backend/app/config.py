@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     llm_concurrency: int = 4
     # Parallel agent POST /draft calls while building one RIA review package.
     review_draft_concurrency: int = 4
+    # Build the review package as soon as an analyze job finishes (on in docker-compose).
+    review_auto_start: bool = False
     # Reuse identical LLM answers across runs (table llm_cache).
     llm_cache_enabled: bool = True
 

@@ -4,9 +4,11 @@
 
 ```text
 POST /api/regulations/{id}/analyze ─► job analyze ─► impact_finding (AI_PROPOSED)
-POST /api/analyses/{job_id}/review ─► job review ─► mỗi finding: agent POST /draft
-                                                  ─► vbpls (1 / job analyze) + impacts (+patch)
-UI  ── GET /api/vbpls · /api/vbpls/{id}/impacts · POST/DELETE /api/decisions · GET /api/audit
+        └─ REVIEW_AUTO_START ─► job review ─► mỗi finding: agent POST /draft
+                                           ─► vbpls (1 / job analyze) + impacts (+patch)
+UI  ── GET /api/regulations (inbox, đếm theo gói review)
+    ── POST /api/regulations/{id}/review → vbpl_id ── GET /api/vbpls/{vbpl_id}/impacts
+    ── POST/DELETE /api/decisions (id của impact trong gói) · GET /api/audit
 KHOA-02 ── GET /api/feedback
 ```
 
@@ -113,15 +115,21 @@ Không ghi bảng `amendment` của RIA.
 | `document_id` | `impact_finding.impacted_document_id` |
 | `chunk_id` | `impact_finding.internal_clause_id` |
 | `location` | numbering của điều khoản nội bộ |
-| `change_clause` | numbering của điều khoản VBPL chứa nghĩa vụ |
-| `citation` | text của `source_span` (đoạn VBPL làm căn cứ) |
+| `change_clause` | nguyên văn nghĩa vụ trong VBPL (`obligation.text`); UI hiện ở ô "Điều khoản VBPL mới" |
+| `citation` | `"<số VBPL>, điều khoản <numbering>"`, ví dụ `99/2026/TT-NHNN, điều khoản 2.1` |
 | `affected_text` | text điều khoản nội bộ |
 | `suggested_text` | `affected_text` sau khi áp patch; `""` khi không có patch |
 | `page`, `bboxes` | từ `clause.bbox` (`[[page, x0, y0, x1, y1], …]`): `page` = trang của box đầu, `bboxes` = các box cùng trang đó; `null` / `[]` khi không có bbox |
 | `reasoning` | `impact_finding.rationale` |
 | `model_output` | `{"finding": <impact_finding>, "draft": <AmendmentProposal> \| null}`: RLHF cần biết bước nào bị người duyệt sửa (`edit` ≈ lỗi drafter, `reject` ≈ lỗi judge của RIA) |
 
-## 3. `POST /api/analyses/{job_id}/review`
+## 3. `POST /api/analyses/{job_id}/review` và `POST /api/regulations/{id}/review`
+
+Gói review được tạo tự động ngay khi job analyze xong nếu `REVIEW_AUTO_START=true` (mặc định trong `docker-compose.yml`; mặc định trong code là tắt để test không gọi agent). Cách làm: `app.review_bridge` đăng ký lại handler `analyze` = phân tích của RIA rồi xếp job review; code RIA không đổi.
+
+`POST /api/regulations/{id}/review` trả gói của lần phân tích xong gần nhất của VBPL (tạo nếu chưa có, ví dụ VBPL phân tích trước khi có gói); `409` khi lần phân tích đầu còn chạy, `404` khi chưa từng phân tích. UI dùng endpoint này để lấy `vbpl_id`, rồi đọc `GET /api/vbpls/{vbpl_id}/impacts`.
+
+`GET /api/regulations` (inbox) có thêm `vbpl_id`; `impact_count`, `pending_count`, `status` tính từ gói review (`processing` khi đang soạn, `not_found` khi 0 tác động). Chưa có gói mà RIA đã `AI_PROPOSED`: đếm finding `AI_PROPOSED` của lần phân tích gần nhất. `POST /api/decisions` chỉ nhận id của impact trong gói (finding id thô → `404`).
 
 - `404` khi job không tồn tại hoặc không phải `analyze`; `409` khi job chưa `succeeded`.
 - `202 {"vbpl_id", "review_job_id"}` (snake_case như các API RIA) khi tạo gói mới. Gọi lại: `200` với gói hiện có; nếu job review trước `failed` thì chỉ chạy lại các finding còn thiếu.
