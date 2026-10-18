@@ -54,7 +54,8 @@ check_ports() {
   local busy="" port
   for port in \
     "$(env_value FRONTEND_PORT 3000)" "$(env_value API_PORT 8000)" "$(env_value AGENT_PORT 8080)" \
-    "$(env_value POSTGRES_PORT 5432)" "$(env_value MINIO_PORT 9000)" "$(env_value MINIO_CONSOLE_PORT 9001)"; do
+    "$(env_value POSTGRES_PORT 5432)" "$(env_value MINIO_PORT 9000)" "$(env_value MINIO_CONSOLE_PORT 9001)" \
+    "$(env_value FALKORDB_PORT 6379)"; do
     if lsof -iTCP:"$port" -sTCP:LISTEN -n -P >/dev/null 2>&1; then
       busy="$busy $port"
     fi

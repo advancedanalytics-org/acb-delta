@@ -20,6 +20,7 @@ def test_rerank_client_orders_scores_by_input(monkeypatch):
     sent = {}
     monkeypatch.setattr(get_settings(), "rerank_base_url", "https://example.test/api/v1")
     monkeypatch.setattr(get_settings(), "rerank_model", "qwen/qwen3-reranker-8b")
+    monkeypatch.setattr(get_settings(), "rerank_backend", "rerank")
 
     def fake_post(url, headers, json, timeout):
         sent.update(url=url, body=json)

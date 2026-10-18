@@ -134,6 +134,12 @@ _UNITS = {
     "giờ": ("hour", 1.0),
     "%": ("percent", 1.0),
     "phần trăm": ("percent", 1.0),
+    "tỷ đồng": ("money", 1e9),
+    "triệu đồng": ("money", 1e6),
+    "nghìn đồng": ("money", 1e3),
+    "ngàn đồng": ("money", 1e3),
+    "đồng": ("money", 1.0),
+    "VND": ("money", 1.0),
 }
 _UNIT_RE = "|".join(re.escape(u) for u in sorted(_UNITS, key=len, reverse=True))
 
@@ -143,7 +149,7 @@ _MIN_QUALIFIERS = ("tối thiểu", "ít nhất", "không dưới", "không ít 
 _QUANTITY = re.compile(
     rf"(?P<qual>tối đa|không quá|chậm nhất|trong thời hạn|trong vòng|trong|tối thiểu|ít nhất|"
     rf"không dưới|không ít hơn|định kỳ)?\s*"
-    rf"(?P<num>\d+(?:[.,]\d+)?|{_NUMBER_WORDS}(?:\s+{_NUMBER_WORDS})*)\s*"
+    rf"(?P<num>\d{{1,3}}(?:\.\d{{3}})+|\d+(?:[.,]\d+)?|{_NUMBER_WORDS}(?:\s+{_NUMBER_WORDS})*)\s*"
     rf"(?P<unit>{_UNIT_RE})(?![0-9a-zà-ỹđ])",
     re.IGNORECASE,
 )
@@ -152,6 +158,8 @@ _QUANTITY = re.compile(
 def parse_vietnamese_number(words: str) -> float | None:
     """Parse numbers like '12', '2,5', 'mười lăm', 'sáu mươi', 'ba mươi', 'một trăm'."""
     words = words.strip().lower()
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", words):  # Vietnamese thousands: 50.000
+        return float(words.replace(".", ""))
     if re.fullmatch(r"\d+(?:[.,]\d+)?", words):
         return float(words.replace(",", "."))
     total, current = 0, 0

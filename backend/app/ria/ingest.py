@@ -17,7 +17,7 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.db import get_engine
-from app.ria import jobs
+from app.ria import graph, jobs
 from app.ria.indexing import build_index_views
 from app.ria.legal_parser import RE_DOC_NUMBER, parse_pdf
 from app.ria.obligations import ClauseInput, extract_obligations
@@ -451,6 +451,15 @@ def run_parse(job_id: str) -> dict:
             },
         )
 
+    graph_stats = None
+    if graph.enabled():
+        # Derived index: a graph outage must not fail an otherwise good parse.
+        try:
+            with get_engine().begin() as conn:
+                graph_stats = graph.sync_version(conn, version_id)
+        except Exception as exc:
+            graph_stats = {"error": f"{exc.__class__.__name__}: {exc}"[:300]}
+
     refs = Counter(r["status"] for r in ref_rows)
     return {
         "regulation_id": document_id,
@@ -465,6 +474,7 @@ def run_parse(job_id: str) -> dict:
         "references": dict(refs),
         "superseded_versions": superseded,
         "index": index_stats,
+        "graph": graph_stats,
         "warnings": parsed.warnings,
     }
 

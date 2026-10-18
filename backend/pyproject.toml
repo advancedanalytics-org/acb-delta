@@ -18,6 +18,8 @@ dependencies = [
     "langchain-postgres>=0.0.12",
     "langchain-openai>=0.3",
     "langchain-google-genai>=4.4.2",
+    "underthesea>=9.5",
+    "falkordb>=1.2",
 ]
 
 [dependency-groups]
