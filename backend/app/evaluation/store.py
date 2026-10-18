@@ -1,5 +1,7 @@
 """Reading and writing evaluation runs."""
 
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -35,13 +37,16 @@ def save_run(
     note: str,
     metrics: dict,
     params: dict,
+    created_at: datetime | None = None,
 ) -> models.EvalRun:
+    """`created_at` defaults to now; pass the run's own time when recording a finished job."""
     run = models.EvalRun(
         label=label,
         dataset_size=dataset_size,
         note=note,
         metrics=metrics,
         params=params,
+        **({"created_at": created_at} if created_at is not None else {}),
     )
     session.add(run)
     session.commit()

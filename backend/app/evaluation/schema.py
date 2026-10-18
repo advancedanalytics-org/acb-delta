@@ -16,9 +16,20 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ChangeKind = Literal["new", "amended", "repealed"]
+ChangeKind = Literal["added", "amended", "repealed"]
 ImpactType = Literal["conflict", "outdated_reference", "new_obligation"]
 Severity = Literal["high", "medium", "low"]
+
+# The RIA path (engine A, PLAN.md 2026-10-18) labels work on obligations, not on extracted changes.
+RiaCategory = Literal[
+    "VALUE_CHANGE",
+    "CONTRADICTION",
+    "SCOPE_CHANGE",
+    "ADDITION",
+    "INDIRECT_IMPACT",
+    "EQUIVALENT",
+]
+PatchOperation = Literal["REPLACE", "INSERT", "DELETE"]
 
 
 class ExpectedChange(BaseModel):
@@ -94,3 +105,66 @@ def load_dataset(path: Path) -> list[DatasetItem]:
     """Read a ground-truth dataset from a JSON array of `DatasetItem` objects."""
     raw = json.loads(path.read_text(encoding="utf-8"))
     return [DatasetItem.model_validate(item) for item in raw]
+
+
+# --- RIA path (engine A) ------------------------------------------------------------------------
+# The shapes above model the older `/invoke` path and stay until it is retired. Below is the same
+# idea for the RIA path: the unit is an obligation rather than an extracted change, and clauses are
+# keyed by `clause_id` (`DOC-102@v4#5.2`) instead of a free-text article path.
+
+
+class ReferencePatch(BaseModel):
+    """The edit a correct amendment would make, for the LLM judge to compare against."""
+
+    operation: PatchOperation
+    old_text: str = ""
+    new_text: str = ""
+
+
+class ExpectedObligation(BaseModel):
+    """One atomic duty the regulation imposes, as RIA's `obligation` table models it."""
+
+    clause_id: str = Field(description='In the regulation, e.g. "REG-99-2026-TT-NHNN@v1#2.1".')
+    text: str
+    modality: Literal["must", "must_not", "may"]
+
+
+class ExpectedFinding(BaseModel):
+    """One obligation judged against one internal clause.
+
+    `category == "EQUIVALENT"` means the internal clause already satisfies the obligation, so the
+    pipeline must **not** report it. Those rows are the only way to measure false positives: a
+    dataset of conflicts alone makes Precision look perfect no matter how the pipeline behaves.
+    """
+
+    obligation_clause_id: str
+    internal_clause_id: str
+    category: RiaCategory
+    priority: Severity
+    # Substring of the internal clause the edit should land on; `None` when the clause only anchors
+    # an insertion.
+    target_span_text: str | None = None
+    reference_patch: ReferencePatch | None = None
+
+
+class RiaDatasetItem(BaseModel):
+    """Ground truth for one regulation on the RIA path."""
+
+    item_id: str
+    regulation_number: str
+    # File name of the regulation PDF the generator writes next to this dataset. The PDF is
+    # regenerated rather than committed (AGENTS.md: raw files stay out of git).
+    regulation_pdf: str
+    obligations: list[ExpectedObligation] = Field(default_factory=list)
+    findings: list[ExpectedFinding] = Field(default_factory=list)
+
+    @property
+    def expected_findings(self) -> list[ExpectedFinding]:
+        """Findings the pipeline should report: everything that is not already satisfied."""
+        return [f for f in self.findings if f.category != "EQUIVALENT"]
+
+
+def load_ria_dataset(path: Path) -> list[RiaDatasetItem]:
+    """Read a RIA ground-truth dataset. The file is a JSON object with an `items` array."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return [RiaDatasetItem.model_validate(item) for item in raw["items"]]
