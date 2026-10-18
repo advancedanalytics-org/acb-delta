@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Keyboard } from 'lucide-react'
+import { ChevronDown, ChevronUp, Keyboard, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -71,8 +71,15 @@ export function ReviewPage() {
 
   const step = (offset: number) => {
     if (visible.length === 0) return
-    const index = visible.findIndex((impact) => impact.id === selected?.id)
-    const next = visible[Math.min(Math.max(index + offset, 0), visible.length - 1)]
+    const currentId = requestedId
+    const index = currentId ? visible.findIndex((impact) => impact.id === currentId) : -1
+    let nextIndex: number
+    if (index === -1) {
+      nextIndex = offset > 0 ? 0 : visible.length - 1
+    } else {
+      nextIndex = Math.min(Math.max(index + offset, 0), visible.length - 1)
+    }
+    const next = visible[nextIndex]
     if (next) select(next.id)
   }
 
@@ -117,11 +124,20 @@ export function ReviewPage() {
     j: () => step(1),
     k: () => step(-1),
     // No accept without an AI proposal (failed or skipped draft): edit or reject instead.
-    a: () =>
-      selected &&
-      (selected.finalText ?? selected.suggestedText) &&
-      onDecide(selected, { action: 'accept', reasonTags: [] }),
-    r: () => selected && onDecide(selected, { action: 'reject', reasonTags: [] }),
+    a: () => {
+      const target = requestedId ? ordered.find((i) => i.id === requestedId) : ordered[0]
+      if (target && (target.finalText ?? target.suggestedText)) {
+        if (!requestedId) select(target.id)
+        onDecide(target, { action: 'accept', reasonTags: [] }, true)
+      }
+    },
+    r: () => {
+      const target = requestedId ? ordered.find((i) => i.id === requestedId) : ordered[0]
+      if (target) {
+        if (!requestedId) select(target.id)
+        onDecide(target, { action: 'reject', reasonTags: [] }, true)
+      }
+    },
     '?': () => setHelpOpen(true),
   })
 
@@ -139,7 +155,7 @@ export function ReviewPage() {
     )
   }
 
-  if (vbpls.isPending || impacts.isPending || documents.isPending) return <ReviewSkeleton />
+  if (vbpls.isPending || documents.isPending) return <ReviewSkeleton />
 
   if (!vbpl) {
     return (
@@ -192,7 +208,22 @@ export function ReviewPage() {
       </div>
 
       {/* Three panes from 1024px; below that they stack and the page scrolls. */}
-      {all.length === 0 ? (
+      {impacts.isPending ? (
+        <div className="grid min-h-0 flex-1 max-lg:overflow-auto lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
+          <aside aria-label="Đang tải danh sách tác động" className="min-h-0 border-r bg-card p-3 space-y-3">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </aside>
+          <section aria-label="Đang tải văn bản" className="min-h-0 flex items-center justify-center bg-muted/60">
+            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+              <Loader2 className="size-6 animate-spin text-primary" />
+              <span className="text-xs">Đang tải tác động và văn bản...</span>
+            </div>
+          </section>
+        </div>
+      ) : all.length === 0 ? (
         <EmptyState
           title={vbpl.status === 'processing' ? 'VBPL đang được phân tích' : 'Không có tác động nào'}
           description={
@@ -208,7 +239,7 @@ export function ReviewPage() {
             <ImpactList
               impacts={visible}
               documents={docs}
-              selectedId={selected?.id}
+              selectedId={requestedId ?? undefined}
               onSelect={select}
               filter={filter}
               onFilterChange={setFilter}
@@ -220,7 +251,7 @@ export function ReviewPage() {
                 key={selectedDoc.id}
                 document={selectedDoc}
                 impacts={all.filter((impact) => impact.documentId === selectedDoc.id)}
-                selectedId={selected?.id}
+                selectedId={requestedId ?? undefined}
                 onSelect={select}
                 onDecide={(impact, request) => onDecide(impact, request)}
                 disabled={!reviewer || decide.isPending}
@@ -238,17 +269,24 @@ export function ReviewPage() {
 function ReviewSkeleton() {
   return (
     <div className="flex h-full flex-col" aria-busy="true" aria-label="Đang tải">
-      <div className="flex items-center gap-4 border-b px-4 py-3">
-        <Skeleton className="h-10 flex-1" />
-        <Skeleton className="h-10 w-48" />
-      </div>
-      <div className="grid flex-1 grid-cols-[300px_1fr] gap-4 p-4">
-        <div className="space-y-2">
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-20" />
-          ))}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-card px-4 py-3">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-5 w-80" />
         </div>
-        <Skeleton className="h-full" />
+        <Skeleton className="h-6 w-24 rounded-full" />
+        <Skeleton className="h-8 w-44" />
+      </div>
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="min-h-0 border-r bg-card p-3 space-y-3">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+        <div className="min-h-0 bg-muted/60 flex items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-muted-foreground/40" />
+        </div>
       </div>
     </div>
   )
