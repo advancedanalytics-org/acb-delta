@@ -198,9 +198,10 @@ def rule_classify(
     }
 
 
-_SYSTEM = """Bạn là chuyên gia pháp chế ngân hàng. So sánh MỘT nghĩa vụ trong văn bản pháp quy mới
-với MỘT điều khoản quy định nội bộ. Chỉ dựa vào văn bản được cung cấp, không suy đoán.
-Nhãn hợp lệ:
+SYSTEM = """Bạn là chuyên gia pháp chế ngân hàng. So sánh MỘT nghĩa vụ trong văn bản pháp quy mới
+với từng điều khoản quy định nội bộ được liệt kê (mỗi điều khoản có "ma").
+Chỉ dựa vào văn bản được cung cấp, không suy đoán.
+Nhãn hợp lệ cho từng điều khoản:
 - EQUIVALENT: cùng nghĩa vụ dù khác từ ngữ, nội bộ đã đáp ứng
 - CONTRADICTION: yêu cầu xung đột trong cùng phạm vi
 - ADDITION: nguồn thêm yêu cầu mà điều khoản nội bộ chưa có
@@ -208,17 +209,18 @@ Nhãn hợp lệ:
 - VALUE_CHANGE: khác số liệu, hạn mức, thời hạn
 - INDIRECT_IMPACT: chỉ liên quan gián tiếp, cần xác minh
 Trả về DUY NHẤT một JSON object:
-{"classification": "<nhãn>", "rationale": "<giải thích ngắn tiếng Việt>",
- "source_quote": "<trích nguyên văn ngắn từ nghĩa vụ nguồn>",
- "target_quote": "<trích nguyên văn ngắn từ điều khoản nội bộ>",
- "confidence": <0..1>, "conditions_to_verify": ["..."]}
-Trích dẫn phải sao chép CHÍNH XÁC từ văn bản. Nếu không đủ căn cứ, dùng INDIRECT_IMPACT."""
+{"best": "<ma điều khoản khớp nhất với nghĩa vụ>",
+ "results": [{"ma": "<ma>", "classification": "<nhãn>",
+   "rationale": "<giải thích ngắn tiếng Việt>",
+   "source_quote": "<trích nguyên văn ngắn từ nghĩa vụ nguồn>",
+   "target_quote": "<trích nguyên văn ngắn từ điều khoản nội bộ đó>",
+   "confidence": <0..1>, "conditions_to_verify": ["..."]}]}
+Có đúng một phần tử results cho mỗi điều khoản. Trích dẫn phải sao chép CHÍNH XÁC từ văn bản.
+Nếu không đủ căn cứ, dùng INDIRECT_IMPACT."""
 
 
-def llm_classify(
-    obligation: dict, reg_clause_text: str, internal: dict, context: list[dict], rule: dict
-) -> dict:
-    user = json.dumps(
+def _group_payload(obligation: dict, reg_clause_text: str, items: list[dict]) -> str:
+    return json.dumps(
         {
             "nghia_vu_nguon": {
                 "trich_dan": obligation["text"],
@@ -229,29 +231,171 @@ def llm_classify(
                 "ngoai_le": obligation.get("exception"),
                 "dieu_khoan_day_du": reg_clause_text[:2000],
             },
-            "dieu_khoan_noi_bo": {
-                "ma": internal["clause_id"],
-                "noi_dung": internal["text"][:2000],
-                "ngu_canh": [c["text"] for c in context][:4],
-            },
-            "ket_qua_rule": {"nhan": rule["category"], "kiem_tra": rule["checks"]},
+            "dieu_khoan_noi_bo": [
+                {
+                    "ma": it["internal"]["clause_id"],
+                    "noi_dung": it["internal"]["text"][:2000],
+                    "ngu_canh": [c["text"] for c in it["context"]][:4],
+                    "ket_qua_rule": {
+                        "nhan": it["rule"]["category"],
+                        "kiem_tra": it["rule"]["checks"],
+                    },
+                }
+                for it in items
+            ],
         },
         ensure_ascii=False,
     )
-    return llm.chat_json(_SYSTEM, user)
 
 
-def _ask_grounded(obligation, reg_clause_text, internal, context, rule, attempts: int = 2):
-    """Ask the LLM judge; retry once when its label or quotes cannot be found in the sources."""
-    answer, src, tgt = {}, None, None
-    for _ in range(attempts):
-        answer = llm_classify(obligation, reg_clause_text, internal, context, rule)
-        label = str(answer.get("classification", "")).upper()
-        src = _locate(obligation["text"], answer.get("source_quote"))
-        tgt = _locate(internal["text"], answer.get("target_quote"))
-        if label in LABELS and src is not None and tgt is not None:
-            return label, answer, src, tgt
-    return None, answer, src, tgt
+def _answers_by_clause(answer: dict, items: list[dict]) -> dict[str, dict]:
+    results = answer.get("results")
+    if results is None and "classification" in answer and len(items) == 1:
+        # A model may answer a single-clause question with a bare object.
+        results = [{**answer, "ma": items[0]["internal"]["clause_id"]}]
+    out = {}
+    for r in results or []:
+        if isinstance(r, dict) and r.get("ma"):
+            out[str(r["ma"])] = r
+    return out
+
+
+def _grounded(obligation: dict, internal: dict, r: dict | None):
+    if not r:
+        return None
+    label = str(r.get("classification", "")).upper()
+    src = _locate(obligation["text"], r.get("source_quote"))
+    tgt = _locate(internal["text"], r.get("target_quote"))
+    if label in LABELS and src is not None and tgt is not None:
+        return label, src, tgt
+    return None
+
+
+def _merge(obligation, reg_clause_text, internal, rule, r, grounded) -> dict:
+    """Combine the rule result with one LLM answer (or its grounding failure). Fail closed."""
+    result = {**rule, "method": "rule"}
+    checks = list(rule["checks"])
+    if grounded is None:
+        checks.append(
+            {
+                "check": "source_grounding",
+                "status": "fail",
+                "detail": {
+                    "reason": "LLM label or quote not found verbatim in the sources",
+                    "llm_label": (r or {}).get("classification"),
+                    "source_quote": str((r or {}).get("source_quote"))[:300],
+                    "target_quote": str((r or {}).get("target_quote"))[:300],
+                },
+            }
+        )
+        result["checks"] = checks
+        return result
+    label, src, tgt = grounded
+    checks.append(
+        {"check": "source_grounding", "status": "pass", "detail": "LLM quotes found verbatim"}
+    )
+    conflict = rule["category"] in ("VALUE_CHANGE", "CONTRADICTION")
+    if conflict and label in ("EQUIVALENT", "INDIRECT_IMPACT"):
+        # Fail closed: a rule-detected conflict is never overridden as safe.
+        checks.append(
+            {
+                "check": "verifier_agreement",
+                "status": "fail",
+                "detail": f"rule={rule['category']} llm={label}; giữ nhãn rule",
+            }
+        )
+    else:
+        result.update(
+            category=label,
+            rationale=str(r.get("rationale", ""))[:2000] or rule["rationale"],
+            confidence=_clamp(r.get("confidence")),
+        )
+        if not (conflict and label == rule["category"]):
+            # Same conflict as the rule: keep the rule's exact value spans, which a minimal
+            # patch needs; otherwise use the LLM's verified quotes.
+            o_start = obligation["span_start"]
+            result.update(
+                source_span=_span(reg_clause_text, o_start + src[0], o_start + src[1]),
+                target_span=_span(internal["text"], *tgt),
+            )
+        if conflict:
+            checks.append(
+                {
+                    "check": "verifier_agreement",
+                    "status": "pass" if label == rule["category"] else "warn",
+                    "detail": f"rule={rule['category']} llm={label}",
+                }
+            )
+    result["method"] = "llm+rule"
+    result["conditions_to_verify"] = [str(c) for c in r.get("conditions_to_verify", [])][:10]
+    result["checks"] = checks
+    return result
+
+
+def judge_group(
+    obligation: dict,
+    reg_clause_text: str,
+    items: list[dict],
+    use_llm: bool,
+    refresh: bool = False,
+) -> tuple[list[dict], dict]:
+    """Compare one obligation with all its candidate clauses in a single LLM call (06.1–06.2).
+
+    items: [{"internal": clause, "evidence": {span, shared_terms}, "context": [...]}].
+    Returns one result per item (same order) and call stats. Ungrounded answers are asked once
+    more without the cache; what is still ungrounded falls back to the rule result.
+    """
+    for it in items:
+        it["rule"] = rule_classify(
+            obligation, reg_clause_text, it["internal"]["text"], it["evidence"]
+        )
+    stats = {"llm_calls": 0, "cache_hits": 0, "best": None}
+    if not use_llm or not items:
+        return [{**it["rule"], "method": "rule"} for it in items], stats
+
+    payload = _group_payload(obligation, reg_clause_text, items)
+    answers: dict[str, dict] = {}
+    grounded: dict[str, tuple] = {}
+    try:
+        for attempt in range(2):
+            answer, cached = llm.chat_json_cached(
+                "judge_group", SYSTEM, payload, refresh=refresh or attempt > 0
+            )
+            stats["cache_hits" if cached else "llm_calls"] += 1
+            stats["best"] = stats["best"] or answer.get("best")
+            for cid, r in _answers_by_clause(answer, items).items():
+                if cid in grounded:
+                    continue
+                answers[cid] = r
+                internal = next(
+                    (it["internal"] for it in items if it["internal"]["clause_id"] == cid), None
+                )
+                g = _grounded(obligation, internal, r) if internal else None
+                if g:
+                    grounded[cid] = g
+            if len(grounded) == len(items):
+                break
+    except Exception as exc:  # LLM down or malformed: keep the rule results, say so
+        error = {"check": "llm_judge", "status": "error", "detail": str(exc)[:200]}
+        return [
+            {**it["rule"], "method": "rule", "checks": [*it["rule"]["checks"], error]}
+            for it in items
+        ], stats
+
+    results = []
+    for it in items:
+        cid = it["internal"]["clause_id"]
+        merged = _merge(
+            obligation,
+            reg_clause_text,
+            it["internal"],
+            it["rule"],
+            answers.get(cid),
+            grounded.get(cid),
+        )
+        merged["llm_best"] = stats["best"] == cid
+        results.append(merged)
+    return results, stats
 
 
 def classify(
@@ -262,77 +406,14 @@ def classify(
     context: list[dict],
     use_llm: bool,
 ) -> dict:
-    rule = rule_classify(obligation, reg_clause_text, internal["text"], evidence)
-    result = {**rule, "method": "rule"}
-    checks = list(rule["checks"])
-    if use_llm:
-        try:
-            label, answer, src, tgt = _ask_grounded(
-                obligation, reg_clause_text, internal, context, rule
-            )
-        except Exception as exc:  # LLM down or malformed: keep the rule result, say so
-            checks.append({"check": "llm_judge", "status": "error", "detail": str(exc)[:200]})
-        else:
-            if label is None:
-                # Fail closed: an answer we cannot trace to the sources is not used.
-                checks.append(
-                    {
-                        "check": "source_grounding",
-                        "status": "fail",
-                        "detail": {
-                            "reason": "LLM label or quote not found verbatim in the sources",
-                            "llm_label": answer.get("classification"),
-                            "source_quote": str(answer.get("source_quote"))[:300],
-                            "target_quote": str(answer.get("target_quote"))[:300],
-                        },
-                    }
-                )
-            else:
-                checks.append(
-                    {
-                        "check": "source_grounding",
-                        "status": "pass",
-                        "detail": "LLM quotes found verbatim",
-                    }
-                )
-                conflict = rule["category"] in ("VALUE_CHANGE", "CONTRADICTION")
-                if conflict and label in ("EQUIVALENT", "INDIRECT_IMPACT"):
-                    # Fail closed: a rule-detected conflict is never overridden as safe.
-                    checks.append(
-                        {
-                            "check": "verifier_agreement",
-                            "status": "fail",
-                            "detail": f"rule={rule['category']} llm={label}; giữ nhãn rule",
-                        }
-                    )
-                else:
-                    result.update(
-                        category=label,
-                        rationale=str(answer.get("rationale", ""))[:2000] or rule["rationale"],
-                        confidence=_clamp(answer.get("confidence")),
-                    )
-                    if not (conflict and label == rule["category"]):
-                        # Same conflict as the rule: keep the rule's exact value spans, which
-                        # a minimal patch needs; otherwise use the LLM's verified quotes.
-                        o_start = obligation["span_start"]
-                        result.update(
-                            source_span=_span(reg_clause_text, o_start + src[0], o_start + src[1]),
-                            target_span=_span(internal["text"], *tgt),
-                        )
-                    if conflict:
-                        checks.append(
-                            {
-                                "check": "verifier_agreement",
-                                "status": "pass" if label == rule["category"] else "warn",
-                                "detail": f"rule={rule['category']} llm={label}",
-                            }
-                        )
-                result["method"] = "llm+rule"
-                result["conditions_to_verify"] = [
-                    str(c) for c in answer.get("conditions_to_verify", [])
-                ][:10]
-    result["checks"] = checks
-    return result
+    """Single-pair form of judge_group."""
+    results, _ = judge_group(
+        obligation,
+        reg_clause_text,
+        [{"internal": internal, "evidence": evidence, "context": context}],
+        use_llm,
+    )
+    return results[0]
 
 
 def _pair_detail(p: dict) -> str:

@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     # JSON merged into every chat request, e.g. {"reasoning": {"enabled": false}} on OpenRouter.
     llm_extra_body: str = ""
     llm_concurrency: int = 4
+    # Reuse identical LLM answers across runs (table llm_cache).
+    llm_cache_enabled: bool = True
+
+    # Optional reranker with a Cohere/Jina-style POST {base}/rerank API (OpenRouter, vLLM, Jina).
+    # Empty = Engine 1 keeps its lexical/dense relevance gate.
+    rerank_base_url: str = ""
+    rerank_model: str = ""
+    rerank_api_key: str = ""
+    rerank_concurrency: int = 8
 
 
 @lru_cache

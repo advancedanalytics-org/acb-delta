@@ -53,12 +53,15 @@ Job parse (`ingest.run_parse`) chạy trong một transaction, lỗi ở bước
 |---|---|---|
 | `internal_document_ids` | tất cả văn bản nội bộ `effective` | phạm vi corpus (ACL) |
 | `modalities` | `must`, `must_not`, `may` | lọc nghĩa vụ |
-| `use_llm`, `max_llm_pairs` | `true`, `200` | dùng LLM judge khi đã cấu hình `LLM_MODEL` |
+| `use_llm`, `max_llm_calls` | `true`, `150` | dùng LLM judge khi đã cấu hình `LLM_MODEL`; một lần gọi cho mỗi nghĩa vụ |
+| `filter_not_applicable` | `true` | bỏ nghĩa vụ không ràng buộc ngân hàng (rule + LLM, lưu theo nghĩa vụ) |
+| `refresh_llm_cache` | `false` | hỏi lại LLM thay vì dùng câu trả lời đã cache |
+| `use_rerank`, `rerank_candidates`, `rerank_min_score` | `true`, `20`, `0.2` | reranker chấm 20 ứng viên đầu sau RRF; dưới ngưỡng thì loại |
 | `rrf_k`, `candidates_per_query` | `60`, `20` | RRF và số candidate mỗi truy vấn |
-| `min_shared_bigrams`, `min_idf_score`, `min_term_idf` | `2`, `6.0`, `2.0` | lexical gate |
-| `dense_min_score`, `dense_strong_score` | `0.55`, `0.7` | gate dense: dưới mức strong phải có thêm ≥ 1 thuật ngữ đặc trưng chung |
+| `min_shared_bigrams`, `min_idf_score`, `min_term_idf` | `2`, `6.0`, `2.0` | lexical gate, chỉ dùng khi không có reranker |
+| `dense_min_score`, `dense_strong_score` | `0.55`, `0.7` | gate dense (khi không có reranker): dưới mức strong phải có thêm ≥ 1 thuật ngữ đặc trưng chung |
 | `relative_cutoff` | `0.6` | bỏ đuôi candidate yếu |
-| `evidence_per_obligation`, `max_documents`, `alpha` | `3`, `20`, `0.7` | evidence và aggregation |
+| `evidence_per_obligation`, `max_documents`, `alpha` | `5`, `20`, `0.7` | evidence và aggregation |
 
 Phần đồng bộ (`analysis.start_analysis`):
 
@@ -71,28 +74,36 @@ Phần đồng bộ (`analysis.start_analysis`):
 
 Job phân tích (`analysis.run_analysis`):
 
-1. **Lọc nghĩa vụ.** Bỏ nghĩa vụ của cơ quan nhà nước (Bộ, Chính phủ…). Các điều khoản ủy quyền như "Chính phủ quy định chi tiết…" đã bị loại từ bước parse.
+1. **Lọc nghĩa vụ không áp dụng** (`applicability.py`):
+   - Rule xử lý các trường hợp rõ: cơ quan nhà nước, chủ thể dữ liệu/công dân → `no`; tổ chức tín dụng, ngân hàng, bên kiểm soát/xử lý dữ liệu, "cơ quan, tổ chức, cá nhân" → `yes`.
+   - Phần còn lại gửi LLM theo lô 20 nghĩa vụ.
+   - Kết quả lưu vào cột `obligation.applicability`, nên các lần chạy sau dùng lại.
+   - `uncertain` vẫn giữ nghĩa vụ lại (ưu tiên không bỏ sót). Câu trả lời không hợp lệ hoặc LLM lỗi cũng giữ lại nhưng không lưu, để lần sau hỏi lại.
+   - Điều khoản ủy quyền như "Chính phủ quy định chi tiết…" đã bị loại từ bước parse.
 2. **Engine 1, mục 07–09** (`retrieval.py`):
    - Mỗi nghĩa vụ sinh 3–4 query view: nguyên văn, mệnh đề chuẩn hóa, chủ đề (tên Điều), giá trị/điều kiện.
    - Chạy sparse search (Postgres FTS trên bigram âm tiết) và dense search (pgvector, nếu có `EMBEDDING_*`).
    - Gộp bằng RRF `Σ 1/(k + rank)`.
-   - Lexical gate dùng IDF tính trên toàn corpus đã index. Từ chủ đề phủ khắp văn bản như "dữ liệu cá nhân" không được tính là bằng chứng.
+   - **Reranker** (mục 05.6, nếu có `RERANK_*`): chấm 20 ứng viên đầu theo cặp (nghĩa vụ, điều khoản kèm ngữ cảnh), song song theo `RERANK_CONCURRENCY`. Điểm rerank thay cho gate và là điểm của ứng viên. Reranker lỗi với một nghĩa vụ thì nghĩa vụ đó quay về gate.
+   - Không có reranker thì dùng lexical gate: IDF tính trên toàn corpus đã index, nên từ chủ đề phủ khắp văn bản như "dữ liệu cá nhân" không được tính là bằng chứng.
    - Aggregation cấp tài liệu `S(D,Q) = α·max + (1−α)·mean(TopK)`, kèm coverage và số section trúng.
    - Mở rộng ngữ cảnh: điều khoản cha và điều khoản anh em chứa ngoại lệ.
    - Kết quả ghi vào `evidence`, có rank theo từng query, truy vấn đã chạy và parent context. Version chuyển `RETRIEVAL_COMPLETED`.
-3. **Engine 2, mục 10–11, 14** (`compare.py`), xét từng cặp nghĩa vụ ↔ điều khoản:
+3. **Engine 2, mục 10–11, 14** (`compare.py`). Rule xét từng cặp; LLM xét **mỗi nghĩa vụ một lần** cùng mọi điều khoản ứng viên của nó, và chọn điều khoản khớp nhất (`best`, mục 06.1):
    - Rule giá trị: tách số/thời hạn tiếng Việt ("tối đa 12 tháng", "mười lăm ngày làm việc", "năm năm") và so theo cận max/min. Vượt cận → `VALUE_CHANGE`, nằm trong cận → `EQUIVALENT`.
    - Rule mức bắt buộc: nguồn "phải"/"không được" nhưng nội bộ "có thể"/"được phép" cho cùng hành động → `CONTRADICTION`.
    - Còn lại → `INDIRECT_IMPACT`.
    - LLM judge (tùy chọn) trả nhãn kèm trích dẫn. Trích dẫn phải có nguyên văn trong nguồn (source grounding). Không khớp thì hỏi lại một lần; vẫn không khớp thì giữ kết quả rule và gắn `BLOCKED`, chi tiết check lưu câu trả lời của LLM.
    - LLM không được hạ một xung đột mà rule đã phát hiện xuống `EQUIVALENT`/`INDIRECT_IMPACT` (fail closed, chống false-safe). Khi LLM đồng ý với rule thì giữ span chính xác của rule ("24 tháng") để làm patch tối thiểu.
-   - Các cặp được gọi LLM song song (`LLM_CONCURRENCY`). Ngân sách `max_llm_pairs` dành cho các cặp có điểm retrieval cao nhất.
+   - Các nghĩa vụ được gọi LLM song song (`LLM_CONCURRENCY`). Ngân sách `max_llm_calls` dành cho các nghĩa vụ có điểm retrieval cao nhất.
+   - **Cache** (`llm_cache`): khóa là sha256 của (loại lời gọi, model, `LLM_EXTRA_BODY`, system prompt, payload). Đổi prompt, model hay nội dung điều khoản thì khóa đổi theo. Lần hỏi lại vì trích dẫn sai sẽ bỏ qua cache và ghi đè. `refresh_llm_cache: true` buộc hỏi lại; `LLM_CACHE_ENABLED=false` tắt cache.
+   - Gọi LLM và reranker có retry với backoff khi gặp 429/5xx/timeout.
 4. **Finding:** một finding cho mỗi cặp (nghĩa vụ, tài liệu nội bộ), theo mô hình mục 04.
-   - Cặp đại diện chọn theo thứ tự: xung đột > đã đáp ứng > khác biệt cụ thể nhất.
+   - Cặp đại diện chọn theo thứ tự: xung đột > đã đáp ứng > khác biệt cụ thể nhất; nếu ngang nhau thì ưu tiên điều khoản LLM chọn là khớp nhất, rồi đến điểm retrieval.
    - `evidence_ids` và `citations` liệt kê mọi điều khoản liên quan, điều khoản chính đứng đầu.
    - `verification.checks` gồm: `deterministic_values`, `modality`, `source_grounding`, `temporal_validity`, `scope_exceptions`, `human_approval: pending`.
    - Status `AI_PROPOSED`, hoặc `NO_ACTION_PROPOSED` khi `EQUIVALENT`. Version chuyển `AI_PROPOSED`.
-5. **`job.result`:** tham số đã dùng, phương thức retrieval, model, số nghĩa vụ và coverage, xếp hạng tài liệu, số finding theo loại/ưu tiên, danh sách `uncovered_obligations`. Danh sách này nghĩa là "chưa tìm thấy bằng chứng", không phải kết luận vi phạm.
+5. **`job.result`:** tham số đã dùng, phương thức retrieval, model, `llm_calls` và `llm_cache_hits`, số nghĩa vụ (kèm phân bố applicability) và coverage, xếp hạng tài liệu, số finding theo loại/ưu tiên, danh sách `uncovered_obligations`. Danh sách này nghĩa là "chưa tìm thấy bằng chứng", không phải kết luận vi phạm.
 
 Ví dụ finding với thông tư giả định trong `backend/tests/ria_fixtures.py`, tương ứng RIA-001 trong mục 16:
 
@@ -117,7 +128,17 @@ LLM_EXTRA_BODY='{"reasoning":{"enabled":false}}'      # tắt thinking: ~5 lần
 LLM_CONCURRENCY=6
 EMBEDDING_BASE_URL=https://openrouter.ai/api/v1
 EMBEDDING_MODEL=baai/bge-m3                           # 1024 chiều, đa ngôn ngữ
+RERANK_BASE_URL=https://openrouter.ai/api/v1
+RERANK_MODEL=qwen/qwen3-reranker-8b                   # họ Qwen3-Reranker, mục 05.6
+RERANK_API_KEY=<cùng key OpenRouter>
 ```
+
+Ngưỡng `rerank_min_score = 0.2` được chọn sau khi đo trên dữ liệu thật:
+- Cặp đúng cùng lĩnh vực (thông tư KYC giả định ↔ DOC-102): mọi ứng viên ≥ 0,38.
+- Luật 91 và Nghị định 13 ↔ DOC-102 (khác lĩnh vực): 90% nghĩa vụ có điểm tốt nhất < 0,17–0,27.
+- Các tác động gián tiếp thật của Luật 91, như "thu thập phải được sự đồng ý trước khi thu thập" ↔ Điều 4.1, nằm quanh 0,22. Ngưỡng 0,3 sẽ loại các cặp này.
+
+Cần đo lại trên gold set (mục 19) trước khi chốt.
 
 Đổi `EMBEDDING_MODEL` thì phải chạy lại seed. Vector cũ vẫn nằm trong bảng dưới `embedding_version` cũ và không bị trộn với vector mới.
 
