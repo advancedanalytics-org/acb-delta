@@ -6,9 +6,10 @@ import uuid
 from fastapi import FastAPI, Header, HTTPException, status
 from pydantic import BaseModel
 
+from agent.draft_graph import build_draft_graph, to_proposal
 from agent.graph import build_graph
 from agent.llm import LLMNotConfiguredError
-from agent.schemas import Change, ImpactOut
+from agent.schemas import AmendmentProposal, Change, DraftRequest, ImpactOut
 from agent.tracing import get_callbacks
 
 log = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class InvokeResponse(BaseModel):
 def create_app() -> FastAPI:
     app = FastAPI(title="acb-delta agent", version="0.1.0")
     graph = build_graph()
+    draft_graph = build_draft_graph()
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -37,22 +39,42 @@ def create_app() -> FastAPI:
         user_id: str | None = Header(None, alias="X-GreenNode-AgentBase-User-Id"),
         session_id: str | None = Header(None, alias="X-GreenNode-AgentBase-Session-Id"),
     ) -> InvokeResponse:
-        if not session_id:
-            # AgentBase always sends these; locally they are optional since memory is unused.
-            # The graph keeps no state between runs, so the id only labels traces.
-            log.info("No AgentBase session header; using a one-off thread id")
-            session_id = f"local-{uuid.uuid4()}"
-        config = {
-            "configurable": {"thread_id": session_id, "user_id": user_id},
-            "callbacks": get_callbacks(),
-        }
         try:
-            result = graph.invoke({"vbpl_text": body.vbpl_text}, config=config)
+            result = graph.invoke(
+                {"vbpl_text": body.vbpl_text}, config=_run_config(user_id, session_id)
+            )
         except LLMNotConfiguredError as exc:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
         return InvokeResponse(changes=result.get("changes", []), impacts=result.get("impacts", []))
 
+    @app.post("/draft")
+    def draft(
+        body: DraftRequest,
+        user_id: str | None = Header(None, alias="X-GreenNode-AgentBase-User-Id"),
+        session_id: str | None = Header(None, alias="X-GreenNode-AgentBase-Session-Id"),
+    ) -> AmendmentProposal:
+        """Draft one minimal patch for one RIA finding. A patch that fails checks is `failed`."""
+        try:
+            result = draft_graph.invoke(
+                {"request": body.model_dump()}, config=_run_config(user_id, session_id)
+            )
+        except LLMNotConfiguredError as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+        return to_proposal(body, result)
+
     return app
+
+
+def _run_config(user_id: str | None, session_id: str | None) -> dict:
+    if not session_id:
+        # AgentBase always sends these; locally they are optional since memory is unused.
+        # The graphs keep no state between runs, so the id only labels traces.
+        log.info("No AgentBase session header; using a one-off thread id")
+        session_id = f"local-{uuid.uuid4()}"
+    return {
+        "configurable": {"thread_id": session_id, "user_id": user_id},
+        "callbacks": get_callbacks(),
+    }
 
 
 app = create_app()

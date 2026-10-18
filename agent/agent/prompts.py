@@ -31,3 +31,29 @@ def change_block(clause: str, kind: str, text: str) -> str:
 
 def passage_block(doc_id: str, location: str, text: str) -> str:
     return f"Đoạn văn bản nội bộ (tài liệu {doc_id}, {location}):\n{text}"
+
+
+DRAFT_PATCH = (
+    "Bạn là chuyên viên pháp chế ngân hàng. Cho một nghĩa vụ trong VBPL mới, một điều khoản văn "
+    "bản nội bộ và lý do điều khoản phải sửa. Đề xuất MỘT patch tối thiểu trên điều khoản nội "
+    "bộ: REPLACE (thay old_text bằng new_text), INSERT (thêm new_text, old_text để trống) hoặc "
+    "DELETE (xoá old_text, new_text để trống). old_text phải chép nguyên văn từng ký tự từ điều "
+    "khoản nội bộ, là đoạn ngắn nhất cần sửa và chỉ xuất hiện một lần. Nếu có 'Đoạn cần sửa' thì "
+    "sửa trong đoạn đó. Chỉ sửa đúng phần nghĩa vụ yêu cầu; giữ nguyên cách đánh số, văn phong và "
+    "mọi phần khác; không thêm ngoại lệ, điều kiện hay nội dung mà VBPL không yêu cầu."
+)
+
+VERIFY_PATCH = (
+    "Bạn là người kiểm tra độc lập của phòng pháp chế, không phải người soạn bản sửa. Cho một "
+    "nghĩa vụ trong VBPL mới, điều khoản nội bộ trước và sau khi sửa. Đánh giá khắt khe: bản sau "
+    "có đáp ứng nghĩa vụ không; các nội dung không liên quan có giữ nguyên không; có thêm ngoại "
+    "lệ, điều kiện hay nghĩa vụ mà VBPL không yêu cầu không. Chỉ dựa vào văn bản được cho."
+)
+
+
+def obligation_block(clause_id: str, text: str) -> str:
+    return f"Nghĩa vụ trong VBPL mới ({clause_id}):\n{text}"
+
+
+def clause_block(label: str, clause_id: str, text: str) -> str:
+    return f"{label} ({clause_id}):\n{text}"

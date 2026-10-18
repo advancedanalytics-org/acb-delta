@@ -62,10 +62,14 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [x] Node `judge_impact`: có bị ảnh hưởng không, loại (mâu thuẫn / tham chiếu lỗi thời / nghĩa vụ mới), mức độ, lý do, đoạn trích dẫn
   - [x] Node `draft_amendment`: văn bản gốc → văn bản đề xuất
   - [x] Pydantic schema cho output mọi node LLM
+  - [~] Engine A (RIA 4.0 M04): endpoint `POST /draft` nhận một finding RIA → patch tối thiểu (`REPLACE` / `INSERT` / `DELETE`) đã kiểm tra với văn bản gốc + verifier độc lập (`docs/amendment-review-contract.md`)
 - [~] **TAI-02** – HITL
   - [x] Graph chạy hết (không dùng `interrupt()`); backend lưu impact vào Postgres trạng thái `pending`, quyết định Accept / Edit / Reject / Undo ghi qua API
   - [x] Bảng Postgres lưu quyết định: thay đổi, chunk, output model, hành động, text đã sửa, reason tag, người duyệt (audit trail)
   - [x] API FastAPI cho accept / edit / reject
+  - [ ] Engine A (RIA 4.0 M05 backend): `POST /api/analyses/{job_id}/review` biến finding RIA thành gói review (`vbpls` + `impacts` có patch before/after); lỗi một bản nháp không làm hỏng cả gói
+  - [ ] `GET /api/feedback`: nhãn HITL (quyết định còn hiệu lực) cho `KHOA-02`
+  - [ ] Chạy E2E thật trên model GCP (`qwen3-next-80b`): VBPL → RIA → bản nháp → quyết định → audit + feedback
 - [x] **TAI-03** – Tài liệu VBPL & fake dữ liệu văn bản nội bộ
   - [x] Thu thập VBPL mẫu (bản cũ + bản sửa đổi)
   - [x] Sinh văn bản nội bộ giả lập theo format đã chốt (`MINH-02`), xuất DOCX → PDF
@@ -166,5 +170,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 - **Model embedding** (MINH-01): _chưa chốt_ — phải chạy được cả trên server team và GreenNode MaaS
 - **Endpoint LLM** (TAI-07): GreenNode MaaS. Trước khi có tài khoản, code chỉ đọc `OPENAI_BASE_URL` + `LLM_MODEL` nên dùng tạm bất kỳ endpoint OpenAI-compatible nào; bỏ server team Phase 1
 - **HITL** (TAI-02): không dùng `interrupt()`. Graph chạy hết, impact lưu Postgres trạng thái `pending`, mỗi quyết định (accept / edit / reject / undo) là một dòng mới trong bảng quyết định (không sửa đè) → nguồn dữ liệu cho audit trail và `KHOA-02`
+- **Engine phân tích tác động** (TAI-01, MINH-01, 2026-10-18): phương án **A** theo blueprint RIA 4.0 (`docs/ACB_RIA_4_0_Final_E2E_6_Modules_6_Owners.html`). RIA (M01–M03, `MINH-01`) tìm finding; agent (M04, `TAI-01`) chỉ soạn patch. M05 backend (quyết định, audit, feedback) = `TAI-02`, M05 UI = `HUY-01`, M06 = `KHOA-01/02`. Luồng `/invoke` cũ giữ nguyên tới khi `KHOA-01` chuyển sang đường RIA. Không ghi bảng `amendment` của RIA; patch nằm ở `impacts.patch`. Hợp đồng: `docs/amendment-review-contract.md`
+- **Duyệt HITL** (TAI-02): một bước duyệt (accept / edit / reject / undo) + audit append-only; duyệt nhiều cấp / maker-checker để roadmap. Redline = dữ liệu before/after trên đúng span trong API, không xuất DOCX
 - **Luồng dữ liệu Evaluate + enrich test set** (KHOA-01): _chưa chốt_
 - **Luồng dữ liệu feedback loop** (KHOA-02): _chưa chốt_
