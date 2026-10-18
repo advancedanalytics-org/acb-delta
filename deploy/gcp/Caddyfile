@@ -1,0 +1,22 @@
+# Public entry point on the GCP VM: HTTPS (Let's Encrypt) + basic auth in front of the UI.
+# The UI's nginx already proxies /api to the backend, so one upstream is enough.
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# OpenAI-compatible model endpoint so teammates can call the VM's models from their laptops.
+	# Guarded by a bearer key instead of basic auth, because OpenAI clients send
+	# "Authorization: Bearer <key>". /v1/embeddings goes to bge-m3, everything else to LiteLLM.
+	handle /v1/* {
+		@nokey not header Authorization "Bearer {$MODEL_API_KEY}"
+		respond @nokey "Unauthorized" 401
+		reverse_proxy /v1/embeddings embedding:80
+		reverse_proxy litellm:4000
+	}
+
+	handle {
+		basic_auth {
+			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+		}
+		reverse_proxy frontend:3000
+	}
+}

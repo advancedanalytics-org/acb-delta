@@ -43,7 +43,7 @@ class AnalyzeRequest(BaseModel):
     # Swagger would otherwise prefill ["string"] lists, which scope the corpus to nothing.
     model_config = ConfigDict(
         json_schema_extra={
-            "examples": [{}, {"internal_document_ids": ["DOC-102"], "max_llm_pairs": 20}]
+            "examples": [{}, {"internal_document_ids": ["DOC-102"], "max_llm_calls": 20}]
         }
     )
 
@@ -52,10 +52,21 @@ class AnalyzeRequest(BaseModel):
     )
     modalities: list[Literal["must", "must_not", "may"]] | None = None
     use_llm: bool = Field(True, description="Use the LLM judge when LLM_MODEL is configured")
-    max_llm_pairs: int = Field(200, ge=0, le=5000)
+    max_llm_calls: int = Field(
+        150, ge=0, le=5000, description="LLM judge calls, one per obligation (strongest first)"
+    )
+    use_rerank: bool = Field(True, description="Use the reranker when RERANK_MODEL is configured")
+    rerank_candidates: int = Field(20, ge=1, le=200)
+    rerank_min_score: float = Field(0.2, ge=0, le=1)
+    filter_not_applicable: bool = Field(
+        True, description="Skip obligations that do not bind the bank (rules + LLM, cached)"
+    )
+    refresh_llm_cache: bool = Field(
+        False, description="Ask the LLM again instead of reusing cached answers"
+    )
     rrf_k: int = Field(60, ge=1, le=1000)
     candidates_per_query: int = Field(20, ge=1, le=200)
-    evidence_per_obligation: int = Field(3, ge=1, le=20)
+    evidence_per_obligation: int = Field(5, ge=1, le=20)
     max_documents: int = Field(20, ge=1, le=500)
     alpha: float = Field(0.7, ge=0, le=1)
     min_shared_bigrams: int = Field(2, ge=0, le=20)

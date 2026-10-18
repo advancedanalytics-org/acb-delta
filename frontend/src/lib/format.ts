@@ -7,8 +7,14 @@ const dateTimeFormat = new Intl.DateTimeFormat('vi-VN', {
   minute: '2-digit',
 })
 
-export const formatDate = (iso: string) => dateFormat.format(new Date(iso))
-export const formatDateTime = (iso: string) => dateTimeFormat.format(new Date(iso))
+// Show the raw value for an unparseable date: Intl throws on Invalid Date and would crash the page
+const safeFormat = (format: Intl.DateTimeFormat, iso: string) => {
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? iso : format.format(date)
+}
+
+export const formatDate = (iso: string) => safeFormat(dateFormat, iso)
+export const formatDateTime = (iso: string) => safeFormat(dateTimeFormat, iso)
 
 export const formatPercent = (value: number, digits = 1) =>
   `${(value * 100).toLocaleString('vi-VN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`

@@ -71,6 +71,31 @@ The script wraps these; they always work too.
 
 Ports: UI 3000, API 8000, agent 8080 (fixed by AgentBase), Postgres 5432 and MinIO 9000/9001 on `127.0.0.1` only; override with the `*_PORT` values in `.env`.
 
+### GCP demo VM
+
+A demo copy of the whole stack runs on one GCP VM (project `acb-delta-demo-2340`, Singapore) behind Caddy (HTTPS + basic auth) at `https://34-143-129-52.sslip.io`. It is separate from the GreenNode target in `TAI-07`. Every push to `main` deploys there automatically (`.github/workflows/deploy-gcp.yml`); `scripts/gcp.sh` is the manual entry point and needs `gcloud` logged in to an account with access to that project.
+
+| Command | What it does |
+|---|---|
+| `./scripts/gcp.sh deploy` | Fetches `origin/main` (or `GCP_REF`), uploads it, builds and starts the stack, prints URL + login. Keeps the VM's `.env` and data. Fails if the chat or embedding model, or the agent, does not answer one test call |
+| `./scripts/gcp.sh status` · `logs [service]` · `ssh` | Health, last 100 log lines, shell on the VM |
+| `./scripts/gcp.sh login` | Prints URL, user, password and model key (from the VM's `.env`) |
+| `./scripts/gcp.sh stop` · `start` | Stops / starts the VM to save credit; data and IP are kept |
+| `./scripts/gcp.sh create` · `destroy` | Creates the VM (`e2-standard-4`, runs as service account `acb-delta-vm`), static IP and 80/443 firewall rule / deletes them with all data (asks first) |
+
+Models on the VM come from `deploy/gcp/docker-compose.gcp.yml`, not from `.env`, and need no API key:
+
+| Role | Service | Model |
+|---|---|---|
+| Chat (api + agent) | `litellm` → Vertex AI, location `global` | Qwen3-Next-80B Instruct (`deploy/gcp/litellm.yaml`), called as `qwen3-next-80b`. Authenticated as the VM's service account (`roles/aiplatform.user`, `cloud-platform` scope) |
+| Embedding (api) | `embedding`: text-embeddings-inference on CPU | `BAAI/bge-m3`, 1024 dims; weights cached in the `embeddingdata` volume |
+
+`scripts/gcp.sh deploy` writes `COMPOSE_FILE` into the VM's `.env`, so `docker compose` and `scripts/run.sh` on the VM always include that overlay. The CI deployer (`github-deployer`) needs `roles/iam.serviceAccountUser` on `acb-delta-vm` to SSH in.
+
+To call the VM's models from a laptop (e.g. a local stack), use the OpenAI-compatible endpoint `https://34-143-129-52.sslip.io/v1` with the model key from `gcp.sh login` as the bearer token: set `OPENAI_BASE_URL` and `EMBEDDING_BASE_URL` to it, `OPENAI_API_KEY` and `EMBEDDING_API_KEY` to the key, `LLM_MODEL=qwen3-next-80b`, `EMBEDDING_MODEL=BAAI/bge-m3`. Calls spend the demo project's Vertex credit and share the VM's CPU with the demo; never commit the key.
+
+Rules for agents: never print the login or `.env` in CI logs (the repo is public); never run `destroy` unless your human asked.
+
 ## Team and ownership
 
 | Owner | Task IDs | Area |
@@ -125,6 +150,7 @@ Status markers: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (
 - **Known gap:** those checks only look at the repo root, so `backend/`, `agent/` and `frontend/` are not built or tested in CI yet. CI changes are deferred until the `aamacrunner` Mac Mini is fixed (`plans/261017-1103-project-skeleton/phase-05-ci-cd-on-org-runner.md`). Until then, run the **Commands** checks locally before opening a PR.
 - The runner is persistent and shared, not a fresh VM: never write outside the workspace, install global packages, or leave background processes running from CI steps.
 - PRs from forks do not run on the self-hosted runner, for security.
+- `.github/workflows/deploy-gcp.yml` deploys every push to `main` to the GCP demo VM on a GitHub-hosted runner. It authenticates keylessly (Workload Identity Federation limited to this repo's `main`) as `github-deployer@acb-delta-demo-2340.iam.gserviceaccount.com`, using the repo variables `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`. A failed build leaves the previous containers running.
 
 ## Agent-specific config
 

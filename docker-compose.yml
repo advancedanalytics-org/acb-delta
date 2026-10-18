@@ -100,6 +100,10 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_EXTRA_BODY: ${LLM_EXTRA_BODY:-}
       LLM_CONCURRENCY: ${LLM_CONCURRENCY:-4}
+      # Optional reranker for Engine 1 (Cohere/Jina-style /rerank); empty = relevance gate.
+      RERANK_BASE_URL: ${RERANK_BASE_URL:-}
+      RERANK_MODEL: ${RERANK_MODEL:-}
+      RERANK_API_KEY: ${RERANK_API_KEY:-}
       CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-3000}","http://localhost:5173"]'
     ports:
       - ${API_PORT:-8000}:8000
