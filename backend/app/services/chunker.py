@@ -81,18 +81,13 @@ def extract_metadata(doc: pymupdf.Document, default_doc_id: str | None = None) -
     if ver_match:
         meta.version = ver_match.group(1).strip()
 
-    # Match effective date
-    date_match = re.search(r"Hiệu lực từ\s*[:\s]*([0-9\/]+)", full_first_page_text)
+    # Match effective date; stored as ISO YYYY-MM-DD because the UI parses it with Date
+    date_match = re.search(
+        r"Hiệu lực từ\s*[:\s]*(\d{1,2})/(\d{1,2})/(\d{4})", full_first_page_text
+    ) or re.search(r"ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})", full_first_page_text)
     if date_match:
-        meta.effective_date = date_match.group(1).strip()
-    else:
-        # Check standard Vietnamese date: ngày DD tháng MM năm YYYY
-        v_date = re.search(
-            r"ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})", full_first_page_text
-        )
-        if v_date:
-            d, m, y = v_date.groups()
-            meta.effective_date = f"{int(d):02d}/{int(m):02d}/{y}"
+        d, m, y = date_match.groups()
+        meta.effective_date = f"{y}-{int(m):02d}-{int(d):02d}"
 
     # Match title and issuer from blocks on first page
     blocks = doc[0].get_text("dict").get("blocks", [])
