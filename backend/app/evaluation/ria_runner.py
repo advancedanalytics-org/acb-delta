@@ -149,6 +149,55 @@ def _read_ria_tables(database_url: str, job_id: str) -> tuple[set[str], dict, li
         engine.dispose()
 
 
+def _job_timings(database_url: str, job_id: str) -> tuple[str, float]:
+    """The review package of an analyze job, and how long that analysis plus its review took.
+
+    `vbpls.ria_job_id` is unique per analyze job (contract §2), so the package is reachable from
+    the job id alone. Latency comes from the job rows rather than a wall clock, which is both more
+    accurate and the only option when scoring a run that finished earlier.
+    """
+    engine = create_engine(database_url, connect_args={"connect_timeout": 5})
+    try:
+        with engine.connect() as conn:
+            vbpl_id = conn.execute(
+                text("SELECT id FROM vbpls WHERE ria_job_id = :job"), {"job": job_id}
+            ).scalar()
+            if vbpl_id is None:
+                raise RunnerError(f"No review package for analyze job {job_id}")
+            seconds = conn.execute(
+                text(
+                    "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - started_at))), 0) "
+                    "FROM job WHERE job_id = :job OR (job_type = 'review' AND version_id = "
+                    "(SELECT version_id FROM job WHERE job_id = :job))"
+                ),
+                {"job": job_id},
+            ).scalar()
+            return vbpl_id, float(seconds or 0.0)
+    finally:
+        engine.dispose()
+
+
+def score_existing_job(client: httpx.Client, job_id: str, database_url: str) -> RunArtifacts:
+    """Build artifacts for an analyze job that already ran, without touching the pipeline.
+
+    `hitlAcceptRate` only exists once people have reviewed a run's output, so a freshly finished
+    run can never carry it. Scoring is therefore a second pass over an earlier job.
+    """
+    vbpl_id, latency = _job_timings(database_url, job_id)
+    impacts = client.get(f"/api/vbpls/{vbpl_id}/impacts").raise_for_status().json()
+    obligations, ranked, findings = _read_ria_tables(database_url, job_id)
+    return RunArtifacts(
+        regulation_id="",
+        analyze_job_id=job_id,
+        vbpl_id=vbpl_id,
+        impacts=impacts,
+        obligations=obligations,
+        retrieval=ranked,
+        findings=findings,
+        latency_seconds=latency,
+    )
+
+
 def run_pipeline(client: httpx.Client, pdf_path: Path, database_url: str) -> RunArtifacts:
     started = time.monotonic()
     print("1/4 upload")
@@ -251,12 +300,17 @@ def to_outcome(item: RiaDatasetItem, run: RunArtifacts) -> ItemOutcome:
 
 
 def hitl_accept_rate(client: httpx.Client, vbpl_id: str) -> float | None:
-    """Share of decided impacts the reviewer kept. `None` when nobody has reviewed yet."""
+    """Share of decided impacts the reviewer took as written. `None` when nobody has reviewed yet.
+
+    `accept` only, not `accept` + `edit`. `PLAN.md` asks for the accept rate, and as a measure of
+    suggestion quality an edit says the draft was not good enough to use: the reviewer had to
+    rewrite it. That differs from the UI's `status`, which calls an edited impact `accepted`
+    because the workflow step is finished -- a different question from whether the AI was right.
+    """
     rows = client.get("/api/feedback", params={"vbplId": vbpl_id}).raise_for_status().json()
     if not rows:
         return None
-    kept = sum(1 for r in rows if r["action"] in ("accept", "edit"))
-    return kept / len(rows)
+    return sum(1 for r in rows if r["action"] == "accept") / len(rows)
 
 
 def judge_score(item: RiaDatasetItem, run: RunArtifacts) -> float | None:
@@ -317,6 +371,10 @@ def main() -> None:
         "--cost-usd", type=float, default=None, help="Cost per document, read from Langfuse"
     )
     parser.add_argument("--post", action="store_true", help="Save via POST /api/eval/runs")
+    # hitlAcceptRate only exists after people review a run, so recording a run is a second pass.
+    parser.add_argument(
+        "--job", default=None, help="Score an analyze job that already ran, instead of running one"
+    )
     args = parser.parse_args()
 
     items = load_ria_dataset(args.dataset)
@@ -324,11 +382,14 @@ def main() -> None:
         raise RunnerError(f"Expected exactly one dataset item, got {len(items)}")
     item = items[0]
     pdf_path = args.dataset.parent / item.regulation_pdf
-    if not pdf_path.is_file():
+    if not args.job and not pdf_path.is_file():
         raise RunnerError(f"{pdf_path} missing; run `python -m app.evaluation.ground_truth` first")
 
     with httpx.Client(base_url=args.api, timeout=180) as client:
-        run = run_pipeline(client, pdf_path, args.database_url)
+        if args.job:
+            run = score_existing_job(client, args.job, args.database_url)
+        else:
+            run = run_pipeline(client, pdf_path, args.database_url)
         stages = evaluate([to_outcome(item, run)], k=DEFAULT_K)
         accept_rate = hitl_accept_rate(client, run.vbpl_id)
         judge = judge_score(item, run)

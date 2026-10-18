@@ -141,6 +141,27 @@ def test_the_judge_reaches_labels_through_finding_id_not_a_clause_id(item, run, 
     assert "tối đa 12 tháng" in asked[0]
 
 
+def test_accept_rate_counts_accept_only_not_edit():
+    """An edit means the draft was not good enough to use, so it is not an accept.
+
+    The UI calls an edited impact `accepted` because the workflow step is done; that is a
+    different question from whether the AI was right, which is what this metric reports.
+    """
+    import httpx
+
+    from app.evaluation.ria_runner import hitl_accept_rate
+
+    rows = [{"action": "accept"}, {"action": "edit"}, {"action": "reject"}, {"action": "accept"}]
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=rows))
+    with httpx.Client(base_url="http://api", transport=transport) as client:
+        assert hitl_accept_rate(client, "vbpl-1") == pytest.approx(0.5)
+
+    empty = httpx.MockTransport(lambda request: httpx.Response(200, json=[]))
+    with httpx.Client(base_url="http://api", transport=empty) as client:
+        # Nobody has reviewed this run yet: unknown, not zero.
+        assert hitl_accept_rate(client, "vbpl-1") is None
+
+
 def test_latency_is_carried_through_and_cost_stays_unmeasured(item, run):
     scores = evaluate([to_outcome(item, run)])
 
