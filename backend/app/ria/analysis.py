@@ -6,7 +6,7 @@ nothing is overwritten and no internal document is modified.
 """
 
 import json
-import re
+import logging
 import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,25 +16,24 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.db import get_engine
-from app.ria import embeddings, jobs, llm
-from app.ria.compare import PRIORITY, classify
+from app.ria import embeddings, jobs, llm, rerank
+from app.ria.applicability import classify_obligations
+from app.ria.compare import PRIORITY, judge_group
 from app.ria.retrieval import (
     RetrievalParams,
     aggregate_documents,
     best_sentence_span,
     build_queries,
+    fuse_for_obligation,
     load_internal_corpus,
     parent_context,
-    retrieve_for_obligation,
+    rerank_entries,
+    select_candidates,
 )
 from app.ria.schema import ensure_schema
 
 ANALYZABLE = ("PARSED", "RETRIEVAL_COMPLETED", "AI_PROPOSED")
-# Duties of state bodies (ministries, the Government, People's Committees) bind no bank unit.
-_STATE_SUBJECT = re.compile(
-    r"^(Bộ\s|Bộ trưởng|Chính phủ|Thủ tướng|Ủy ban nhân dân|Ủy ban Nhân dân|Cơ quan chuyên trách|"
-    r"Cơ quan quản lý nhà nước|Ngân hàng Nhà nước|Thống đốc|Thanh tra|Quốc hội)",
-)
+log = logging.getLogger(__name__)
 
 
 # Which pair represents a finding: a conflict anywhere wins (fail closed); otherwise a clause
@@ -196,7 +195,10 @@ def run_analysis(job_id: str) -> dict:
     modalities = set(options.get("modalities") or ("must", "must_not", "may"))
     model = embeddings.embedding_version()
     use_llm = bool(llm.llm_model()) and options.get("use_llm", True) is not False
-    max_llm_pairs = int(options.get("max_llm_pairs", 200))
+    reranker = rerank.rerank_model() if options.get("use_rerank", True) is not False else None
+    max_llm_calls = int(options.get("max_llm_calls", 150))
+    refresh = bool(options.get("refresh_llm_cache", False))
+    settings = get_settings()
     warnings: list[str] = []
 
     with get_engine().connect() as conn:
@@ -225,42 +227,75 @@ def run_analysis(job_id: str) -> dict:
                 model = None
         else:
             warnings.append("EMBEDDING_BASE_URL not set; sparse retrieval only")
+        if not reranker:
+            warnings.append("reranker not configured; lexical/dense relevance gate used")
         if not use_llm:
             warnings.append("LLM judge disabled; comparison is rule-based")
 
-        in_scope, skipped = [], Counter()
-        for o in obligations:
-            if o["modality"] not in modalities:
-                skipped["modality_filtered"] += 1
-            elif _STATE_SUBJECT.match(o["subject"] or ""):
-                skipped["state_body_duty"] += 1
-            else:
-                in_scope.append(o)
+    # Applicability: drop obligations that cannot bind the bank before spending retrieval/LLM.
+    jobs.update_progress(job_id, "applicability", 3)
+    by_modality = [o for o in obligations if o["modality"] in modalities]
+    skipped = Counter({"modality_filtered": len(obligations) - len(by_modality)})
+    if options.get("filter_not_applicable", True) is not False:
+        with get_engine().begin() as conn:
+            applies = classify_obligations(conn, by_modality, use_llm, refresh=refresh)
+        in_scope = [o for o in by_modality if applies.get(o["obligation_id"]) != "no"]
+        skipped["not_applicable"] = len(by_modality) - len(in_scope)
+        applicability = dict(Counter(applies.values()))
+    else:
+        in_scope, applicability = by_modality, {}
+    skipped = +skipped  # drop zero counts
 
-        # Engine 1: retrieval per obligation.
-        jobs.update_progress(job_id, "retrieval", 5)
-        query_vectors: dict[str, dict[str, list[float]]] = {}
-        if model:
-            flat = [
-                (o["obligation_id"], name, q)
-                for o in in_scope
-                for name, q in build_queries(o).items()
-                if name in ("legal_text", "proposition")
-            ]
-            vectors = embeddings.embed([q for _, _, q in flat])
-            for (oid, name, _), vector in zip(flat, vectors, strict=True):
-                query_vectors.setdefault(oid, {})[name] = vector
+    # Engine 1: fuse sparse + dense per obligation (SQL), then rerank in parallel.
+    jobs.update_progress(job_id, "retrieval", 10)
+    query_vectors: dict[str, dict[str, list[float]]] = {}
+    if model and in_scope:
+        flat = [
+            (o["obligation_id"], name, q)
+            for o in in_scope
+            for name, q in build_queries(o).items()
+            if name in ("legal_text", "proposition")
+        ]
+        vectors = embeddings.embed([q for _, _, q in flat])
+        for (oid, name, _), vector in zip(flat, vectors, strict=True):
+            query_vectors.setdefault(oid, {})[name] = vector
 
-        per_obligation: dict[str, list[dict]] = {}
-        traces: dict[str, dict] = {}
+    fused: dict[str, list[dict]] = {}
+    traces: dict[str, dict] = {}
+    with get_engine().connect() as conn:
         for i, o in enumerate(in_scope):
-            cands, trace = retrieve_for_obligation(
+            entries, trace = fuse_for_obligation(
                 conn, o, corpus, params, query_vectors.get(o["obligation_id"]), model
             )
-            per_obligation[o["obligation_id"]] = cands
-            traces[o["obligation_id"]] = trace
+            fused[o["obligation_id"]], traces[o["obligation_id"]] = entries, trace
             if i % 25 == 0:
-                jobs.update_progress(job_id, "retrieval", 5 + int(45 * i / max(1, len(in_scope))))
+                jobs.update_progress(job_id, "retrieval", 10 + int(20 * i / max(1, len(in_scope))))
+
+    rerank_scores: dict[str, dict[str, float] | None] = {}
+    rerank_failures = 0
+    if reranker:
+        jobs.update_progress(job_id, "rerank", 30)
+
+        def score(o: dict) -> dict[str, float] | None:
+            try:
+                return rerank_entries(o, fused[o["obligation_id"]], corpus, params)
+            except Exception as exc:  # fall back to the lexical/dense gate for this obligation
+                log.warning("rerank failed for %s: %s", o["obligation_id"], exc)
+                return None
+
+        with ThreadPoolExecutor(
+            max_workers=max(1, settings.rerank_concurrency), thread_name_prefix="ria-rerank"
+        ) as pool:
+            for o, scores in zip(in_scope, pool.map(score, in_scope), strict=True):
+                rerank_scores[o["obligation_id"]] = scores
+                rerank_failures += scores is None
+        if rerank_failures:
+            warnings.append(f"reranker failed for {rerank_failures} obligations; gate used")
+
+    per_obligation = {
+        oid: select_candidates(entries, corpus, params, rerank_scores.get(oid))
+        for oid, entries in fused.items()
+    }
 
     shortlist = aggregate_documents(per_obligation, params)
     shortlisted = {d["document_id"] for d in shortlist}
@@ -276,6 +311,8 @@ def run_analysis(job_id: str) -> dict:
             clause = corpus.clauses[c["clause_id"]]
             start, end = best_sentence_span(clause["text"], c["shared_terms"])
             method = "+".join(sorted({k.split(":")[0] for k in c["ranks"]})) + "+rrf"
+            if c["rerank"] is not None:
+                method += "+rerank"
             evidence_rows.append(
                 {
                     "evidence_id": f"EV-{uuid.uuid4().hex[:12]}",
@@ -313,6 +350,7 @@ def run_analysis(job_id: str) -> dict:
                                 "ranks": ev["candidate"]["ranks"],
                                 "rrf": ev["candidate"]["rrf"],
                                 "dense": ev["candidate"]["dense"],
+                                "rerank": ev["candidate"]["rerank"],
                                 "shared_terms": ev["candidate"]["shared_terms"],
                                 "idf_score": ev["candidate"]["idf_score"],
                                 "queries": traces[ev["obligation"]["obligation_id"]]["queries"],
@@ -326,7 +364,7 @@ def run_analysis(job_id: str) -> dict:
             )
         _set_status(conn, version_id, "RETRIEVAL_COMPLETED")
 
-    # Engine 2: compare each obligation ↔ clause pair and persist findings.
+    # Engine 2: one LLM call per obligation with all its candidate clauses.
     jobs.update_progress(job_id, "comparison", 55)
     temporal = {"check": "temporal_validity", "status": "pass"}
     if legal["status"] == "pending":
@@ -338,35 +376,44 @@ def run_analysis(job_id: str) -> dict:
     elif legal["status"] in ("superseded", "unknown"):
         temporal = {"check": "temporal_validity", "status": "warn", "detail": legal["status"]}
 
-    # Classify every obligation ↔ clause pair, then group per (obligation, document).
-    # The LLM budget goes to the strongest retrieval candidates first.
-    by_score = sorted(
-        range(len(evidence_rows)), key=lambda i: -evidence_rows[i]["candidate"]["score"]
+    groups: dict[str, list[int]] = {}
+    for i, ev in enumerate(evidence_rows):
+        groups.setdefault(ev["obligation"]["obligation_id"], []).append(i)
+    # The LLM budget goes to the obligations with the strongest retrieval evidence.
+    order = sorted(
+        groups, key=lambda oid: -max(evidence_rows[i]["candidate"]["score"] for i in groups[oid])
     )
-    llm_allowed = set(by_score[:max_llm_pairs]) if use_llm else set()
+    llm_allowed = set(order[:max_llm_calls]) if use_llm else set()
 
-    def compare_pair(i: int) -> dict:
-        ev = evidence_rows[i]
-        return classify(
-            ev["obligation"],
-            ev["obligation"]["clause_text"],
-            ev["clause"],
-            {"span": ev["span"], "shared_terms": ev["candidate"]["shared_terms"]},
-            ev["context"],
-            i in llm_allowed,
-        )
+    def compare_group(oid: str) -> tuple[str, list[dict], dict]:
+        rows = [evidence_rows[i] for i in groups[oid]]
+        o = rows[0]["obligation"]
+        items = [
+            {
+                "internal": ev["clause"],
+                "evidence": {"span": ev["span"], "shared_terms": ev["candidate"]["shared_terms"]},
+                "context": ev["context"],
+            }
+            for ev in rows
+        ]
+        results, stats = judge_group(o, o["clause_text"], items, oid in llm_allowed, refresh)
+        return oid, results, stats
 
     results: list[dict | None] = [None] * len(evidence_rows)
-    workers = max(1, get_settings().llm_concurrency) if llm_allowed else 1
+    llm_calls = cache_hits = 0
+    workers = max(1, settings.llm_concurrency) if llm_allowed else 1
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ria-compare") as pool:
-        futures = {pool.submit(compare_pair, i): i for i in range(len(evidence_rows))}
+        futures = [pool.submit(compare_group, oid) for oid in groups]
         for done, future in enumerate(as_completed(futures), start=1):
-            results[futures[future]] = future.result()
+            oid, group_results, stats = future.result()
+            llm_calls += stats["llm_calls"]
+            cache_hits += stats["cache_hits"]
+            for i, r in zip(groups[oid], group_results, strict=True):
+                results[i] = r
             if done % 10 == 0:
                 jobs.update_progress(
-                    job_id, "comparison", 55 + int(40 * done / max(1, len(evidence_rows)))
+                    job_id, "comparison", 55 + int(40 * done / max(1, len(groups)))
                 )
-    llm_calls = len(llm_allowed)
 
     pairs_by_group: dict[tuple[str, str], list[tuple[dict, dict]]] = {}
     for ev, result in zip(evidence_rows, results, strict=True):
@@ -375,7 +422,15 @@ def run_analysis(job_id: str) -> dict:
 
     finding_rows = []
     for pairs in pairs_by_group.values():
-        pairs.sort(key=lambda p: _CATEGORY_RANK[p[1]["category"]])
+        # Most severe category first; among equals, the clause the LLM picked as best match,
+        # then the strongest retrieval score.
+        pairs.sort(
+            key=lambda p: (
+                _CATEGORY_RANK[p[1]["category"]],
+                not p[1].get("llm_best"),
+                -p[0]["candidate"]["score"],
+            )
+        )
         ev, result = pairs[0]
         o, clause = ev["obligation"], ev["clause"]
         checks = [*result["checks"], temporal]
@@ -412,6 +467,7 @@ def run_analysis(job_id: str) -> dict:
                         "status": "NEEDS_HUMAN_REVIEW" if grounded else "BLOCKED",
                         "checks": checks,
                         "conditions_to_verify": result.get("conditions_to_verify", []),
+                        "llm_best_clause": result.get("llm_best", False),
                         "other_clauses": [
                             {"clause_id": p[0]["clause"]["clause_id"], "category": p[1]["category"]}
                             for p in pairs[1:]
@@ -458,14 +514,19 @@ def run_analysis(job_id: str) -> dict:
         "version_id": version_id,
         "status": "AI_PROPOSED",
         "parameters": {**asdict(params), "modalities": sorted(modalities)},
-        "retrieval_methods": ["sparse"] + (["dense"] if model else []),
+        "retrieval_methods": ["sparse"]
+        + (["dense"] if model else [])
+        + (["rerank"] if reranker else []),
         "embedding_version": model or "none",
+        "rerank_model": reranker,
         "llm_model": llm.llm_model() if use_llm else None,
         "llm_calls": llm_calls,
+        "llm_cache_hits": cache_hits,
         "obligations": {
             "total": len(obligations),
             "analyzed": len(in_scope),
             "skipped": dict(skipped),
+            "applicability": applicability,
             "with_evidence": covered,
             "coverage": round(covered / max(1, len(in_scope)), 4),
         },

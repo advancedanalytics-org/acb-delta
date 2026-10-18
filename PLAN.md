@@ -134,7 +134,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [ ] Chọn và test model embedding tiếng Việt trên MaaS (đã chạy thử `baai/bge-m3` qua OpenRouter, chưa thử MaaS)
   - [ ] Chốt schema chunk: `doc_id, doc_type, issuer, effective_date, article_path, page, bbox, text, embedding`
   - [x] Hybrid search: vector + keyword (Postgres full-text), filter theo metadata — `POST /api/regulations/{id}/analyze`, xem `docs/ria-ingest-analyze.md`
-  - [ ] Rerank (tùy chọn nếu còn thời gian)
+  - [x] Rerank (tùy chọn nếu còn thời gian) — `qwen/qwen3-reranker-8b` qua OpenRouter, ngưỡng 0.2; kèm lọc nghĩa vụ không áp dụng, gộp lời gọi LLM theo nghĩa vụ và cache LLM
   - [ ] Đóng gói thành tool / hàm retrieve cho agent (`TAI-01`)
 - [ ] **MINH-02** – Làm việc với Tài để thống nhất document format cho tài liệu mock
 

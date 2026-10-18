@@ -38,7 +38,13 @@ def client(tmp_path_factory):
     patch.setenv("DATABASE_URL", DB_URL)
     patch.setenv("STORAGE_BACKEND", "local")
     patch.setenv("STORAGE_LOCAL_DIR", str(tmp_path_factory.mktemp("storage")))
-    for name in ("EMBEDDING_BASE_URL", "OPENAI_BASE_URL", "LLM_MODEL"):
+    for name in (
+        "EMBEDDING_BASE_URL",
+        "OPENAI_BASE_URL",
+        "LLM_MODEL",
+        "RERANK_BASE_URL",
+        "RERANK_MODEL",
+    ):
         patch.setenv(name, "")
     _reset_caches()
     from app.main import create_app
@@ -198,3 +204,87 @@ def test_dense_retrieval_path(client, monkeypatch):
             ).scalars()
         )
     assert any("dense" in m for m in methods)
+
+
+def _fake_llm(system, user, timeout=120):
+    """Deterministic stand-in for the LLM: quotes are copied from the payload, so they ground."""
+    import json as _json
+
+    from app.ria import applicability, compare
+
+    payload = _json.loads(user)
+    if system == applicability.SYSTEM:
+        return {"items": [{"id": o["id"], "applies": "yes", "reason": "test"} for o in payload]}
+    assert system == compare.SYSTEM
+    source = payload["nghia_vu_nguon"]["trich_dan"]
+    clauses = payload["dieu_khoan_noi_bo"]
+    return {
+        "best": clauses[0]["ma"],
+        "results": [
+            {
+                "ma": c["ma"],
+                "classification": "INDIRECT_IMPACT",
+                "rationale": "test",
+                "source_quote": source[:12],
+                "target_quote": c["noi_dung"][:12],
+                "confidence": 0.5,
+            }
+            for c in clauses
+        ],
+    }
+
+
+def test_rerank_group_llm_and_cache(client, monkeypatch):
+    from app.db import get_engine
+    from app.ria import llm, rerank
+
+    monkeypatch.setattr(rerank, "rerank_model", lambda: "fake-reranker")
+    monkeypatch.setattr(
+        rerank,
+        "rerank",
+        lambda q, docs, timeout=60: [0.9 if "rà soát" in d else 0.05 for d in docs],
+    )
+    monkeypatch.setattr(llm, "llm_model", lambda: "fake-llm")
+    monkeypatch.setattr(llm, "chat_json", _fake_llm)
+
+    body = _upload(client, ria_001_pdf()).json()
+    assert _wait(client, body["job_id"])["status"] == "succeeded"
+    options = {"refresh_llm_cache": True}
+    first = _wait(
+        client,
+        client.post(f"/api/regulations/{body['regulation_id']}/analyze", json=options).json()[
+            "job_id"
+        ],
+    )
+    assert first["status"] == "succeeded", first["error"]
+    r1 = first["result"]
+    assert r1["retrieval_methods"][-1] == "rerank" and r1["rerank_model"] == "fake-reranker"
+    groups = r1["obligations"]["with_evidence"]
+    assert groups > 0 and r1["llm_calls"] == groups and r1["llm_cache_hits"] == 0
+    assert r1["evidence"] >= groups  # several clauses per obligation, one call each
+
+    second = _wait(
+        client,
+        client.post(f"/api/regulations/{body['regulation_id']}/analyze", json={}).json()["job_id"],
+    )
+    r2 = second["result"]
+    assert r2["llm_calls"] == 0 and r2["llm_cache_hits"] == groups
+
+    with get_engine().connect() as conn:
+        stored = dict(
+            conn.execute(
+                text(
+                    "SELECT o.applicability, count(*) FROM obligation o JOIN clause c "
+                    "ON c.clause_id = o.source_clause_id WHERE c.version_id = :v GROUP BY 1"
+                ),
+                {"v": body["version_id"]},
+            ).all()
+        )
+        methods = set(
+            conn.execute(
+                text("SELECT retrieval_method FROM evidence WHERE job_id = :j"),
+                {"j": first["job_id"]},
+            ).scalars()
+        )
+    assert stored == {"yes": 3}  # "Tổ chức tín dụng" duties: decided by rule, stored
+    assert all(m.endswith("+rerank") for m in methods)

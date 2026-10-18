@@ -168,3 +168,21 @@ CREATE TABLE IF NOT EXISTS amendment (
   validation    text NOT NULL,
   approval      text NOT NULL
 );
+
+-- Obligation applicability to the bank: decided once per obligation and reused by every run.
+ALTER TABLE obligation ADD COLUMN IF NOT EXISTS applicability text;          -- yes | no | uncertain
+ALTER TABLE obligation ADD COLUMN IF NOT EXISTS applicability_reason text;
+ALTER TABLE obligation ADD COLUMN IF NOT EXISTS applicability_method text;   -- rule | llm:<model>
+
+-- LLM answers keyed by a hash of (kind, model, extra body, prompt, payload). Changing the
+-- prompt or the model changes the key, so stale answers are never reused.
+CREATE TABLE IF NOT EXISTS llm_cache (
+  cache_key       text PRIMARY KEY,
+  kind            text NOT NULL,            -- judge_group | applicability
+  model           text NOT NULL,
+  prompt_version  text NOT NULL,            -- sha256(system prompt)[:12]
+  response        jsonb NOT NULL,
+  hits            int NOT NULL DEFAULT 0,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  last_hit_at     timestamptz
+);

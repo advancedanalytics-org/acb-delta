@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import text
 
-from app.ria import embeddings
+from app.ria import embeddings, rerank
 from app.ria.indexing import context_text
 from app.ria.textutil import content_bigrams, normalize, tsquery_from_bigrams
 
@@ -22,7 +22,8 @@ _EXCEPTION_HINT = re.compile(r"\b(trừ|ngoại trừ|không áp dụng|miễn)\
 class RetrievalParams:
     rrf_k: int = 60
     candidates_per_query: int = 20
-    evidence_per_obligation: int = 3
+    # One LLM call judges all of them, so keeping more clauses costs little and protects recall.
+    evidence_per_obligation: int = 5
     max_documents: int = 20
     alpha: float = 0.7  # S(D,Q) = α·max(s) + (1−α)·mean(TopK(s))
     top_k_mean: int = 3
@@ -34,6 +35,9 @@ class RetrievalParams:
     # Below this, dense similarity alone is register, not topic (Vietnamese legal text sits at
     # 0.55–0.65 with bge-m3): it also needs one shared gated term to count as evidence.
     dense_strong_score: float = 0.7
+    # Reranker (when configured): how many fused entries it scores, and its relevance floor.
+    rerank_candidates: int = 20
+    rerank_min_score: float = 0.2
 
 
 @dataclass
@@ -207,7 +211,7 @@ def parent_context(cid: str, corpus: InternalCorpus) -> list[dict]:
     return out
 
 
-def retrieve_for_obligation(
+def fuse_for_obligation(
     conn,
     obligation: dict,
     corpus: InternalCorpus,
@@ -215,6 +219,7 @@ def retrieve_for_obligation(
     query_vectors: dict[str, list[float]] | None,
     model: str | None,
 ) -> tuple[list[dict], dict]:
+    """Sparse + dense lists for every query view, fused by RRF, best first. No gating yet."""
     queries = build_queries(obligation)
     ranked: dict[str, list[tuple[str, float]]] = {}
     for name, q in queries.items():
@@ -228,32 +233,73 @@ def retrieve_for_obligation(
             )
 
     fused = rrf(ranked, params.rrf_k)
-    n_lists = max(1, len(ranked))
-    max_rrf = n_lists / (params.rrf_k + 1)
-    gate_text = " ".join(p for p in (obligation["text"], obligation.get("article_heading")) if p)
-    candidates = []
+    max_rrf = max(1, len(ranked)) / (params.rrf_k + 1)
+    gate_text = gate_query(obligation)
+    entries = []
     for cid, entry in fused.items():
         lex = lexical_overlap(gate_text, cid, corpus, params.min_term_idf)
-        dense = entry["dense"]
-        dense_ok = dense is not None and (
-            dense >= params.dense_strong_score
-            or (dense >= params.dense_min_score and len(lex["shared"]) >= 1)
-        )
-        lexical_ok = (
-            len(lex["shared"]) >= params.min_shared_bigrams
-            and lex["idf_score"] >= params.min_idf_score
-        )
-        if not (lexical_ok or dense_ok):
-            continue
-        relevance = entry["dense"] if entry["dense"] is not None else lex["ratio"]
+        entries.append({"clause_id": cid, **entry, "rrf_norm": entry["rrf"] / max_rrf, "lex": lex})
+    entries.sort(key=lambda e: -e["rrf"])
+    trace = {
+        "queries": queries,
+        "lists": {k: len(v) for k, v in ranked.items()},
+        "fused": len(fused),
+    }
+    return entries, trace
+
+
+def gate_query(obligation: dict) -> str:
+    return " ".join(p for p in (obligation["text"], obligation.get("article_heading")) if p)
+
+
+def rerank_entries(
+    obligation: dict, entries: list[dict], corpus: InternalCorpus, params: RetrievalParams
+) -> dict[str, float]:
+    """Cross-encoder scores for the top fused entries (design section 05.6)."""
+    top = entries[: params.rerank_candidates]
+    docs = [context_text(corpus.clauses[e["clause_id"]], corpus.clauses) for e in top]
+    scores = rerank.rerank(gate_query(obligation), docs)
+    return {e["clause_id"]: s for e, s in zip(top, scores, strict=True)}
+
+
+def select_candidates(
+    entries: list[dict],
+    corpus: InternalCorpus,
+    params: RetrievalParams,
+    rerank_scores: dict[str, float] | None = None,
+) -> list[dict]:
+    """Keep relevant entries. With rerank scores the cross-encoder decides; without them the
+    lexical/dense gate does. Then drop the tail below relative_cutoff × best."""
+    candidates = []
+    for entry in entries:
+        cid, lex, dense = entry["clause_id"], entry["lex"], entry["dense"]
+        rr = rerank_scores.get(cid) if rerank_scores is not None else None
+        if rerank_scores is not None:
+            if rr is None or rr < params.rerank_min_score:
+                continue
+            score = rr
+        else:
+            dense_ok = dense is not None and (
+                dense >= params.dense_strong_score
+                or (dense >= params.dense_min_score and len(lex["shared"]) >= 1)
+            )
+            lexical_ok = (
+                len(lex["shared"]) >= params.min_shared_bigrams
+                and lex["idf_score"] >= params.min_idf_score
+            )
+            if not (lexical_ok or dense_ok):
+                continue
+            relevance = dense if dense is not None else lex["ratio"]
+            score = 0.5 * entry["rrf_norm"] + 0.5 * min(1.0, relevance)
         candidates.append(
             {
                 "clause_id": cid,
                 "document_id": corpus.clauses[cid]["document_id"],
-                "score": round(0.5 * entry["rrf"] / max_rrf + 0.5 * min(1.0, relevance), 4),
+                "score": round(score, 4),
                 "rrf": round(entry["rrf"], 5),
                 "ranks": entry["ranks"],
-                "dense": entry["dense"],
+                "dense": dense,
+                "rerank": None if rr is None else round(rr, 4),
                 "shared_terms": lex["shared"][:10],
                 "idf_score": round(lex["idf_score"], 3),
             }
@@ -262,12 +308,20 @@ def retrieve_for_obligation(
     if candidates:
         floor = params.relative_cutoff * candidates[0]["score"]
         candidates = [c for c in candidates if c["score"] >= floor]
-    trace = {
-        "queries": queries,
-        "lists": {k: len(v) for k, v in ranked.items()},
-        "fused": len(fused),
-    }
-    return candidates, trace
+    return candidates
+
+
+def retrieve_for_obligation(
+    conn,
+    obligation: dict,
+    corpus: InternalCorpus,
+    params: RetrievalParams,
+    query_vectors: dict[str, list[float]] | None,
+    model: str | None,
+) -> tuple[list[dict], dict]:
+    """Fuse and gate without a reranker."""
+    entries, trace = fuse_for_obligation(conn, obligation, corpus, params, query_vectors, model)
+    return select_candidates(entries, corpus, params), trace
 
 
 def aggregate_documents(

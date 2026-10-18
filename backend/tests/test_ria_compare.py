@@ -1,4 +1,14 @@
+import pytest
+
+from app.config import get_settings
 from app.ria import compare
+
+
+@pytest.fixture(autouse=True)
+def no_llm_cache(monkeypatch):
+    # Unit tests talk to a monkeypatched LLM only; the DB cache belongs to integration tests.
+    monkeypatch.setattr(get_settings(), "llm_cache_enabled", False)
+
 
 INTERNAL_52 = "Đơn vị thực hiện rà soát hồ sơ khách hàng định kỳ 24 tháng."
 REG_CLAUSE = (
@@ -166,3 +176,117 @@ def test_llm_ungrounded_is_retried_once(monkeypatch):
     )
     grounding = next(c for c in result["checks"] if c["check"] == "source_grounding")
     assert grounding["status"] == "pass"
+
+
+def test_group_judge_one_call_for_all_candidates(monkeypatch):
+    calls = []
+
+    def fake(system, user, timeout=120):
+        calls.append(user)
+        return {
+            "best": "DOC-102@v4#5.2",
+            "results": [
+                {
+                    "ma": "DOC-102@v4#5.2",
+                    "classification": "VALUE_CHANGE",
+                    "rationale": "12 vs 24 tháng",
+                    "source_quote": "12 tháng",
+                    "target_quote": "24 tháng",
+                    "confidence": 0.9,
+                },
+                {
+                    "ma": "DOC-102@v4#10.2",
+                    "classification": "INDIRECT_IMPACT",
+                    "rationale": "liên quan lưu trữ",
+                    "source_quote": "hồ sơ nhận biết khách hàng",
+                    "target_quote": "lưu trữ hồ sơ",
+                    "confidence": 0.4,
+                },
+            ],
+        }
+
+    monkeypatch.setattr(compare.llm, "chat_json", fake)
+    items = [
+        {
+            "internal": {"clause_id": "DOC-102@v4#5.2", "text": INTERNAL_52},
+            "evidence": _evidence(INTERNAL_52),
+            "context": [],
+        },
+        {
+            "internal": {
+                "clause_id": "DOC-102@v4#10.2",
+                "text": "Đơn vị lưu trữ hồ sơ trên hệ thống.",
+            },
+            "evidence": _evidence("x"),
+            "context": [],
+        },
+    ]
+    results, stats = compare.judge_group(_obligation(), REG_CLAUSE, items, use_llm=True)
+    assert len(calls) == 1 and stats["llm_calls"] == 1
+    assert [r["category"] for r in results] == ["VALUE_CHANGE", "INDIRECT_IMPACT"]
+    assert results[0]["llm_best"] and not results[1]["llm_best"]
+    assert results[0]["target_span"]["text"] == "24 tháng"  # rule span kept on agreement
+
+
+def test_group_judge_retries_only_ungrounded(monkeypatch):
+    answers = iter(
+        [
+            {
+                "results": [
+                    {
+                        "ma": "A",
+                        "classification": "ADDITION",
+                        "source_quote": "bịa",
+                        "target_quote": "x",
+                    },
+                    {
+                        "ma": "B",
+                        "classification": "EQUIVALENT",
+                        "source_quote": "12 tháng",
+                        "target_quote": "lưu trữ",
+                        "rationale": "ok",
+                    },
+                ]
+            },
+            {
+                "results": [
+                    {
+                        "ma": "A",
+                        "classification": "VALUE_CHANGE",
+                        "source_quote": "12 tháng",
+                        "target_quote": "24 tháng",
+                        "rationale": "ok",
+                    },
+                    {
+                        "ma": "B",
+                        "classification": "ADDITION",
+                        "source_quote": "12 tháng",
+                        "target_quote": "lưu trữ",
+                    },
+                ]
+            },
+        ]
+    )
+    refreshes = []
+
+    def fake_cached(kind, system, user, refresh=False):
+        refreshes.append(refresh)
+        return next(answers), False
+
+    monkeypatch.setattr(compare.llm, "chat_json_cached", fake_cached)
+    items = [
+        {
+            "internal": {"clause_id": "A", "text": INTERNAL_52},
+            "evidence": _evidence(INTERNAL_52),
+            "context": [],
+        },
+        {
+            "internal": {"clause_id": "B", "text": "Đơn vị lưu trữ hồ sơ."},
+            "evidence": _evidence("x"),
+            "context": [],
+        },
+    ]
+    results, stats = compare.judge_group(_obligation(), REG_CLAUSE, items, use_llm=True)
+    assert refreshes == [False, True] and stats["llm_calls"] == 2
+    assert results[0]["category"] == "VALUE_CHANGE"
+    assert results[1]["category"] == "EQUIVALENT"  # first grounded answer for B is kept
