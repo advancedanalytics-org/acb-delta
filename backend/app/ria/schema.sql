@@ -190,3 +190,18 @@ CREATE TABLE IF NOT EXISTS llm_cache (
 -- Document-level findings from the knowledge graph (an internal document cites a law the
 -- regulation replaces) belong to no single obligation.
 ALTER TABLE impact_finding ALTER COLUMN obligation_id DROP NOT NULL;
+
+-- Engine 3 (design sections 13-14): a minimal patch per finding, its verification and decision.
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS version_id text REFERENCES document_version(version_id);
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS doc_start int;            -- offsets in the document
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS doc_end int;
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS original_hash text NOT NULL DEFAULT '';
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS method text NOT NULL DEFAULT 'rule';   -- rule | llm
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS rationale text;
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS conditions jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS validation_report jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS reviewer text;
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS review_comment text;
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS decided_at timestamptz;
+ALTER TABLE amendment ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+CREATE INDEX IF NOT EXISTS amendment_finding ON amendment (finding_id);

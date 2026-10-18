@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     span_detection_enabled: bool = True
 
     # Optional TypeSafe Jev decisions model (OpenRouter Decisions API): the Engine 1 reranker
-    # when RERANK_BACKEND=jev. Empty = not used.
+    # when RERANK_BACKEND=jev, and the independent verifier of Engine 3. Empty = not used.
     jev_base_url: str = ""
     jev_model: str = ""
     jev_api_key: str = ""

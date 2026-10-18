@@ -349,6 +349,60 @@ def test_findings_list_filters_and_evidence_pack(client):
     assert client.get("/api/findings/RIA-missing").status_code == 404
 
 
+def test_engine3_value_change_patch_verify_decide_redline(client):
+    reg = _regulation(client)
+    job = _analyze(client, reg["regulation_id"])
+    listed = client.get("/api/findings", params={"job_id": job["job_id"]}).json()
+    assert listed["total"] == len(listed["items"]) > 0
+    value = next(f for f in listed["items"] if f["category"] == "VALUE_CHANGE")
+
+    pack = client.get(f"/api/findings/{value['finding_id']}/evidence").json()
+    assert pack["obligation"]["text"].startswith("Tổ chức tín dụng phải rà soát")
+    assert pack["evidence"] and pack["evidence"][0]["evidence_id"] == value["evidence_id"]
+
+    created = client.post(f"/api/findings/{value['finding_id']}/amendments", json={})
+    assert created.status_code == 201, created.text
+    patch = created.json()
+    assert (patch["operation"], patch["method"]) == ("REPLACE", "rule")
+    assert (patch["before_text"], patch["after_text"]) == ("24 tháng", "tối đa 12 tháng")
+    assert patch["patched_text"].endswith("định kỳ tối đa 12 tháng.")
+    assert patch["original_hash"].startswith("sha256:")
+    checks = {c["check"]: c["status"] for c in patch["validation_report"]["checks"]}
+    assert checks["patch_integrity"] == checks["minimality"] == "pass"
+    assert checks["deterministic_values"] == "pass"
+    assert checks["semantic_entailment"] == "skipped"  # no JEV in tests
+    assert patch["validation"] == "NEEDS_HUMAN_REVIEW"
+
+    again = client.post(f"/api/findings/{value['finding_id']}/amendments", json={})
+    assert again.status_code == 200 and again.json()["patch_id"] == patch["patch_id"]
+
+    redline = client.get(f"/api/amendments/{patch['patch_id']}/redline")
+    assert "<del>24 tháng</del><ins>tối đa 12 tháng</ins>" in redline.text
+
+    decided = client.post(
+        f"/api/amendments/{patch['patch_id']}/decision",
+        json={"decision": "approve", "reviewer": "phap-che-01", "comment": "đồng ý"},
+    )
+    assert decided.status_code == 200 and decided.json()["approval"] == "APPROVED"
+    assert client.get(f"/api/findings/{value['finding_id']}").json()["status"] == "APPROVED"
+    twice = client.post(
+        f"/api/amendments/{patch['patch_id']}/decision",
+        json={"decision": "reject", "reviewer": "phap-che-02"},
+    )
+    assert twice.status_code == 409
+
+
+def test_engine3_refuses_equivalent_and_document_level_findings(client):
+    reg = _regulation(client)
+    job = _analyze(client, reg["regulation_id"])
+    items = client.get("/api/findings", params={"job_id": job["job_id"], "limit": 500}).json()
+    equivalent = [f for f in items["items"] if f["category"] == "EQUIVALENT"]
+    for f in equivalent:
+        r = client.post(f"/api/findings/{f['finding_id']}/amendments", json={})
+        assert r.status_code == 409
+    assert client.post("/api/findings/RIA-missing/amendments", json={}).status_code == 404
+
+
 @pytest.mark.skipif(not GRAPH_URL, reason="RIA_TEST_FALKORDB_URL not set")
 def test_knowledge_graph_links_citing_documents_and_dependent_clauses(client, tmp_path):
     import json
@@ -413,3 +467,6 @@ def test_knowledge_graph_links_citing_documents_and_dependent_clauses(client, tm
     doc901 = [f for f in graph_findings if f["impacted_document_id"] == "DOC-901"]
     assert doc901 and doc901[0]["priority"] == "high" and doc901[0]["obligation_id"] is None
     assert doc901[0]["internal_clause_id"] == "DOC-901@v1#1.1"
+    # Engine 3 drafts only per obligation: a document-level graph finding is reviewed manually.
+    refused = client.post(f"/api/findings/{doc901[0]['finding_id']}/amendments", json={})
+    assert refused.status_code == 409

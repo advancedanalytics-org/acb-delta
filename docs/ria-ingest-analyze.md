@@ -138,6 +138,41 @@ Finding cấp văn bản từ đồ thị (`method = "graph"`, `obligation_id = 
 
 Soạn patch và duyệt (M04/M05) không thuộc RIA: agent `POST /draft` (TAI-01) và gói review HITL (TAI-02), theo `docs/amendment-review-contract.md`.
 
+## 4. Engine 3 — Amendment Intelligence (mục 13–15) — DRAFT
+
+> Trái quyết định đã chốt trong `PLAN.md` (M04 thuộc agent `/draft` của TAI-01, RIA không ghi bảng `amendment`). Chỉ merge khi nhóm đổi quyết định; nếu không, phần kiểm chứng (đặc biệt Jev) nên chuyển vào `/draft`.
+
+Chạy thật trên thông tư giả định (LLM `qwen/qwen3-32b`, Jev `typesafe/jev-1.14`): VALUE_CHANGE 5.2 → patch rule "24 tháng" → "tối đa 12 tháng", Jev đáp ứng 0,94, `VERIFIED`; ADDITION 4.3 → LLM thay câu nhưng bỏ mất "người thực hiện và thời điểm thực hiện", Jev "giữ nguyên phần khác" 0,58 → `NEEDS_HUMAN_REVIEW`.
+
+| API | Phương thức | Mục đích |
+|---|---|---|
+| `/api/findings` | GET | Danh sách finding; lọc theo `job_id`, `regulation_id`, `impacted_document_id`, `category`, `status`, `priority`, `method`; phân trang `limit`/`offset` |
+| `/api/findings/{id}` · `/api/findings/{id}/evidence` | GET | Finding; evidence pack (nghĩa vụ, điều khoản nội bộ, mọi evidence kèm trace truy hồi) |
+| `/api/findings/{id}/amendments` | POST · GET | Sinh và kiểm chứng patch (201; 200 nếu đã có patch đang chờ/đã duyệt, `{"refresh": true}` để sinh lại) · danh sách patch |
+| `/api/amendments/{id}` | GET | Patch, báo cáo kiểm chứng, điều khoản sau sửa (`patched_text`) |
+| `/api/amendments/{id}/validate` | POST | Chạy lại kiểm chứng (ví dụ khi điều khoản đã đổi) |
+| `/api/amendments/{id}/decision` | POST | `{"decision": "approve|reject|return", "reviewer", "comment"}` |
+| `/api/amendments/{id}/redline` | GET | HTML trước/sau (`<del>`/`<ins>`) kèm căn cứ và kết quả kiểm tra |
+
+Sinh patch (`amendment.py`): một thao tác REPLACE / INSERT / DELETE trên một điều khoản, lưu vị trí trong điều khoản và trong văn bản, cùng `original_hash` (sha256 nội dung điều khoản lúc sinh).
+- `VALUE_CHANGE` có span chính xác từ rule giá trị → patch rule, không gọi LLM: "24 tháng" → "tối đa 12 tháng".
+- Loại khác → LLM soạn sửa đổi nhỏ nhất. `old_text`/`anchor_text` phải xuất hiện **đúng một lần** trong điều khoản (mục 07.01: locator duy nhất); sai thì hỏi lại một lần, vẫn sai trả 422. LLM có thể trả `NONE` (không cần sửa).
+- Từ chối (409): finding `EQUIVALENT`, finding cấp văn bản từ đồ thị, finding đang `BLOCKED`.
+
+Kiểm chứng (mục 14), mọi kết quả lưu ở `validation_report`:
+
+| Check | Quy tắc | Không đạt |
+|---|---|---|
+| `source_grounding` | Có nghĩa vụ nguồn, văn bản nguồn chưa bị thay thế | block |
+| `patch_integrity` | Hash điều khoản khớp, offset hợp lệ, `before_text` đúng vị trí, phiên bản nội bộ còn hiệu lực | block |
+| `minimality` | REPLACE/DELETE sửa ≤ 60% điều khoản; INSERT ≤ 800 ký tự | block |
+| `deterministic_values` | Giá trị trong câu sau sửa thỏa cận tối đa/tối thiểu của nguồn | block |
+| `scope_exceptions` | Nghĩa vụ có điều kiện/ngoại lệ | needs_review |
+| `semantic_entailment` | Jev (model khác LLM đã soạn) chấm: đáp ứng nghĩa vụ, không tạo nghĩa vụ mới, giữ nguyên phần khác. Đáp ứng < 0,4 → fail | fail / needs_review |
+| `human_approval` | Luôn chờ người duyệt | — |
+
+Tổng hợp: có block/fail → `BLOCKED` (không duyệt được, fail closed); có needs_review/skipped → `NEEDS_HUMAN_REVIEW`; còn lại `VERIFIED`. Duyệt cập nhật cả `amendment.approval` và `impact_finding.status` (`APPROVED` / `REJECTED` / `NEED_MORE_EVIDENCE`). Không có bước nào ghi vào tài liệu nội bộ.
+
 ## Đồ thị tri thức (FalkorDB)
 
 Postgres vẫn là nguồn dữ liệu gốc; FalkorDB (`graph.py`) là chỉ mục dẫn xuất để duyệt quan hệ, được đồng bộ sau khi parse văn bản pháp quy, sau seed tài liệu nội bộ, và đầu mỗi lần phân tích cho phiên bản chưa đồng bộ.
