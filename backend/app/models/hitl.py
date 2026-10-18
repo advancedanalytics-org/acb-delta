@@ -7,7 +7,7 @@ Tables come from `create_all` at startup (new tables only); move to Alembic befo
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -22,6 +22,8 @@ class HitlBase(DeclarativeBase):
 
 class Vbpl(HitlBase):
     __tablename__ = "vbpls"
+    # Named like the startup ALTER in `app.hitl` so an existing DB gets the same index.
+    __table_args__ = (Index("vbpls_ria_job_id", "ria_job_id", unique=True),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=new_id)
     number: Mapped[str] = mapped_column(Text)
@@ -35,6 +37,8 @@ class Vbpl(HitlBase):
     # or failed with `error`.
     status: Mapped[str] = mapped_column(String(32), default="processing")
     error: Mapped[str | None] = mapped_column(Text)
+    # RIA analyze job this review package was built from; null for VBPLs posted to /api/vbpls.
+    ria_job_id: Mapped[str | None] = mapped_column(Text)
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -44,6 +48,7 @@ class Impact(HitlBase):
     """One affected internal passage, copied from the agent output as the reviewer saw it."""
 
     __tablename__ = "impacts"
+    __table_args__ = (Index("impacts_finding_id", "finding_id"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=new_id)
     vbpl_id: Mapped[str] = mapped_column(ForeignKey("vbpls.id", ondelete="CASCADE"), index=True)
@@ -64,6 +69,13 @@ class Impact(HitlBase):
     suggested_text: Mapped[str] = mapped_column(Text)
     # Raw agent output for this impact, for evaluation (KHOA-01 / KHOA-02).
     model_output: Mapped[dict] = mapped_column(JSONB)
+    # RIA review packages only (docs/amendment-review-contract.md); null on /invoke rows.
+    finding_id: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(32))
+    # {operation, start, end, old_text, new_text}: the before/after data for the redline view.
+    patch: Mapped[dict | None] = mapped_column(JSONB)
+    draft_status: Mapped[str | None] = mapped_column(String(16))
+    draft_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     vbpl: Mapped[Vbpl] = relationship()

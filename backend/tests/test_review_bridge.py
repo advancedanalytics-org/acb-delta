@@ -1,0 +1,463 @@
+"""RIA analyze job → review package (vbpls + impacts with drafted patches).
+
+Mapping helpers run everywhere. The flow tests need the disposable Postgres + pgvector of
+`test_ria_api.py` (RIA_TEST_DATABASE_URL); HITL tables are created on that same DB at startup.
+"""
+
+import json
+import os
+import time
+from pathlib import Path
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import text
+
+from app import agent_client, review_bridge
+from tests.ria_fixtures import ria_001_pdf
+
+DB_URL = os.environ.get("RIA_TEST_DATABASE_URL")
+needs_db = pytest.mark.skipif(not DB_URL, reason="RIA_TEST_DATABASE_URL not set")
+DOC_102 = Path(__file__).resolve().parents[2] / "db" / "DOC-102.parsed.json"
+
+
+# --- mapping, no DB ---
+
+
+def test_page_and_boxes_keeps_the_first_page():
+    bbox = [[2, 10, 20, 30, 40], [2, 10, 45, 30, 60], [3, 1, 2, 3, 4]]
+    assert review_bridge.page_and_boxes(bbox) == (
+        2,
+        [[10.0, 20.0, 30.0, 40.0], [10.0, 45.0, 30.0, 60.0]],
+    )
+    assert review_bridge.page_and_boxes(None) == (None, [])
+
+
+def _finding(**overrides) -> dict:
+    clause = "5.2. Hồ sơ được rà soát định kỳ 24 tháng một lần."
+    start = clause.index("24 tháng")
+    finding = {
+        "finding_id": "RIA-1", "job_id": "JOB-1", "obligation_id": "OBL-1", "evidence_id": "EV-1",
+        "category": "VALUE_CHANGE", "rationale": "12 tháng thay vì 24 tháng.",
+        "status": "AI_PROPOSED", "priority": "high", "confidence": 0.9,
+        "source_span": {"text": "tối đa 12 tháng", "start": 0, "end": 15},
+        "target_span": {"text": "24 tháng", "start": start, "end": start + 8},
+        "verification": {}, "citations": ["REG-1@v1#2.1", "DOC-102@v4#5.2"], "method": "rule",
+        "impacted_document_id": "DOC-102", "internal_clause_id": "DOC-102@v4#5.2",
+        "obligation_text": "Phải rà soát tối đa 12 tháng.", "source_clause_id": "REG-1@v1#2.1",
+        "regulation_numbering": "2.1", "clause_numbering": "5.2", "clause_heading": None,
+        "parent_heading": "Điều 5. Rà soát định kỳ", "clause_text": clause,
+        "clause_bbox": [[1, 50, 100, 500, 112]], "score": 0.8,
+    }  # fmt: skip
+    return finding | overrides
+
+
+def _proposal(f: dict, new_text: str = "tối đa 12 tháng", status: str = "review_required"):
+    span = f["target_span"]
+    return {
+        "finding_id": f["finding_id"],
+        "operation": "REPLACE",
+        "start": span["start"] if status != "failed" else None,
+        "end": span["end"] if status != "failed" else None,
+        "old_text": span["text"] if status != "failed" else None,
+        "new_text": new_text if status != "failed" else None,
+        "verification": {
+            "status": status,
+            "reason": "span_unique: x" if status == "failed" else None,
+        },
+    }
+
+
+def test_impact_row_maps_finding_and_patch():
+    f = _finding()
+    row = review_bridge.impact_row(f, 3, _proposal(f), None)
+    assert row["patch"] == {
+        "operation": "REPLACE", "start": f["target_span"]["start"], "end": f["target_span"]["end"],
+        "old_text": "24 tháng", "new_text": "tối đa 12 tháng",
+    }  # fmt: skip
+    assert row["suggested_text"] == "5.2. Hồ sơ được rà soát định kỳ tối đa 12 tháng một lần."
+    assert row["draft_status"] == "review_required" and row["draft_error"] is None
+    assert (row["type"], row["severity"], row["category"]) == ("conflict", "high", "VALUE_CHANGE")
+    assert row["location"] == "5.2. Điều 5. Rà soát định kỳ"
+    assert row["change_clause"] == "2.1" and row["citation"] == "tối đa 12 tháng"
+    assert (row["page"], row["bboxes"]) == (1, [[50.0, 100.0, 500.0, 112.0]])
+    assert row["model_output"]["finding"]["finding_id"] == "RIA-1"
+    assert row["model_output"]["draft"]["new_text"] == "tối đa 12 tháng"
+
+
+def test_impact_row_failed_and_skipped_drafts_have_no_patch():
+    f = _finding()
+    failed = review_bridge.impact_row(f, 0, _proposal(f, status="failed"), None)
+    assert (failed["draft_status"], failed["draft_error"]) == ("failed", "span_unique: x")
+    assert failed["patch"] is None and failed["suggested_text"] == ""
+    agent_down = review_bridge.impact_row(f, 0, None, "Agent unreachable: ConnectError")
+    assert agent_down["draft_status"] == "failed"
+    skipped = review_bridge.impact_row(f, 0, None, review_bridge.SKIPPED + "no target_span")
+    assert (skipped["draft_status"], skipped["draft_error"]) == ("skipped", "no target_span")
+
+
+def test_invalid_proposal():
+    f = _finding()
+    good = _proposal(f)
+    clause = f["clause_text"]
+    assert review_bridge.invalid_proposal(clause, good) is None
+    assert review_bridge.invalid_proposal(clause, _proposal(f, status="failed")) is None
+    assert review_bridge.invalid_proposal(clause, good | {"operation": "replace"})
+    assert review_bridge.invalid_proposal(clause, good | {"start": None})
+    assert review_bridge.invalid_proposal(clause, good | {"end": 999})
+    assert review_bridge.invalid_proposal(clause, good | {"old_text": "36 tháng"})
+    assert review_bridge.invalid_proposal(clause, {"operation": "REPLACE"})
+    assert review_bridge.invalid_proposal(clause, ["not", "a", "dict"])
+
+
+def test_category_types():
+    assert review_bridge.TYPE_BY_CATEGORY["ADDITION"] == "new_obligation"
+    assert review_bridge.TYPE_BY_CATEGORY["INDIRECT_IMPACT"] == "outdated_reference"
+    assert "EQUIVALENT" not in review_bridge.TYPE_BY_CATEGORY
+
+
+# --- full flow on Postgres ---
+
+
+class FakeDrafter:
+    """Agent /draft stand-in: REPLACE target_span with "<span> (mới)"; can fail chosen findings."""
+
+    def __init__(self):
+        self.fail_ids: set[str] = set()
+        # Findings answered 200 with a patch the backend must refuse.
+        self.malformed_ids: set[str] = set()
+        self.requests: list[dict] = []
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        self.requests.append(body)
+        if body["finding_id"] in self.fail_ids:
+            return httpx.Response(500, text="agent exploded")
+        span = body["target_span"]
+        if body["finding_id"] in self.malformed_ids:
+            return httpx.Response(
+                200, json={"operation": "replace", "verification": {"status": "review_required"}}
+            )
+        if "24 tháng" in span["text"]:
+            new_text = span["text"].replace("24 tháng", "12 tháng")
+        else:
+            new_text = span["text"] + " (mới)"
+        return httpx.Response(
+            200,
+            json={
+                "finding_id": body["finding_id"],
+                "clause_id": body["clause"]["clause_id"],
+                "operation": "REPLACE",
+                "start": span["start"],
+                "end": span["end"],
+                "old_text": span["text"],
+                "new_text": new_text,
+                "rationale": "test",
+                "legal_evidence_ids": [body["obligation"]["clause_id"]],
+                "verification": {"status": "review_required", "reason": None, "checks": []},
+                "model": "fake",
+                "prompt_version": "test",
+            },
+        )
+
+
+@pytest.fixture
+def drafter(monkeypatch) -> FakeDrafter:
+    fake = FakeDrafter()
+    monkeypatch.setattr(
+        agent_client,
+        "http_client",
+        lambda: httpx.Client(base_url="http://agent", transport=httpx.MockTransport(fake.handle)),
+    )
+    return fake
+
+
+def _reset_caches():
+    from app.config import get_settings
+    from app.db import get_engine, get_sessionmaker
+    from app.ria import schema, storage
+
+    get_settings.cache_clear()
+    get_engine.cache_clear()
+    get_sessionmaker.cache_clear()
+    storage.get_storage.cache_clear()
+    schema._ready = False
+
+
+@pytest.fixture(scope="module")
+def ria_client(tmp_path_factory):
+    patch = pytest.MonkeyPatch()
+    patch.setenv("DATABASE_URL", DB_URL)
+    patch.setenv("STORAGE_BACKEND", "local")
+    patch.setenv("STORAGE_LOCAL_DIR", str(tmp_path_factory.mktemp("storage")))
+    for name in ("EMBEDDING_BASE_URL", "OPENAI_BASE_URL", "LLM_MODEL", "RERANK_BASE_URL"):
+        patch.setenv(name, "")
+    _reset_caches()
+    from app.main import create_app
+    from app.ria.schema import ensure_schema
+    from app.ria.seed import seed_file
+
+    ensure_schema()
+    seed_file(DOC_102)
+    with TestClient(create_app()) as client:  # lifespan creates the HITL tables on this DB
+        yield client
+    from app.db import get_engine
+
+    with get_engine().begin() as conn:
+        conn.execute(text("TRUNCATE vbpls, impacts, decisions CASCADE"))
+    patch.undo()
+    _reset_caches()
+
+
+def _wait(client, job_id: str, timeout: float = 120) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        job = client.get(f"/api/jobs/{job_id}").json()
+        if job["status"] in ("succeeded", "failed"):
+            return job
+        time.sleep(0.2)
+    raise TimeoutError(job_id)
+
+
+def _analyze(client) -> str:
+    """A fresh analyze job on the RIA-001 regulation (rules only: no LLM configured)."""
+    body = client.post(
+        "/api/regulations", files={"file": ("tt-99.pdf", ria_001_pdf(), "application/pdf")}
+    ).json()
+    assert _wait(client, body["job_id"])["status"] == "succeeded"
+    started = client.post(f"/api/regulations/{body['regulation_id']}/analyze", json={})
+    job = _wait(client, started.json()["job_id"])
+    assert job["status"] == "succeeded", job["error"]
+    return job["job_id"]
+
+
+def _findings(job_id: str) -> list[dict]:
+    from app.db import get_engine
+
+    with get_engine().connect() as conn:
+        rows = conn.execute(
+            text("SELECT finding_id, category, status FROM impact_finding WHERE job_id = :j"),
+            {"j": job_id},
+        ).mappings()
+        return [dict(r) for r in rows]
+
+
+@needs_db
+def test_review_package_from_analyze_job(ria_client, drafter):
+    job_id = _analyze(ria_client)
+    findings = _findings(job_id)
+    proposed = [f for f in findings if f["status"] == "AI_PROPOSED"]
+
+    started = ria_client.post(f"/api/analyses/{job_id}/review")
+    assert started.status_code == 202, started.text
+    body = started.json()
+    review = _wait(ria_client, body["review_job_id"])
+    assert review["status"] == "succeeded", review["error"]
+    assert review["result"]["findings"] == len(proposed)
+
+    vbpl = next(v for v in ria_client.get("/api/vbpls").json() if v["id"] == body["vbpl_id"])
+    assert vbpl["number"] == "99/2026/TT-NHNN"
+    assert vbpl["status"] == "awaiting_review" and vbpl["impactCount"] == len(proposed)
+
+    impacts = ria_client.get(f"/api/vbpls/{body['vbpl_id']}/impacts").json()
+    # EQUIVALENT findings are NO_ACTION_PROPOSED and not imported.
+    assert {i["findingId"] for i in impacts} == {f["finding_id"] for f in proposed}
+    assert all(i["category"] != "EQUIVALENT" for i in impacts)
+    value_change = next(i for i in impacts if i["category"] == "VALUE_CHANGE")
+    patch = value_change["patch"]
+    assert patch["operation"] == "REPLACE" and patch["oldText"] == "24 tháng"
+    assert value_change["affectedText"][patch["start"] : patch["end"]] == "24 tháng"
+    assert "12 tháng" in value_change["suggestedText"]
+    assert value_change["draftStatus"] == "review_required"
+    assert value_change["status"] == "pending" and value_change["type"] == "conflict"
+    # The review decision API works unchanged on these rows.
+    decided = ria_client.post(
+        "/api/decisions",
+        json={"impactId": value_change["id"], "action": "accept", "reviewerId": "rv-anh"},
+    )
+    assert decided.status_code == 201
+
+    # Second call: same package, no new job, no new drafts.
+    sent = len(drafter.requests)
+    again = ria_client.post(f"/api/analyses/{job_id}/review")
+    assert again.status_code == 200
+    assert again.json() == body
+    assert len(drafter.requests) == sent
+
+
+@needs_db
+def test_one_failed_draft_does_not_fail_the_package(ria_client, drafter):
+    job_id = _analyze(ria_client)
+    proposed = [f for f in _findings(job_id) if f["status"] == "AI_PROPOSED"]
+    broken = next(f for f in proposed if f["category"] == "VALUE_CHANGE")
+    drafter.fail_ids = {broken["finding_id"]}
+
+    body = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    assert _wait(ria_client, body["review_job_id"])["status"] == "succeeded"
+
+    impacts = {
+        i["findingId"]: i for i in ria_client.get(f"/api/vbpls/{body['vbpl_id']}/impacts").json()
+    }
+    assert len(impacts) == len(proposed)
+    failed = impacts[broken["finding_id"]]
+    assert failed["draftStatus"] == "failed" and "Agent HTTP 500" in failed["draftError"]
+    assert "patch" not in failed and failed["suggestedText"] == ""
+    others = [i for fid, i in impacts.items() if fid != broken["finding_id"]]
+    assert all(i["draftStatus"] == "review_required" for i in others)
+    vbpl = next(v for v in ria_client.get("/api/vbpls").json() if v["id"] == body["vbpl_id"])
+    assert vbpl["status"] == "awaiting_review"
+
+
+@needs_db
+def test_rerun_after_failed_review_job_redrafts_only_failed(ria_client, drafter):
+    from app.db import get_engine
+
+    job_id = _analyze(ria_client)
+    proposed = [f for f in _findings(job_id) if f["status"] == "AI_PROPOSED"]
+    broken = proposed[0]["finding_id"]
+    drafter.fail_ids = {broken}
+    first = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    assert _wait(ria_client, first["review_job_id"])["status"] == "succeeded"
+    # Simulate a package-level failure (e.g. the API restarted mid-run).
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE job SET status = 'failed' WHERE job_id = :j"),
+            {"j": first["review_job_id"]},
+        )
+
+    drafter.fail_ids = set()
+    sent = len(drafter.requests)
+    second = ria_client.post(f"/api/analyses/{job_id}/review")
+    assert second.status_code == 202
+    assert second.json()["vbpl_id"] == first["vbpl_id"]
+    assert _wait(ria_client, second.json()["review_job_id"])["status"] == "succeeded"
+
+    assert [r["finding_id"] for r in drafter.requests[sent:]] == [broken]
+    impacts = ria_client.get(f"/api/vbpls/{first['vbpl_id']}/impacts").json()
+    assert len(impacts) == len(proposed)
+    assert all(i["draftStatus"] == "review_required" for i in impacts)
+
+
+@needs_db
+def test_review_rejects_unknown_and_non_analyze_jobs(ria_client):
+    assert ria_client.post("/api/analyses/JOB-nope/review").status_code == 404
+    body = ria_client.post(
+        "/api/regulations", files={"file": ("tt-99.pdf", ria_001_pdf(), "application/pdf")}
+    ).json()
+    parse_job = body["job_id"]
+    if parse_job:
+        assert ria_client.post(f"/api/analyses/{parse_job}/review").status_code == 404
+
+
+@needs_db
+def test_review_of_unfinished_analyze_job_is_409(ria_client):
+    from app.db import get_engine
+
+    job_id = _analyze(ria_client)
+
+    def set_status(status: str) -> None:
+        with get_engine().begin() as conn:
+            conn.execute(
+                text("UPDATE job SET status = :s WHERE job_id = :j"), {"s": status, "j": job_id}
+            )
+
+    set_status("running")
+    try:
+        assert ria_client.post(f"/api/analyses/{job_id}/review").status_code == 409
+    finally:
+        # A 'running' analyze job is reused by the next analyze call on this regulation.
+        set_status("succeeded")
+
+
+@needs_db
+def test_malformed_agent_reply_fails_only_that_finding(ria_client, drafter):
+    job_id = _analyze(ria_client)
+    proposed = [f for f in _findings(job_id) if f["status"] == "AI_PROPOSED"]
+    bad = proposed[0]["finding_id"]
+    drafter.malformed_ids = {bad}
+
+    body = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    assert _wait(ria_client, body["review_job_id"])["status"] == "succeeded"
+
+    response = ria_client.get(f"/api/vbpls/{body['vbpl_id']}/impacts")
+    assert response.status_code == 200
+    impacts = {i["findingId"]: i for i in response.json()}
+    assert impacts[bad]["draftStatus"] == "failed"
+    assert impacts[bad]["draftError"].startswith("Agent reply invalid")
+    assert sum(i["draftStatus"] == "review_required" for i in impacts.values()) == len(proposed) - 1
+
+
+@needs_db
+def test_rerun_keeps_a_failed_draft_that_was_already_decided(ria_client, drafter):
+    from app.db import get_engine
+
+    job_id = _analyze(ria_client)
+    broken = next(f for f in _findings(job_id) if f["status"] == "AI_PROPOSED")["finding_id"]
+    drafter.fail_ids = {broken}
+    first = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    assert _wait(ria_client, first["review_job_id"])["status"] == "succeeded"
+    impacts = ria_client.get(f"/api/vbpls/{first['vbpl_id']}/impacts").json()
+    failed = next(i for i in impacts if i["findingId"] == broken)
+    decided = ria_client.post(
+        "/api/decisions",
+        json={"impactId": failed["id"], "action": "reject", "reviewerId": "rv-anh"},
+    )
+    assert decided.status_code == 201
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE job SET status = 'failed' WHERE job_id = :j"),
+            {"j": first["review_job_id"]},
+        )
+
+    drafter.fail_ids = set()
+    second = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    assert _wait(ria_client, second["review_job_id"])["status"] == "succeeded"
+
+    after = next(
+        i
+        for i in ria_client.get(f"/api/vbpls/{first['vbpl_id']}/impacts").json()
+        if i["findingId"] == broken
+    )
+    # What the reviewer decided on is kept as it was, decision included.
+    assert after["id"] == failed["id"] and after["draftStatus"] == "failed"
+    assert after["status"] == "rejected"
+
+
+@needs_db
+def test_infra_failure_fails_the_package_without_leaking_details(ria_client, drafter, monkeypatch):
+    job_id = _analyze(ria_client)
+
+    def broken_store(*args, **kwargs):
+        raise RuntimeError("INSERT INTO impacts ... secret clause text")
+
+    monkeypatch.setattr(review_bridge, "_store", broken_store)
+    body = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    job = _wait(ria_client, body["review_job_id"])
+
+    assert job["status"] == "failed"
+    assert "secret" not in job["error"] and "INSERT" not in job["error"]
+    vbpl = next(v for v in ria_client.get("/api/vbpls").json() if v["id"] == body["vbpl_id"])
+    assert vbpl["status"] == "failed" and vbpl["error"] == "Internal error: RuntimeError"
+
+
+@needs_db
+def test_startup_fails_packages_whose_review_job_died(ria_client):
+    from app.db import get_engine
+
+    job_id = _analyze(ria_client)
+    # A package left processing with no live review job, as after a crash.
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO vbpls (id, number, title, issuer, issued_date, effective_date, "
+                "summary, text, status, ria_job_id) VALUES ('vbpl-orphan', 'n', 't', 'i', "
+                "'2026-01-01', '2026-01-01', '', '', 'processing', :j)"
+            ),
+            {"j": job_id},
+        )
+
+    review_bridge.fail_interrupted_packages()
+
+    vbpl = next(v for v in ria_client.get("/api/vbpls").json() if v["id"] == "vbpl-orphan")
+    assert vbpl["status"] == "failed" and vbpl["error"] == "interrupted by API restart"

@@ -68,6 +68,19 @@ class AuditEntryOut(DecisionOut):
     location: str
     original_text: str
     suggested_text: str
+    # RIA review packages only.
+    finding_id: str | None = Field(default=None, exclude_if=_omit_none)
+    category: str | None = Field(default=None, exclude_if=_omit_none)
+
+
+class PatchOut(CamelModel):
+    """Before/after on the exact span of `affectedText`: replace [start, end) with newText."""
+
+    operation: Literal["REPLACE", "INSERT", "DELETE"]
+    start: int
+    end: int
+    old_text: str
+    new_text: str
 
 
 class ImpactOut(CamelModel):
@@ -84,6 +97,12 @@ class ImpactOut(CamelModel):
     severity: str
     reasoning: str
     suggested_text: str
+    # RIA review packages only; left out of the JSON for impacts from /invoke.
+    finding_id: str | None = Field(default=None, exclude_if=_omit_none)
+    category: str | None = Field(default=None, exclude_if=_omit_none)
+    patch: PatchOut | None = Field(default=None, exclude_if=_omit_none)
+    draft_status: str | None = Field(default=None, exclude_if=_omit_none)
+    draft_error: str | None = Field(default=None, exclude_if=_omit_none)
     status: ImpactStatus
     final_text: str | None = Field(default=None, exclude_if=_omit_none)
     decision: DecisionOut | None = Field(default=None, exclude_if=_omit_none)
@@ -103,3 +122,25 @@ class DecisionCreate(CamelModel):
         if self.action != "edit":
             self.edited_text = None
         return self
+
+
+class FeedbackRow(CamelModel):
+    """One decided impact as a label for KHOA-02 (docs/amendment-review-contract.md §4)."""
+
+    impact_id: str
+    vbpl_id: str
+    finding_id: str | None
+    category: str | None
+    action: DecisionAction
+    reason_tags: list[str]
+    reviewer_id: str
+    decided_at: datetime
+    affected_text: str
+    suggested_text: str
+    edited_text: str | None
+    patch: PatchOut | None
+    draft_status: str | None
+    model_output: dict
+    # Preference pair: what the human wants vs. the AI text they did not take (null if none).
+    chosen: str | None
+    rejected: str | None

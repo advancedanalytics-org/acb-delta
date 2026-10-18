@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     # JSON merged into every chat request, e.g. {"reasoning": {"enabled": false}} on OpenRouter.
     llm_extra_body: str = ""
     llm_concurrency: int = 4
+    # Parallel agent POST /draft calls while building one RIA review package.
+    review_draft_concurrency: int = 4
     # Reuse identical LLM answers across runs (table llm_cache).
     llm_cache_enabled: bool = True
 
