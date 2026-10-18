@@ -1,0 +1,23 @@
+# Overlay for the GCP VM: adds Caddy on 80/443. Used with the main file:
+#   docker compose -f docker-compose.yml -f deploy/gcp/docker-compose.gcp.yml up -d --wait
+# SITE_ADDRESS and BASIC_AUTH_* are written to .env on the VM by scripts/gcp.sh.
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    ports:
+      - 80:80
+      - 443:443
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set by scripts/gcp.sh}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set by scripts/gcp.sh}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set by scripts/gcp.sh}
+    volumes:
+      - ./deploy/gcp/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    depends_on:
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  caddydata:
