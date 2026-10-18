@@ -13,7 +13,55 @@ Ký hiệu: ✅ đã hoàn thành · 🟡 đang làm · ⬜ chưa bắt đầu /
 | Huy | HUY-01, HUY-02 | — | — |
 | Minh | MINH-02 | MINH-01 | — |
 
-## 2. Trạng thái chi tiết theo người
+## 2. Tổng các công việc phải hoàn thành cho dự án
+
+Dự án có **13 task**, đã hoàn thành **7/13**. Tính theo mục con trong `PLAN.md`: **39/63** mục đã xong.
+
+| # | Task | Người | Nội dung | Trạng thái | Mục con xong |
+|---|---|---|---|---|---|
+| 1 | TAI-01 | Tài | Agent gợi ý chỉnh sửa | ✅ | 6/6 |
+| 2 | TAI-02 | Tài | Duyệt bởi con người (HITL) | ✅ | 7/7 |
+| 3 | TAI-03 | Tài | VBPL mẫu và văn bản nội bộ giả lập | ✅ | 3/3 |
+| 4 | TAI-04 | Tài | Slide (có slide lộ trình DPO / fine-tune) | ⬜ | — |
+| 5 | TAI-05 | Tài | Thuyết trình và kịch bản demo | ⬜ | — |
+| 6 | TAI-06 | Tài | Triển khai giai đoạn 1 | ✅ | 3/3 |
+| 7 | TAI-07 | Tài | Chuyển sang GreenNode | ⬜ tạm hoãn | 0/10 |
+| 8 | KHOA-01 | Khoa | Quy trình đánh giá | 🟡 | 3/10 |
+| 9 | KHOA-02 | Khoa | Học từ phản hồi (RLHF) | ⬜ | 0/4 |
+| 10 | HUY-01 | Huy | Giao diện | ✅ | 10/10 |
+| 11 | HUY-02 | Huy | Xử lý PDF của NHNN | ✅ | 5/5 |
+| 12 | MINH-01 | Minh | Embedding, tìm kiếm, metadata trên pgvector | 🟡 | 2/5 |
+| 13 | MINH-02 | Minh | Định dạng tài liệu giả lập | ✅ | — |
+
+### Việc còn phải làm
+
+**Cần cho demo**
+
+| Người | Việc |
+|---|---|
+| Tài | TAI-04: làm slide, gồm slide lộ trình DPO / fine-tune |
+| Tài | TAI-05: thuyết trình và kịch bản demo |
+| Khoa | KHOA-01: họp với Minh và Tài thống nhất luồng dữ liệu đánh giá |
+| Khoa | KHOA-01: dựng bộ dữ liệu trên Langfuse từ đáp án chuẩn của TAI-03 |
+| Khoa | KHOA-01: chấm bản sửa bằng LLM theo tiêu chí (đúng, sửa tối thiểu, nhất quán pháp lý) và tỉ lệ chấp nhận từ HITL |
+| Khoa | KHOA-01: đo độ trễ và chi phí cho mỗi văn bản (đã có hàm tính, chưa có nguồn đo) |
+| Khoa | KHOA-01: tự biến mỗi lần từ chối / sửa trong HITL thành mục mới trong bộ kiểm thử |
+| Khoa | KHOA-01: script chạy đánh giá và xuất bảng kết quả cho màn hình đánh giá |
+| Khoa | KHOA-02: họp với Tài thống nhất luồng dữ liệu (luồng đã chốt, chỉ cần xác nhận) |
+| Khoa | KHOA-02: vòng ngắn — dùng quyết định chấp nhận / sửa làm ví dụ mẫu động cho bước đánh giá tác động và soạn bản sửa; quyết định từ chối làm ví dụ âm |
+| Khoa | KHOA-02: đo chỉ số trước / sau khi học từ phản hồi (số liệu cho demo) |
+| Minh | MINH-01: chọn và thử model embedding tiếng Việt (đang dùng bge-m3) |
+| Minh | MINH-01: chốt cấu trúc đoạn văn bản |
+| Minh | MINH-01: đóng gói hàm tìm kiếm cho agent (cần xác nhận còn cần không) |
+
+**Lộ trình sau demo**
+
+| Người | Việc |
+|---|---|
+| Khoa | KHOA-02: vòng dài — xuất cặp ưu tiên (chọn / bỏ) thành bộ dữ liệu DPO |
+| Tài | TAI-07: chuyển sang GreenNode khi có tài khoản — tài khoản dịch vụ IAM, endpoint LLM trên MaaS, script nạp và re-embed dữ liệu, kiểm tra model có trên MaaS, đóng gói agent lên AgentBase, chuyển CSDL sang vDB, PDF sang vStorage, chạy frontend và FastAPI trên vServer, đổi biến môi trường, chạy lại đánh giá |
+
+## 3. Trạng thái chi tiết theo người
 
 ### Tài
 
@@ -48,7 +96,7 @@ Ký hiệu: ✅ đã hoàn thành · 🟡 đang làm · ⬜ chưa bắt đầu /
 | MINH-01 – Embedding, tìm kiếm, metadata trên pgvector | 🟡 Đang làm | **Đã có:** API nạp văn bản và phân tích tác động RIA (PR #12); tìm kiếm kết hợp vector và từ khoá; xếp hạng lại; lọc nghĩa vụ không áp dụng; gộp lời gọi LLM; bộ nhớ đệm LLM (PR #19). **Chưa có:** chốt model embedding trên GreenNode, chốt cấu trúc đoạn văn bản |
 | MINH-02 – Định dạng tài liệu giả lập | ✅ Hoàn thành | Mẫu `db/DOC-102.md` → `db/DOC-102.parsed.json`, mô hình dữ liệu `db/data-model.md` |
 
-## 3. Công việc đã hoàn thành theo thời gian
+## 4. Công việc đã hoàn thành theo thời gian
 
 Có 28 PR đã gộp vào `main`, giờ ghi theo giờ Việt Nam. PR #8 trùng nội dung với PR #9.
 
@@ -98,12 +146,12 @@ Có 28 PR đã gộp vào `main`, giờ ghi theo giờ Việt Nam. PR #8 trùng 
 | Khoa | 3 | Chưa có (KHOA-01 đang làm) |
 | Minh | 2 | MINH-02 (MINH-01 đang làm) |
 
-## 4. Quyết định đã chốt hôm nay
+## 5. Quyết định đã chốt hôm nay
 
 - Tài cập nhật trạng thái HUY-01, KHOA-01, MINH-02 trong `PLAN.md` thay cho người phụ trách (đã gộp ở PR #28).
 - Tạm thời demo trên máy ảo GCP; TAI-07 (GreenNode) hoãn đến khi có tài khoản.
 
-## 5. Việc cần làm tiếp để kịp demo
+## 6. Việc cần làm tiếp để kịp demo
 
 1. Khoa: chạy đánh giá thật trên luồng RIA; làm KHOA-02 để có số liệu trước / sau khi học từ phản hồi.
 2. Huy: bảng đánh giá hiển thị kết quả thật từ `/api/eval/runs`.
