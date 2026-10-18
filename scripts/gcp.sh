@@ -126,6 +126,9 @@ cmd_deploy() {
     # From now on every plain 'docker compose' (and run.sh) on the VM includes the GCP overlay.
     sudo grep -q '^COMPOSE_FILE=' .env || echo 'COMPOSE_FILE=$COMPOSE_FILES' | sudo tee -a .env >/dev/null
     sudo $COMPOSE_GCP up -d --wait
+    # Compose does not restart a container when only a bind-mounted config file changed, and the
+    # upload replaces those files, so recreate the services that read deploy/gcp/* configs.
+    sudo $COMPOSE_GCP up -d --wait --force-recreate litellm caddy
     sudo ./scripts/run.sh status"
   check_models
   # CI logs are public for this repo: print only the URL there, never the password.
