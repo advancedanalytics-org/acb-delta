@@ -57,7 +57,9 @@ class AnalyzeRequest(BaseModel):
     )
     use_rerank: bool = Field(True, description="Use the reranker when RERANK_MODEL is configured")
     rerank_candidates: int = Field(20, ge=1, le=200)
-    rerank_min_score: float = Field(0.2, ge=0, le=1)
+    rerank_min_score: float | None = Field(
+        None, ge=0, le=1, description="Default: 0.75 for RERANK_BACKEND=jev, 0.2 for /rerank"
+    )
     filter_not_applicable: bool = Field(
         True, description="Skip obligations that do not bind the bank (rules + LLM, cached)"
     )

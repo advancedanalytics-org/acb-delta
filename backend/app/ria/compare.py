@@ -6,11 +6,15 @@ can never downgrade a conflict the rules found to EQUIVALENT (no false-safe).
 """
 
 import json
+import logging
 import re
 
-from app.ria import llm
+from app.config import get_settings
+from app.ria import llm, spans
 from app.ria.obligations import find_modality
 from app.ria.textutil import Quantity, content_bigrams, extract_quantities
+
+log = logging.getLogger(__name__)
 
 LABELS = (
     "EQUIVALENT",
@@ -89,6 +93,27 @@ def _span(text: str, start: int, end: int) -> dict:
     return {"text": text[start:end], "start": start, "end": end}
 
 
+# Similarity above which both sides state the same proposition, so a condition or exception
+# present on one side only is a scope difference rather than a different topic.
+SCOPE_MIN_SIMILARITY = 0.5
+_SPAN_VI = {"CONDITION": "điều kiện", "EXCEPTION": "ngoại lệ"}
+_SNAP_TYPES = {
+    "VALUE_CHANGE": ("VALUE",),
+    "SCOPE_CHANGE": spans.SCOPE_TYPES,
+    "CONTRADICTION": ("MODALITY", "NEGATION", "VALUE"),
+}
+
+
+def _scope_difference(diff: dict | None) -> tuple[str, list[str]] | None:
+    if not diff or diff["similarity"] < SCOPE_MIN_SIMILARITY:
+        return None
+    for side in ("source", "target"):
+        kinds = [k for k in diff[f"only_in_{side}"] if k in _SPAN_VI]
+        if kinds:
+            return side, kinds
+    return None
+
+
 def _locate(haystack: str, quote: str | None) -> tuple[int, int] | None:
     if not quote:
         return None
@@ -103,7 +128,11 @@ def _locate(haystack: str, quote: str | None) -> tuple[int, int] | None:
 
 
 def rule_classify(
-    obligation: dict, reg_clause_text: str, internal_text: str, evidence: dict
+    obligation: dict,
+    reg_clause_text: str,
+    internal_text: str,
+    evidence: dict,
+    diff: dict | None = None,
 ) -> dict:
     o_start = obligation["span_start"]
     values = compare_values(
@@ -120,6 +149,20 @@ def rule_classify(
         )
     else:
         checks.append({"check": "deterministic_values", "status": "not_applicable"})
+    if diff is not None:
+        checks.append(
+            {
+                "check": "span_diff",
+                "status": "info",
+                "detail": {
+                    "backend": diff["backend"],
+                    "similarity": diff["similarity"],
+                    "only_in_source": diff["only_in_source"],
+                    "only_in_target": diff["only_in_target"],
+                    "diffs": spans.compact(diff),
+                },
+            }
+        )
 
     target_default = evidence["span"]
     if values["conflicts"]:
@@ -183,6 +226,23 @@ def rule_classify(
             "checks": checks,
         }
 
+    scope = _scope_difference(diff)
+    if scope:
+        side, kinds = scope
+        sentence = diff["target_sentence"]
+        where = "văn bản mới" if side == "source" else "quy định nội bộ"
+        return {
+            "category": "SCOPE_CHANGE",
+            "confidence": 0.35,
+            "rationale": (
+                f"Cùng nội dung (độ tương đồng {diff['similarity']:.2f}) nhưng chỉ {where} có "
+                f"{', '.join(_SPAN_VI[k] for k in kinds)}. Cần đánh giá phạm vi áp dụng."
+            ),
+            "source_span": _span(reg_clause_text, o_start, obligation["span_end"]),
+            "target_span": _span(internal_text, sentence["start"], sentence["end"]),
+            "checks": checks,
+        }
+
     return {
         "category": "INDIRECT_IMPACT",
         "confidence": 0.3,
@@ -236,6 +296,7 @@ def _group_payload(obligation: dict, reg_clause_text: str, items: list[dict]) ->
                     "ma": it["internal"]["clause_id"],
                     "noi_dung": it["internal"]["text"][:2000],
                     "ngu_canh": [c["text"] for c in it["context"]][:4],
+                    "khac_biet_span": spans.compact(it["span_diff"]) if it.get("span_diff") else [],
                     "ket_qua_rule": {
                         "nhan": it["rule"]["category"],
                         "kiem_tra": it["rule"]["checks"],
@@ -271,7 +332,7 @@ def _grounded(obligation: dict, internal: dict, r: dict | None):
     return None
 
 
-def _merge(obligation, reg_clause_text, internal, rule, r, grounded) -> dict:
+def _merge(obligation, reg_clause_text, internal, rule, r, grounded, diff=None) -> dict:
     """Combine the rule result with one LLM answer (or its grounding failure). Fail closed."""
     result = {**rule, "method": "rule"}
     checks = list(rule["checks"])
@@ -318,6 +379,11 @@ def _merge(obligation, reg_clause_text, internal, rule, r, grounded) -> dict:
                 source_span=_span(reg_clause_text, o_start + src[0], o_start + src[1]),
                 target_span=_span(internal["text"], *tgt),
             )
+            # Narrow a broad LLM quote to the typed span that differs, for a minimal patch.
+            snapped = diff and spans.typed_target_span(diff, tgt, _SNAP_TYPES.get(label, ()))
+            if snapped:
+                result["target_span"] = _span(internal["text"], snapped["start"], snapped["end"])
+                result["llm_target_quote"] = _span(internal["text"], *tgt)
         if conflict:
             checks.append(
                 {
@@ -346,8 +412,9 @@ def judge_group(
     more without the cache; what is still ungrounded falls back to the rule result.
     """
     for it in items:
+        it["span_diff"] = _span_diff(obligation["text"], it["internal"]["text"])
         it["rule"] = rule_classify(
-            obligation, reg_clause_text, it["internal"]["text"], it["evidence"]
+            obligation, reg_clause_text, it["internal"]["text"], it["evidence"], it["span_diff"]
         )
     stats = {"llm_calls": 0, "cache_hits": 0, "best": None}
     if not use_llm or not items:
@@ -392,10 +459,22 @@ def judge_group(
             it["rule"],
             answers.get(cid),
             grounded.get(cid),
+            it["span_diff"],
         )
         merged["llm_best"] = stats["best"] == cid
         results.append(merged)
     return results, stats
+
+
+def _span_diff(source: str, target: str) -> dict | None:
+    """NLP span diff, or None when disabled or failing (it only adds hints and precision)."""
+    if not get_settings().span_detection_enabled:
+        return None
+    try:
+        return spans.span_diff(source, target)
+    except Exception as exc:
+        log.warning("span detection failed: %s", exc)
+        return None
 
 
 def classify(

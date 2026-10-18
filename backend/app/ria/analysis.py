@@ -16,7 +16,7 @@ from sqlalchemy import text
 
 from app.config import get_settings
 from app.db import get_engine
-from app.ria import embeddings, jobs, llm, rerank
+from app.ria import embeddings, graph, jobs, llm, rerank
 from app.ria.applicability import classify_obligations
 from app.ria.compare import PRIORITY, judge_group
 from app.ria.retrieval import (
@@ -25,6 +25,8 @@ from app.ria.retrieval import (
     best_sentence_span,
     build_queries,
     fuse_for_obligation,
+    gate_query,
+    lexical_overlap,
     load_internal_corpus,
     parent_context,
     rerank_entries,
@@ -297,6 +299,29 @@ def run_analysis(job_id: str) -> dict:
         if not use_llm:
             warnings.append("LLM judge disabled; comparison is rule-based")
 
+    # Knowledge graph (FalkorDB): make sure every version in scope is in the graph, then find
+    # internal documents tied to this regulation by legal references.
+    graph_info: dict = {"enabled": graph.enabled()}
+    linked: list[dict] = []
+    if graph.enabled():
+        jobs.update_progress(job_id, "graph", 2)
+        internal_versions = sorted({c["version_id"] for c in corpus.clauses.values()})
+        try:
+            with get_engine().begin() as conn:
+                graph_info["synced_versions"] = graph.ensure_synced(
+                    conn, [version_id, *internal_versions]
+                )
+            linked = [
+                link
+                for link in graph.linked_internal_documents(job["document_id"], version_id)
+                if link["document_id"] in corpus.document_ids
+            ]
+        except Exception as exc:  # derived index: analysis continues without it
+            log.warning("graph unavailable: %s", exc)
+            warnings.append(f"knowledge graph unavailable ({exc.__class__.__name__}); skipped")
+            graph_info["error"] = str(exc)[:300]
+    linked_docs = {link["document_id"] for link in linked}
+
     # Applicability: drop obligations that cannot bind the bank before spending retrieval/LLM.
     jobs.update_progress(job_id, "applicability", 3)
     by_modality = [o for o in obligations if o["modality"] in modalities]
@@ -358,12 +383,19 @@ def run_analysis(job_id: str) -> dict:
             warnings.append(f"reranker failed for {rerank_failures} obligations; gate used")
 
     per_obligation = {
-        oid: select_candidates(entries, corpus, params, rerank_scores.get(oid))
+        oid: select_candidates(entries, corpus, params, rerank_scores.get(oid), linked_docs)
         for oid, entries in fused.items()
     }
 
     shortlist = aggregate_documents(per_obligation, params)
     shortlisted = {d["document_id"] for d in shortlist}
+    for doc_id in sorted(linked_docs - shortlisted):  # never drop a document the graph links
+        shortlist.append({"document_id": doc_id, "score": 0.0, "coverage": 0.0})
+        shortlisted.add(doc_id)
+    for d in shortlist:
+        d["graph_relations"] = sorted(
+            {link["relation"] for link in linked if link["document_id"] == d["document_id"]}
+        )
     titles = {c["document_id"]: c["title"] for c in corpus.clauses.values()}
     for d in shortlist:
         d["title"] = titles.get(d["document_id"])
@@ -389,6 +421,11 @@ def run_analysis(job_id: str) -> dict:
                     "context": parent_context(c["clause_id"], corpus),
                 }
             )
+    graph_info["dependent_clauses_added"] = (
+        _add_dependent_clauses(evidence_rows, corpus, params)
+        if graph.enabled() and not graph_info.get("error")
+        else 0
+    )
     uncovered = [o for o in in_scope if not per_obligation[o["obligation_id"]]]
 
     with get_engine().begin() as conn:
@@ -546,6 +583,12 @@ def run_analysis(job_id: str) -> dict:
             }
         )
 
+    finding_rows += _graph_findings(
+        linked, corpus, job_id, version_id, job["document_id"], temporal
+    )
+    graph_info["findings"] = sum(1 for f in finding_rows if f["method"] == "graph")
+    graph_info["linked_documents"] = linked[:50]
+
     with get_engine().begin() as conn:
         if finding_rows:
             conn.execute(
@@ -608,8 +651,147 @@ def run_analysis(job_id: str) -> dict:
         "uncovered_obligations": [
             {"obligation_id": o["obligation_id"], "text": o["text"][:200]} for o in uncovered[:50]
         ],
+        "graph": graph_info,
         "warnings": warnings,
     }
+
+
+def _add_dependent_clauses(evidence_rows: list[dict], corpus, params: RetrievalParams) -> int:
+    """Knowledge graph expansion: clauses that refer to an evidence clause (or its article) may be
+    impacted too ("thời hạn tại Điều 5"). Add them as evidence; Engine 2 judges them."""
+    top: dict[str, list[dict]] = {}
+    for ev in evidence_rows:
+        top.setdefault(ev["obligation"]["obligation_id"], []).append(ev)
+    sources = {
+        ev["clause"]["clause_id"]
+        for rows in top.values()
+        for ev in sorted(rows, key=lambda e: -e["candidate"]["score"])[:2]
+    }
+    try:
+        pairs = graph.dependent_clauses(sorted(sources))
+    except Exception as exc:
+        log.warning("graph expansion failed: %s", exc)
+        return 0
+    dependents: dict[str, list[str]] = {}
+    for src, dep in pairs:
+        if dep in corpus.clauses:
+            dependents.setdefault(src, []).append(dep)
+    added = 0
+    for rows in top.values():
+        have = {ev["clause"]["clause_id"] for ev in rows}
+        o = rows[0]["obligation"]
+        new = 0
+        for ev in sorted(rows, key=lambda e: -e["candidate"]["score"])[:2]:
+            for dep in dependents.get(ev["clause"]["clause_id"], []):
+                if dep in have or new >= params.graph_neighbors:
+                    continue
+                have.add(dep)
+                new += 1
+                clause = corpus.clauses[dep]
+                lex = lexical_overlap(gate_query(o), dep, corpus, params.min_term_idf)
+                evidence_rows.append(
+                    {
+                        "evidence_id": f"EV-{uuid.uuid4().hex[:12]}",
+                        "obligation": o,
+                        "clause": clause,
+                        "candidate": {
+                            "clause_id": dep,
+                            "document_id": clause["document_id"],
+                            "score": round(ev["candidate"]["score"] * 0.9, 4),
+                            "rrf": 0.0,
+                            "ranks": {"graph:refers_to": 1},
+                            "dense": None,
+                            "rerank": None,
+                            "shared_terms": lex["shared"][:10],
+                            "idf_score": round(lex["idf_score"], 3),
+                            "graph_from": ev["clause"]["clause_id"],
+                        },
+                        "span": best_sentence_span(clause["text"], lex["shared"]),
+                        "method": "graph:refers_to",
+                        "context": parent_context(dep, corpus),
+                    }
+                )
+        added += new
+    return added
+
+
+_GRAPH_RATIONALE = {
+    "cites_regulation": "dẫn chiếu trực tiếp văn bản đang phân tích ({via})",
+    "cites_superseded": (
+        "căn cứ văn bản {via}, văn bản đã bị văn bản đang phân tích thay thế/bãi bỏ"
+    ),
+    "shared_legal_basis": (
+        "cùng căn cứ pháp lý {via} với điều khoản {rc} của văn bản đang phân tích"
+    ),
+}
+_GRAPH_PRIORITY = {
+    "cites_regulation": "high",
+    "cites_superseded": "high",
+    "shared_legal_basis": "low",
+}
+
+
+def _graph_findings(linked, corpus, job_id, version_id, regulation_id, temporal) -> list[dict]:
+    """Document-level findings: an internal document relies on the regulation, on a document it
+    replaces, or on the same law. No obligation: the link is to the document as a whole."""
+    groups: dict[tuple, list[dict]] = {}
+    for link in linked:
+        groups.setdefault((link["document_id"], link["relation"], link["via"]), []).append(link)
+    rows = []
+    for (doc_id, relation, via), links in groups.items():
+        clause_ids = [lk["clause_id"] for lk in links if lk["clause_id"]]
+        first = clause_ids[0] if clause_ids else None
+        target = None
+        if first:
+            clause_text = corpus.clauses[first]["text"]
+            at = clause_text.find(via.split(" ", 1)[-1]) if via else -1
+            if at >= 0:
+                end = at + len(via.split(" ", 1)[-1])
+                target = {"text": clause_text[at:end], "start": at, "end": end}
+        rc = (links[0].get("regulation_clause_id") or "").split("#")[-1]
+        where = f"Điều khoản {first.split('#')[-1]}" if first else "Phần căn cứ của văn bản"
+        rows.append(
+            {
+                "id": f"RIA-{uuid.uuid4().hex[:10]}",
+                "job": job_id,
+                "reg": version_id,
+                "doc": doc_id,
+                "cid": first,
+                "obl": None,
+                "ev": None,
+                "evs": [],
+                "category": "INDIRECT_IMPACT",
+                "rationale": (
+                    f"{where} của {doc_id} "
+                    + _GRAPH_RATIONALE[relation].format(via=via, rc=rc or "?")
+                    + ". Liên kết tìm qua đồ thị tri thức, không qua so khớp nội dung; "
+                    "cần rà soát căn cứ và các điều khoản dựa trên nó."
+                ),
+                "status": "AI_PROPOSED",
+                "priority": _GRAPH_PRIORITY[relation],
+                "confidence": 0.6 if relation != "shared_legal_basis" else 0.3,
+                "src": json.dumps(None),
+                "tgt": json.dumps(target, ensure_ascii=False),
+                "verification": json.dumps(
+                    {
+                        "status": "NEEDS_HUMAN_REVIEW",
+                        "checks": [
+                            {
+                                "check": "graph_link",
+                                "status": "info",
+                                "detail": {"relation": relation, "via": via, "clauses": clause_ids},
+                            },
+                            temporal,
+                            {"check": "human_approval", "status": "pending"},
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                "citations": [regulation_id, *(clause_ids or [doc_id])],
+                "method": "graph",
+            }
+        )
+    return rows
 
 
 jobs.register("analyze", run_analysis)

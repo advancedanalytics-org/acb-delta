@@ -62,14 +62,14 @@ The script wraps these; they always work too.
 | Status / logs | `docker compose ps` · `docker compose logs -f <service>` |
 | Stop (keep data) / reset data | `docker compose down` · `docker compose down -v` |
 | Backend test + lint | `cd backend && uv run pytest && uv run ruff check . && uv run ruff format --check .` |
-| Backend DB integration tests (RIA ingest/analyze) | start a throwaway `pgvector/pgvector:pg16`, then `cd backend && RIA_TEST_DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:<port>/<db> uv run pytest` (skipped when unset) |
+| Backend DB integration tests (RIA ingest/analyze) | start a throwaway `pgvector/pgvector:pg16`, then `cd backend && RIA_TEST_DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:<port>/<db> uv run pytest` (skipped when unset). Add `RIA_TEST_FALKORDB_URL=redis://127.0.0.1:<FALKORDB_PORT>` to also run the knowledge-graph tests (they use the graph `ria_test`) |
 | Seed internal documents into the RIA tables | `cd backend && DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:5432/acb_delta uv run python -m app.ria.seed ../db/DOC-102.parsed.json` |
 | Agent test + lint | `cd agent && uv run pytest && uv run ruff check . && uv run ruff format --check .` |
 | Frontend lint + build | `cd frontend && npm ci && npm run lint && npm run build` |
 | Frontend dev server | `cd frontend && npm run dev` (port 5173, proxies `/api` to `localhost:8000`) |
 | Regenerate demo PDFs | `uv run --with pymupdf python scripts/demo-data/generate_demo_pdfs.py` |
 
-Ports: UI 3000, API 8000, agent 8080 (fixed by AgentBase), Postgres 5432 and MinIO 9000/9001 on `127.0.0.1` only; override with the `*_PORT` values in `.env`.
+Ports: UI 3000, API 8000, agent 8080 (fixed by AgentBase), Postgres 5432, FalkorDB 6379 and MinIO 9000/9001 on `127.0.0.1` only; override with the `*_PORT` values in `.env`.
 
 ### GCP demo VM
 

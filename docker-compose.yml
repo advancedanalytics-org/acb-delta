@@ -21,6 +21,22 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Knowledge graph of documents, clauses and legal references (Engine 1 expansion).
+  falkordb:
+    image: falkordb/falkordb:latest
+    environment:
+      BROWSER: 0  # the bundled web UI is not needed by the API
+    ports:
+      - 127.0.0.1:${FALKORDB_PORT:-6379}:6379
+    volumes:
+      - falkordata:/var/lib/falkordb/data
+    healthcheck:
+      test: redis-cli ping | grep -q PONG
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   minio:
     # minio/minio is no longer pullable from Docker Hub; Chainguard ships the same server.
     image: cgr.dev/chainguard/minio
@@ -106,10 +122,18 @@ services:
       RERANK_BASE_URL: ${RERANK_BASE_URL:-}
       RERANK_MODEL: ${RERANK_MODEL:-}
       RERANK_API_KEY: ${RERANK_API_KEY:-}
+      RERANK_BACKEND: ${RERANK_BACKEND:-rerank}
+      # TypeSafe Jev decisions model: Engine 1 reranker when RERANK_BACKEND=jev.
+      JEV_BASE_URL: ${JEV_BASE_URL:-}
+      JEV_MODEL: ${JEV_MODEL:-}
+      JEV_API_KEY: ${JEV_API_KEY:-}
+      FALKORDB_URL: redis://falkordb:6379
       CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-3000}","http://localhost:5173"]'
     ports:
       - ${API_PORT:-8000}:8000
     depends_on:
+      falkordb:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       agent:
@@ -132,4 +156,5 @@ services:
 
 volumes:
   pgdata:
+  falkordata:
   miniodata:
