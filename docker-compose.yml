@@ -100,6 +100,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_EXTRA_BODY: ${LLM_EXTRA_BODY:-}
       LLM_CONCURRENCY: ${LLM_CONCURRENCY:-4}
+      REVIEW_DRAFT_CONCURRENCY: ${REVIEW_DRAFT_CONCURRENCY:-4}
       # Optional reranker for Engine 1 (Cohere/Jina-style /rerank); empty = relevance gate.
       RERANK_BASE_URL: ${RERANK_BASE_URL:-}
       RERANK_MODEL: ${RERANK_MODEL:-}

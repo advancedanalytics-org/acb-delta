@@ -7,7 +7,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import ai, decisions, documents, evaluation, health, jobs, regulations, vbpls
+from app.routers import (
+    ai,
+    analyses,
+    decisions,
+    documents,
+    evaluation,
+    health,
+    jobs,
+    regulations,
+    vbpls,
+)
 
 log = logging.getLogger(__name__)
 
@@ -33,11 +43,15 @@ async def lifespan(app: FastAPI):
     # RIA tables and recovery of jobs cut off by a restart. A down DB must not stop the API
     # from starting: readiness reports it, and the RIA endpoints retry the schema on first use.
     try:
+        # Importing review_bridge registers the `review` job type; recovery resubmits queued jobs
+        # of every type, so it must come first.
+        from app import review_bridge
         from app.ria.jobs import recover_interrupted
         from app.ria.schema import ensure_schema
 
         ensure_schema()
         recover_interrupted()
+        review_bridge.fail_interrupted_packages()
     except Exception as exc:
         log.warning("RIA schema/job recovery skipped: %s", exc)
     yield
@@ -66,6 +80,8 @@ def create_app() -> FastAPI:
     # TAI-02: VBPL intake, impacts, HITL decisions and audit trail.
     app.include_router(vbpls.router, prefix="/api")
     app.include_router(decisions.router, prefix="/api")
+    # TAI-02: review packages from RIA analyze jobs (agent drafts the patches)
+    app.include_router(analyses.router, prefix="/api")
 
     # MINH-01: regulation ingest + impact analysis (RIA), and their async jobs
     app.include_router(regulations.router, prefix="/api")

@@ -124,14 +124,17 @@ Không ghi bảng `amendment` của RIA.
 ## 3. `POST /api/analyses/{job_id}/review`
 
 - `404` khi job không tồn tại hoặc không phải `analyze`; `409` khi job chưa `succeeded`.
-- `202 {vbpl_id, review_job_id}` khi tạo gói mới. Gọi lại: `200` với gói hiện có; nếu job review trước `failed` thì chỉ chạy lại các finding còn thiếu.
+- `202 {"vbpl_id", "review_job_id"}` (snake_case như các API RIA) khi tạo gói mới. Gọi lại: `200` với gói hiện có; nếu job review trước `failed` thì chỉ chạy lại các finding còn thiếu.
 - Job `review` chạy trên runner của RIA (`backend/app/ria/jobs.py`), theo dõi qua `GET /api/jobs/{review_job_id}`.
 - Lỗi agent ở một finding → impact đó `draft_status = failed`, các finding khác vẫn chạy. Chỉ lỗi DB / hạ tầng mới làm gói `failed`.
 - Song song tối đa `REVIEW_DRAFT_CONCURRENCY` (mặc định 4) lời gọi `/draft`.
+- Kết quả xem bằng API HITL sẵn có (camelCase): `GET /api/vbpls/{vbpl_id}/impacts` có thêm `findingId`, `category`, `patch` (`{operation, start, end, oldText, newText}`), `draftStatus`, `draftError`; các trường này vắng mặt ở impact từ `/invoke`. `GET /api/audit` có thêm `findingId`, `category` theo cùng quy tắc.
 
 ## 4. `GET /api/feedback`
 
-Một dòng cho mỗi impact có quyết định còn hiệu lực (mới nhất, `undone_at IS NULL`). Lọc: `since`, `vbplId`.
+Một dòng cho mỗi impact có quyết định còn hiệu lực (mới nhất, `undone_at IS NULL`), cũ trước mới sau. Lọc: `since` (ISO datetime, theo thời điểm quyết định), `vbplId`.
+
+Trường (camelCase): `impactId, vbplId, findingId, category, action, reasonTags, reviewerId, decidedAt, affectedText, suggestedText, editedText, patch, draftStatus, modelOutput, chosen, rejected`. `findingId`, `category`, `patch`, `draftStatus` là `null` với impact từ `/invoke`.
 
 | `action` | `chosen` | `rejected` |
 |---|---|---|
@@ -139,4 +142,4 @@ Một dòng cho mỗi impact có quyết định còn hiệu lực (mới nhất
 | `edit` | `edited_text` | `suggested_text` |
 | `reject` | `affected_text` | `suggested_text` |
 
-Impact `draft_status = failed` (hoặc không có patch): `rejected = null`, vì không có văn bản AI để học. Quyết định đã undo không có trong feedback nhưng vẫn ở bảng `decisions` cho audit. Theo `docs/evaluation-data-contract.md`.
+Impact `draft_status` = `failed` hoặc `skipped`: không có văn bản AI để học, nên `rejected = null` (và `accept` thì `chosen = null`). Quyết định đã undo không có trong feedback nhưng vẫn ở bảng `decisions` cho audit. Theo `docs/evaluation-data-contract.md`.

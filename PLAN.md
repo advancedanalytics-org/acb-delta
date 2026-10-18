@@ -56,20 +56,20 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 
 ## Tài
 
-- [~] **TAI-01** – Agent gợi ý chỉnh sửa (LangGraph)
+- [x] **TAI-01** – Agent gợi ý chỉnh sửa (LangGraph)
   - [x] Node `extract_changes`: tách điều khoản mới / sửa đổi / bãi bỏ từ VBPL (structured output)
   - [x] Fan-out theo từng thay đổi (LangGraph `Send`) → gọi retrieve qua adapter `agent/agent/retriever.py` (tạm khớp từ khoá trên corpus demo; retrieve + rerank thật thuộc `MINH-01`)
   - [x] Node `judge_impact`: có bị ảnh hưởng không, loại (mâu thuẫn / tham chiếu lỗi thời / nghĩa vụ mới), mức độ, lý do, đoạn trích dẫn
   - [x] Node `draft_amendment`: văn bản gốc → văn bản đề xuất
   - [x] Pydantic schema cho output mọi node LLM
-  - [~] Engine A (RIA 4.0 M04): endpoint `POST /draft` nhận một finding RIA → patch tối thiểu (`REPLACE` / `INSERT` / `DELETE`) đã kiểm tra với văn bản gốc + verifier độc lập (`docs/amendment-review-contract.md`)
-- [~] **TAI-02** – HITL
+  - [x] Engine A (RIA 4.0 M04): endpoint `POST /draft` nhận một finding RIA → patch tối thiểu (`REPLACE` / `INSERT` / `DELETE`) đã kiểm tra với văn bản gốc + verifier độc lập (`docs/amendment-review-contract.md`)
+- [x] **TAI-02** – HITL
   - [x] Graph chạy hết (không dùng `interrupt()`); backend lưu impact vào Postgres trạng thái `pending`, quyết định Accept / Edit / Reject / Undo ghi qua API
   - [x] Bảng Postgres lưu quyết định: thay đổi, chunk, output model, hành động, text đã sửa, reason tag, người duyệt (audit trail)
   - [x] API FastAPI cho accept / edit / reject
-  - [ ] Engine A (RIA 4.0 M05 backend): `POST /api/analyses/{job_id}/review` biến finding RIA thành gói review (`vbpls` + `impacts` có patch before/after); lỗi một bản nháp không làm hỏng cả gói
-  - [ ] `GET /api/feedback`: nhãn HITL (quyết định còn hiệu lực) cho `KHOA-02`
-  - [ ] Chạy E2E thật trên model GCP (`qwen3-next-80b`): VBPL → RIA → bản nháp → quyết định → audit + feedback
+  - [x] Engine A (RIA 4.0 M05 backend): `POST /api/analyses/{job_id}/review` biến finding RIA thành gói review (`vbpls` + `impacts` có patch before/after); lỗi một bản nháp không làm hỏng cả gói
+  - [x] `GET /api/feedback`: nhãn HITL (quyết định còn hiệu lực) cho `KHOA-02`
+  - [x] Chạy E2E thật trên model GCP (`qwen3-next-80b`): VBPL → RIA → bản nháp → quyết định → audit + feedback (`plans/reports/tester-261018-1419-ria-review-live.md`)
 - [x] **TAI-03** – Tài liệu VBPL & fake dữ liệu văn bản nội bộ
   - [x] Thu thập VBPL mẫu (bản cũ + bản sửa đổi)
   - [x] Sinh văn bản nội bộ giả lập theo format đã chốt (`MINH-02`), xuất DOCX → PDF

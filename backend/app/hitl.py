@@ -1,6 +1,6 @@
 """Derived HITL state: an impact's decision is its latest decision that is not undone."""
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, select, text
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
@@ -8,10 +8,26 @@ from app.db import get_engine, get_sessionmaker
 from app.models import hitl as models
 from app.models import hitl_schemas as schemas
 
+# Columns added after the first release. `create_all` never alters an existing table, so they are
+# added here; IF NOT EXISTS keeps it idempotent. Replace with Alembic before real data migrates.
+ADDED_COLUMNS = [
+    "ALTER TABLE vbpls ADD COLUMN IF NOT EXISTS ria_job_id text",
+    "CREATE UNIQUE INDEX IF NOT EXISTS vbpls_ria_job_id ON vbpls (ria_job_id)",
+    "ALTER TABLE impacts ADD COLUMN IF NOT EXISTS finding_id text",
+    "ALTER TABLE impacts ADD COLUMN IF NOT EXISTS category varchar(32)",
+    "ALTER TABLE impacts ADD COLUMN IF NOT EXISTS patch jsonb",
+    "ALTER TABLE impacts ADD COLUMN IF NOT EXISTS draft_status varchar(16)",
+    "ALTER TABLE impacts ADD COLUMN IF NOT EXISTS draft_error text",
+    "CREATE INDEX IF NOT EXISTS impacts_finding_id ON impacts (finding_id)",
+]
+
 
 def init_tables() -> None:
     """Create missing HITL tables and seed the mock reviewers. Safe to run on every start."""
     models.HitlBase.metadata.create_all(get_engine())
+    with get_engine().begin() as conn:
+        for statement in ADDED_COLUMNS:
+            conn.execute(text(statement))
     with get_sessionmaker()() as session:
         for reviewer in models.SEED_REVIEWERS:
             session.merge(models.Reviewer(**reviewer))
@@ -126,6 +142,11 @@ def impact_rows(session: Session, vbpl_id: str) -> list[schemas.ImpactOut]:
                 severity=impact.severity,
                 reasoning=impact.reasoning,
                 suggested_text=impact.suggested_text,
+                finding_id=impact.finding_id,
+                category=impact.category,
+                patch=impact.patch,
+                draft_status=impact.draft_status,
+                draft_error=impact.draft_error,
                 status=STATUS_BY_ACTION[decision.action] if decision else "pending",
                 final_text=final_text,
                 decision=decision_out(decision) if decision else None,

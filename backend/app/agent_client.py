@@ -12,11 +12,26 @@ log = logging.getLogger(__name__)
 
 # The agent makes several LLM calls per change; a long VBPL can take minutes.
 INVOKE_TIMEOUT_SECONDS = 600
+# One /draft is two or three LLM calls.
+DRAFT_TIMEOUT_SECONDS = 180
 
 
 def http_client() -> httpx.Client:
     """Separate function so tests can swap in an `httpx.MockTransport`."""
     return httpx.Client(base_url=get_settings().agent_url, timeout=INVOKE_TIMEOUT_SECONDS)
+
+
+def draft(payload: dict, session_id: str) -> dict:
+    """Agent POST /draft for one RIA finding → AmendmentProposal dict. Raises on HTTP errors."""
+    with http_client() as client:
+        response = client.post(
+            "/draft",
+            json=payload,
+            headers={"X-GreenNode-AgentBase-Session-Id": session_id},
+            timeout=DRAFT_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response.json()
 
 
 def run_analysis(vbpl_id: str) -> None:
@@ -68,11 +83,11 @@ def run_analysis(vbpl_id: str) -> None:
         with get_sessionmaker()() as session:
             vbpl = session.get(Vbpl, vbpl_id)
             vbpl.status = "failed"
-            vbpl.error = _describe(exc)
+            vbpl.error = describe(exc)
             session.commit()
 
 
-def _describe(exc: Exception) -> str:
+def describe(exc: Exception) -> str:
     """Short reason shown in the API. Agent replies are ours; other errors may hold SQL or
     parameters, so only their type goes out (the full trace is in the log)."""
     if isinstance(exc, httpx.HTTPStatusError):
