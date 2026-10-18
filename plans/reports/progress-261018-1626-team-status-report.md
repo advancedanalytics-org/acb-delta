@@ -1,162 +1,117 @@
 # Báo cáo tiến độ nhóm — 18/10/2026
 
-Nguồn: `PLAN.md` và lịch sử nhánh `main` tại commit `0f11ff6` (sau khi gộp PR #28). Hiện không còn PR nào đang mở.
+Nguồn: `PLAN.md` và lịch sử nhánh `main` tại commit `0f11ff6` (sau PR #28).
 
 Ký hiệu: ✅ đã hoàn thành · 🟡 đang làm · ⬜ chưa bắt đầu / tạm hoãn.
 
-## 1. Tóm tắt nhanh
-
-| Người | Đã hoàn thành | Đang làm | Chưa làm |
-|---|---|---|---|
-| Tài | TAI-01, TAI-02, TAI-03, TAI-06 | — | TAI-04, TAI-05, TAI-07 (tạm hoãn) |
-| Khoa | — | KHOA-01 | KHOA-02 |
-| Huy | HUY-01, HUY-02 | — | — |
-| Minh | MINH-02 | MINH-01 | — |
-
-## 2. Tổng các công việc phải hoàn thành cho dự án
+## 1. Task
 
 Dự án có **13 task**, đã hoàn thành **7/13**. Tính theo mục con trong `PLAN.md`: **39/63** mục đã xong.
 
-| # | Task | Người | Nội dung | Trạng thái | Mục con xong |
-|---|---|---|---|---|---|
-| 1 | TAI-01 | Tài | Agent gợi ý chỉnh sửa | ✅ | 6/6 |
-| 2 | TAI-02 | Tài | Duyệt bởi con người (HITL) | ✅ | 7/7 |
-| 3 | TAI-03 | Tài | VBPL mẫu và văn bản nội bộ giả lập | ✅ | 3/3 |
-| 4 | TAI-04 | Tài | Slide (có slide lộ trình DPO / fine-tune) | ⬜ | — |
-| 5 | TAI-05 | Tài | Thuyết trình và kịch bản demo | ⬜ | — |
-| 6 | TAI-06 | Tài | Triển khai giai đoạn 1 | ✅ | 3/3 |
-| 7 | TAI-07 | Tài | Chuyển sang GreenNode | ⬜ tạm hoãn | 0/10 |
-| 8 | KHOA-01 | Khoa | Quy trình đánh giá | 🟡 | 3/10 |
-| 9 | KHOA-02 | Khoa | Học từ phản hồi (RLHF) | ⬜ | 0/4 |
-| 10 | HUY-01 | Huy | Giao diện | ✅ | 10/10 |
-| 11 | HUY-02 | Huy | Xử lý PDF của NHNN | ✅ | 5/5 |
-| 12 | MINH-01 | Minh | Embedding, tìm kiếm, metadata trên pgvector | 🟡 | 2/5 |
-| 13 | MINH-02 | Minh | Định dạng tài liệu giả lập | ✅ | — |
-
-### Việc còn phải làm
-
-**Cần cho demo**
-
-| Người | Việc |
-|---|---|
-| Tài | TAI-04: làm slide, gồm slide lộ trình DPO / fine-tune |
-| Tài | TAI-05: thuyết trình và kịch bản demo |
-| Khoa | KHOA-01: họp với Minh và Tài thống nhất luồng dữ liệu đánh giá |
-| Khoa | KHOA-01: dựng bộ dữ liệu trên Langfuse từ đáp án chuẩn của TAI-03 |
-| Khoa | KHOA-01: chấm bản sửa bằng LLM theo tiêu chí (đúng, sửa tối thiểu, nhất quán pháp lý) và tỉ lệ chấp nhận từ HITL |
-| Khoa | KHOA-01: đo độ trễ và chi phí cho mỗi văn bản (đã có hàm tính, chưa có nguồn đo) |
-| Khoa | KHOA-01: tự biến mỗi lần từ chối / sửa trong HITL thành mục mới trong bộ kiểm thử |
-| Khoa | KHOA-01: script chạy đánh giá và xuất bảng kết quả cho màn hình đánh giá |
-| Khoa | KHOA-02: họp với Tài thống nhất luồng dữ liệu (luồng đã chốt, chỉ cần xác nhận) |
-| Khoa | KHOA-02: vòng ngắn — dùng quyết định chấp nhận / sửa làm ví dụ mẫu động cho bước đánh giá tác động và soạn bản sửa; quyết định từ chối làm ví dụ âm |
-| Khoa | KHOA-02: đo chỉ số trước / sau khi học từ phản hồi (số liệu cho demo) |
-| Minh | MINH-01: chọn và thử model embedding tiếng Việt (đang dùng bge-m3) |
-| Minh | MINH-01: chốt cấu trúc đoạn văn bản |
-| Minh | MINH-01: đóng gói hàm tìm kiếm cho agent (cần xác nhận còn cần không) |
-
-**Lộ trình sau demo**
-
-| Người | Việc |
-|---|---|
-| Khoa | KHOA-02: vòng dài — xuất cặp ưu tiên (chọn / bỏ) thành bộ dữ liệu DPO |
-| Tài | TAI-07: chuyển sang GreenNode khi có tài khoản — tài khoản dịch vụ IAM, endpoint LLM trên MaaS, script nạp và re-embed dữ liệu, kiểm tra model có trên MaaS, đóng gói agent lên AgentBase, chuyển CSDL sang vDB, PDF sang vStorage, chạy frontend và FastAPI trên vServer, đổi biến môi trường, chạy lại đánh giá |
-
-## 3. Trạng thái chi tiết theo người
-
 ### Tài
 
-| Task | Trạng thái | Nội dung đã làm |
-|---|---|---|
-| TAI-01 – Agent gợi ý chỉnh sửa | ✅ Hoàn thành | Agent LangGraph gồm các bước tách thay đổi, chia nhánh theo từng thay đổi, đánh giá tác động, soạn bản sửa (PR #7). Engine A: endpoint `POST /draft` nhận một kết quả phân tích RIA và soạn bản sửa tối thiểu (thay / chèn / xoá), có bước kiểm tra độc lập (PR #21) |
-| TAI-02 – Duyệt bởi con người (HITL) | ✅ Hoàn thành | Bảng lưu quyết định và API chấp nhận / sửa / từ chối / hoàn tác, lưu vết không ghi đè (PR #9). Chuyển kết quả RIA thành gói duyệt (PR #23). Giao diện duyệt đọc gói duyệt (PR #24). Thẻ duyệt hiện đề xuất của AI kèm nút chấp nhận / từ chối (PR #25). Đã chạy thử toàn luồng trên model thật của GCP |
-| TAI-03 – VBPL mẫu và văn bản nội bộ giả lập | ✅ Hoàn thành | Thu thập VBPL mẫu (bản cũ và bản sửa đổi), sinh văn bản nội bộ giả lập dạng PDF (`scripts/demo-data/generate_demo_pdfs.py`, PR #2), cài sẵn các điểm mâu thuẫn làm đáp án chuẩn cho đánh giá |
-| TAI-04 – Slide | ⬜ Chưa bắt đầu | |
-| TAI-05 – Thuyết trình và kịch bản demo | ⬜ Chưa bắt đầu | |
-| TAI-06 – Triển khai giai đoạn 1 | ✅ Hoàn thành | Dựng khung dự án và Docker Compose (PR #2), script `scripts/run.sh` (PR #3, #4). Máy ảo demo trên GCP tự triển khai mỗi khi có thay đổi trên `main` (PR #14, #17, #18, #26, #27): chat bằng Gemini 4 Argon, xếp hạng lại bằng Vertex, embedding bằng bge-m3 |
-| TAI-07 – Chuyển sang GreenNode | ⬜ Tạm hoãn | Tạm thời demo trên máy ảo GCP, chỉ chuyển khi có tài khoản GreenNode |
+| Task | Nội dung | Trạng thái | Mục con xong |
+|---|---|---|---|
+| TAI-01 | Agent gợi ý chỉnh sửa | ✅ Hoàn thành | 6/6 |
+| TAI-02 | Duyệt bởi con người (HITL) | ✅ Hoàn thành | 7/7 |
+| TAI-03 | VBPL mẫu và văn bản nội bộ giả lập | ✅ Hoàn thành | 3/3 |
+| TAI-04 | Slide (có slide lộ trình DPO / fine-tune) | ⬜ Chưa bắt đầu | — |
+| TAI-05 | Thuyết trình và kịch bản demo | ⬜ Chưa bắt đầu | — |
+| TAI-06 | Triển khai giai đoạn 1 | ✅ Hoàn thành | 3/3 |
+| TAI-07 | Chuyển sang GreenNode | ⬜ Tạm hoãn (demo trên GCP đến khi có tài khoản) | 0/10 |
 
 ### Khoa
 
-| Task | Trạng thái | Nội dung |
-|---|---|---|
-| KHOA-01 – Quy trình đánh giá | 🟡 Đang làm | **Đã có:** phần tính chỉ số và cấu trúc bộ dữ liệu (PR #5), tài liệu hợp đồng dữ liệu `docs/evaluation-data-contract.md` (PR #11), API lưu và trả kết quả đánh giá `/api/eval/runs` (PR #16). Các chỉ số đã viết: độ chính xác / độ phủ khi tách thay đổi, Recall@k và MRR khi tìm kiếm, độ chính xác / độ phủ / F1 khi phát hiện tác động. **Chưa có:** bộ dữ liệu trên Langfuse, chấm bản sửa bằng LLM, đo độ trễ và chi phí, tự bổ sung bộ kiểm thử từ quyết định duyệt, lượt chạy đánh giá thật |
-| KHOA-02 – Học từ phản hồi (RLHF) | ⬜ Chưa bắt đầu | Dữ liệu đầu vào `GET /api/feedback` đã sẵn sàng (từ TAI-02), luồng dữ liệu đã chốt |
+| Task | Nội dung | Trạng thái | Mục con xong |
+|---|---|---|---|
+| KHOA-01 | Quy trình đánh giá | 🟡 Đang làm | 3/10 |
+| KHOA-02 | Học từ phản hồi (RLHF) | ⬜ Chưa bắt đầu | 0/4 |
 
 ### Huy
 
-| Task | Trạng thái | Nội dung đã làm |
-|---|---|---|
-| HUY-01 – Giao diện | ✅ Hoàn thành | Đủ 5 màn hình, đã nối API thật, tải VBPL lên, xem PDF có tô sáng theo trạng thái, phím tắt A/E/R/J/K, thông báo có nút hoàn tác, cập nhật lạc quan, chọn người duyệt (PR #6, #10, #20, #22) |
-| HUY-02 – Xử lý PDF của NHNN | ✅ Hoàn thành | Tách chữ từ PDF bằng PyMuPDF giữ số trang và toạ độ, chia đoạn theo Chương / Mục / Điều / Khoản / Điểm, tạo embedding lưu vào pgvector, lưu PDF gốc lên MinIO |
+| Task | Nội dung | Trạng thái | Mục con xong |
+|---|---|---|---|
+| HUY-01 | Giao diện | ✅ Hoàn thành | 10/10 |
+| HUY-02 | Xử lý PDF của NHNN | ✅ Hoàn thành | 5/5 |
 
 ### Minh
 
-| Task | Trạng thái | Nội dung |
+| Task | Nội dung | Trạng thái | Mục con xong |
+|---|---|---|---|
+| MINH-01 | Embedding, tìm kiếm, metadata trên pgvector | 🟡 Đang làm | 2/5 |
+| MINH-02 | Định dạng tài liệu giả lập | ✅ Hoàn thành | — |
+
+## 2. Công việc
+
+Các đầu mục công việc của dự án, theo `PLAN.md`:
+
+| Mảng | Đầu mục | Task |
 |---|---|---|
-| MINH-01 – Embedding, tìm kiếm, metadata trên pgvector | 🟡 Đang làm | **Đã có:** API nạp văn bản và phân tích tác động RIA (PR #12); tìm kiếm kết hợp vector và từ khoá; xếp hạng lại; lọc nghĩa vụ không áp dụng; gộp lời gọi LLM; bộ nhớ đệm LLM (PR #19). **Chưa có:** chốt model embedding trên GreenNode, chốt cấu trúc đoạn văn bản |
-| MINH-02 – Định dạng tài liệu giả lập | ✅ Hoàn thành | Mẫu `db/DOC-102.md` → `db/DOC-102.parsed.json`, mô hình dữ liệu `db/data-model.md` |
+| Dữ liệu | Thu thập VBPL mẫu; sinh văn bản nội bộ giả lập có cài sẵn mâu thuẫn làm đáp án chuẩn; chốt định dạng tài liệu giả lập | TAI-03, MINH-02 |
+| Xử lý PDF | Tách chữ giữ số trang và toạ độ; chia đoạn theo Chương / Mục / Điều / Khoản / Điểm; tạo embedding vào pgvector; lưu PDF gốc | HUY-02 |
+| Tìm kiếm và phân tích tác động | Chọn model embedding; chốt cấu trúc đoạn văn bản; tìm kiếm kết hợp vector và từ khoá; xếp hạng lại; đóng gói hàm tìm kiếm | MINH-01 |
+| Agent | Tách thay đổi từ VBPL; đánh giá tác động; soạn bản sửa tối thiểu có kiểm tra | TAI-01 |
+| Duyệt (HITL) | Lưu quyết định chấp nhận / sửa / từ chối / hoàn tác, lưu vết; gói duyệt từ kết quả RIA; dữ liệu phản hồi cho RLHF | TAI-02 |
+| Giao diện | 5 màn hình: hộp thư VBPL, không gian duyệt, xem PDF có tô sáng, bảng đánh giá, lịch sử duyệt | HUY-01 |
+| Đánh giá | Bộ dữ liệu đánh giá; chỉ số từng bước; chấm bản sửa bằng LLM; đo độ trễ / chi phí; tự bổ sung bộ kiểm thử; script chạy đánh giá | KHOA-01 |
+| Học từ phản hồi | Ví dụ mẫu động từ quyết định duyệt; đo chỉ số trước / sau; xuất dữ liệu DPO | KHOA-02 |
+| Triển khai | Môi trường giai đoạn 1 (local + GCP); chuyển sang GreenNode | TAI-06, TAI-07 |
+| Trình bày | Slide; thuyết trình và kịch bản demo | TAI-04, TAI-05 |
 
-## 4. Công việc đã hoàn thành theo thời gian
+## 3. Công việc đã hoàn thành
 
-Có 28 PR đã gộp vào `main`, giờ ghi theo giờ Việt Nam. PR #8 trùng nội dung với PR #9.
+### Đầu mục đã hoàn thành
 
-### Ngày 17/10
+**Tài**
+- TAI-01: agent LangGraph gồm tách thay đổi, đánh giá tác động, soạn bản sửa (PR #7); endpoint `POST /draft` soạn bản sửa tối thiểu (thay / chèn / xoá) có bước kiểm tra độc lập (PR #21).
+- TAI-02: bảng và API lưu quyết định duyệt, lưu vết không ghi đè (PR #9); chuyển kết quả RIA thành gói duyệt (PR #23); giao diện duyệt đọc gói duyệt (PR #24); thẻ duyệt hiện đề xuất AI kèm nút chấp nhận / từ chối (PR #25); API `GET /api/feedback` cho KHOA-02; đã chạy thử toàn luồng trên model thật.
+- TAI-03: VBPL mẫu, văn bản nội bộ giả lập dạng PDF (`scripts/demo-data/generate_demo_pdfs.py`, PR #2), đáp án chuẩn cho đánh giá.
+- TAI-06: khung dự án và Docker Compose (PR #2); script `scripts/run.sh` (PR #3, #4); máy ảo demo trên GCP tự triển khai mỗi khi có thay đổi trên `main`, chạy Gemini 4 Argon, xếp hạng lại bằng Vertex, embedding bge-m3 (PR #14, #17, #18, #26, #27).
+- Đồng bộ trạng thái task trong `PLAN.md` (PR #28).
 
-| PR | Giờ | Người | Task | Công việc |
-|---|---|---|---|---|
-| #1 | 10:07 | Tài | — | Quy định chung cho các agent lập trình (`AGENTS.md`) và quy trình CI |
-| #2 | 12:53 | Tài | TAI-06, TAI-03 | Khung dự án: backend FastAPI, agent, giao diện mẫu 5 màn hình, Docker Compose, dữ liệu demo |
-| #3 | 13:00 | Tài | TAI-06 | Script `scripts/run.sh` để chạy và kiểm tra hệ thống trên máy |
-| #4 | 13:03 | Tài | TAI-06 | Hướng dẫn agent dùng `run.sh` |
-| #6 | 22:11 | Huy | HUY-01, HUY-02 | Giao diện và API nạp PDF, gợi ý AI; hộp thoại tải VBPL, xem PDF có tô sáng, trang lịch sử duyệt |
-| #5 | 22:17 | Khoa | KHOA-01 | Phần tính chỉ số và cấu trúc bộ dữ liệu đánh giá |
+**Huy**
+- HUY-01: đủ 5 màn hình, nối API thật, tải VBPL lên, xem PDF có tô sáng theo trạng thái, phím tắt A/E/R/J/K, thông báo có nút hoàn tác, chọn người duyệt (PR #6, #20).
+- HUY-02: tách chữ PDF bằng PyMuPDF giữ số trang và toạ độ, chia đoạn theo cấu trúc pháp lý, embedding vào pgvector, lưu PDF lên MinIO (PR #6, #10, #22).
 
-### Ngày 18/10
+**Khoa**
+- KHOA-01 (một phần): phần tính chỉ số và cấu trúc bộ dữ liệu (PR #5); tài liệu `docs/evaluation-data-contract.md` (PR #11); API lưu và trả kết quả đánh giá `/api/eval/runs` (PR #16). Chỉ số đã có: tách thay đổi (độ chính xác / độ phủ), tìm kiếm (Recall@k, MRR), phát hiện tác động (độ chính xác / độ phủ / F1).
 
-| PR | Giờ | Người | Task | Công việc |
-|---|---|---|---|---|
-| #7 | 01:25 | Tài | TAI-01 | Agent LangGraph: tách thay đổi → đánh giá tác động → soạn bản sửa |
-| #9 | 09:30 | Tài | TAI-02 | Bảng và API lưu quyết định duyệt |
-| #10 | 10:05 | Huy | HUY-02 | Tăng giới hạn dung lượng file, cải thiện chia đoạn và lưu vector |
-| #11 | 10:38 | Khoa | KHOA-01 | Tài liệu hợp đồng dữ liệu đánh giá |
-| #12 | 10:39 | Minh | MINH-01 | API nạp văn bản và phân tích tác động RIA, mẫu tài liệu giả lập |
-| #13 | 10:59 | Tài | TAI-02 | Sửa lỗi xem PDF khi tác động không có số trang |
-| #14 | 11:15 | Tài | TAI-06 | Tự triển khai `main` lên máy ảo GCP |
-| #15 | 11:27 | Tài | HUY-02 | Lưu ngày hiệu lực của PDF theo chuẩn ISO để giao diện đọc được |
-| #16 | 11:46 | Khoa | KHOA-01 | API lưu và trả kết quả đánh giá |
-| #17 | 13:04 | Tài | TAI-06 | Chạy Qwen trên Vertex AI và bge-m3 trên máy ảo GCP |
-| #18 | 13:11 | Tài | TAI-06 | Mở endpoint `/v1` có khoá cho model trên máy ảo GCP |
-| #19 | 14:10 | Minh | MINH-01 | Xếp hạng lại, lọc nghĩa vụ không áp dụng, gộp lời gọi LLM, bộ nhớ đệm |
-| #20 | 14:31 | Huy | HUY-01 | Nối giao diện với backend thật |
-| #21 | 14:31 | Tài | TAI-01 | Soạn bản sửa tối thiểu có kiểm tra cho từng kết quả RIA |
-| #22 | 14:35 | Huy | HUY-02 | Sửa lỗi thiếu import logging |
-| #23 | 15:00 | Tài | TAI-02 | Chuyển kết quả RIA thành gói duyệt |
-| #24 | 15:24 | Tài | TAI-02 | Giao diện duyệt đọc gói duyệt |
-| #25 | 16:02 | Tài | TAI-02 | Thẻ duyệt hiện đề xuất AI và nút chấp nhận / từ chối |
-| #26 | 16:05 | Tài | TAI-06 | Chat bằng Gemini 4 Argon và xếp hạng lại bằng Vertex trên máy ảo GCP |
-| #27 | 16:19 | Tài | TAI-06 | Triển khai GCP nạp lại cấu hình mới của litellm và caddy |
-| #28 | 16:29 | Tài | — | Đồng bộ trạng thái task trong `PLAN.md` và thêm báo cáo này |
+**Minh**
+- MINH-01 (một phần): API nạp văn bản và phân tích tác động RIA (PR #12); tìm kiếm kết hợp vector và từ khoá; xếp hạng lại; lọc nghĩa vụ không áp dụng; gộp lời gọi LLM; bộ nhớ đệm LLM (PR #19).
+- MINH-02: mẫu `db/DOC-102.md` → `db/DOC-102.parsed.json`, mô hình dữ liệu `db/data-model.md` (PR #12).
 
-### Tổng kết theo người
+### Link demo
 
-| Người | Số PR đã gộp | Task đã hoàn thành |
+- Link: https://34-143-129-52.sslip.io (đã kiểm tra lúc 16:45 ngày 18/10: trang mở được, cơ sở dữ liệu và agent đều `ok`)
+- User / pass: không ghi trong repo vì repo đang để công khai. Lấy bằng `./scripts/gcp.sh login` (cần `gcloud` đăng nhập vào project `acb-delta-demo-2340`) hoặc hỏi Tài.
+
+## 4. Công việc còn cần hoàn thành
+
+### Cần cho demo
+
+| Người | Task | Việc |
 |---|---|---|
-| Tài | 19 | TAI-01, TAI-02, TAI-03, TAI-06 |
-| Huy | 4 | HUY-01, HUY-02 |
-| Khoa | 3 | Chưa có (KHOA-01 đang làm) |
-| Minh | 2 | MINH-02 (MINH-01 đang làm) |
+| Tài | TAI-04 | Làm slide, gồm slide lộ trình DPO / fine-tune |
+| Tài | TAI-05 | Thuyết trình và kịch bản demo |
+| Khoa | KHOA-01 | Họp với Minh và Tài thống nhất luồng dữ liệu đánh giá |
+| Khoa | KHOA-01 | Dựng bộ dữ liệu trên Langfuse từ đáp án chuẩn của TAI-03 |
+| Khoa | KHOA-01 | Chấm bản sửa bằng LLM theo tiêu chí (đúng, sửa tối thiểu, nhất quán pháp lý) và tỉ lệ chấp nhận từ HITL |
+| Khoa | KHOA-01 | Đo độ trễ và chi phí cho mỗi văn bản (đã có hàm tính, chưa có nguồn đo) |
+| Khoa | KHOA-01 | Tự biến mỗi lần từ chối / sửa trong HITL thành mục mới trong bộ kiểm thử |
+| Khoa | KHOA-01 | Script chạy đánh giá và xuất kết quả cho bảng đánh giá trên giao diện |
+| Khoa | KHOA-02 | Xác nhận luồng dữ liệu với Tài (luồng đã chốt) |
+| Khoa | KHOA-02 | Dùng quyết định chấp nhận / sửa làm ví dụ mẫu động cho bước đánh giá tác động và soạn bản sửa; từ chối làm ví dụ âm |
+| Khoa | KHOA-02 | Đo chỉ số trước / sau khi học từ phản hồi (số liệu cho demo) |
+| Minh | MINH-01 | Chọn và thử model embedding tiếng Việt (đang dùng bge-m3) |
+| Minh | MINH-01 | Chốt cấu trúc đoạn văn bản |
+| Minh | MINH-01 | Đóng gói hàm tìm kiếm cho agent (cần xác nhận còn cần không) |
 
-## 5. Quyết định đã chốt hôm nay
+### Sau demo
 
-- Tài cập nhật trạng thái HUY-01, KHOA-01, MINH-02 trong `PLAN.md` thay cho người phụ trách (đã gộp ở PR #28).
-- Tạm thời demo trên máy ảo GCP; TAI-07 (GreenNode) hoãn đến khi có tài khoản.
-
-## 6. Việc cần làm tiếp để kịp demo
-
-1. Khoa: chạy đánh giá thật trên luồng RIA; làm KHOA-02 để có số liệu trước / sau khi học từ phản hồi.
-2. Huy: bảng đánh giá hiển thị kết quả thật từ `/api/eval/runs`.
-3. Minh: chốt model embedding và cấu trúc đoạn văn bản, ghi vào `PLAN.md`.
-4. Tài: TAI-04 làm slide, TAI-05 viết kịch bản demo.
+| Người | Task | Việc |
+|---|---|---|
+| Khoa | KHOA-02 | Xuất cặp ưu tiên (chọn / bỏ) thành bộ dữ liệu DPO |
+| Tài | TAI-07 | Chuyển sang GreenNode khi có tài khoản: tài khoản dịch vụ IAM, endpoint LLM trên MaaS, script nạp và re-embed dữ liệu, đóng gói agent lên AgentBase, chuyển CSDL sang vDB, PDF sang vStorage, chạy frontend và FastAPI trên vServer, chạy lại đánh giá |
 
 ## Câu hỏi chưa giải quyết
 
