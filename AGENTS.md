@@ -79,7 +79,7 @@ A demo copy of the whole stack runs on one GCP VM (project `acb-delta-demo-2340`
 |---|---|
 | `./scripts/gcp.sh deploy` | Fetches `origin/main` (or `GCP_REF`), uploads it, builds and starts the stack, prints URL + login. Keeps the VM's `.env` and data. Fails if the chat or embedding model, or the agent, does not answer one test call |
 | `./scripts/gcp.sh status` · `logs [service]` · `ssh` | Health, last 100 log lines, shell on the VM |
-| `./scripts/gcp.sh login` | Prints URL, user and password (from the VM's `.env`) |
+| `./scripts/gcp.sh login` | Prints URL, user, password and model key (from the VM's `.env`) |
 | `./scripts/gcp.sh stop` · `start` | Stops / starts the VM to save credit; data and IP are kept |
 | `./scripts/gcp.sh create` · `destroy` | Creates the VM (`e2-standard-4`, runs as service account `acb-delta-vm`), static IP and 80/443 firewall rule / deletes them with all data (asks first) |
 
@@ -91,6 +91,8 @@ Models on the VM come from `deploy/gcp/docker-compose.gcp.yml`, not from `.env`,
 | Embedding (api) | `embedding`: text-embeddings-inference on CPU | `BAAI/bge-m3`, 1024 dims; weights cached in the `embeddingdata` volume |
 
 `scripts/gcp.sh deploy` writes `COMPOSE_FILE` into the VM's `.env`, so `docker compose` and `scripts/run.sh` on the VM always include that overlay. The CI deployer (`github-deployer`) needs `roles/iam.serviceAccountUser` on `acb-delta-vm` to SSH in.
+
+To call the VM's models from a laptop (e.g. a local stack), use the OpenAI-compatible endpoint `https://34-143-129-52.sslip.io/v1` with the model key from `gcp.sh login` as the bearer token: set `OPENAI_BASE_URL` and `EMBEDDING_BASE_URL` to it, `OPENAI_API_KEY` and `EMBEDDING_API_KEY` to the key, `LLM_MODEL=qwen3-next-80b`, `EMBEDDING_MODEL=BAAI/bge-m3`. Calls spend the demo project's Vertex credit and share the VM's CPU with the demo; never commit the key.
 
 Rules for agents: never print the login or `.env` in CI logs (the repo is public); never run `destroy` unless your human asked.
 

@@ -119,6 +119,10 @@ cmd_deploy() {
       printf '\n# Public access, written by scripts/gcp.sh\nSITE_ADDRESS=%s\nBASIC_AUTH_USER=acb\nBASIC_AUTH_PASSWORD=%s\nBASIC_AUTH_HASH=%s\n' \
         '$site' \"\$pw\" \"'\$hash'\" | sudo tee -a .env >/dev/null
     fi
+    # Bearer key for the public /v1 model endpoint (see deploy/gcp/Caddyfile).
+    if ! sudo grep -q '^MODEL_API_KEY=' .env; then
+      printf 'MODEL_API_KEY=%s\n' \"\$(openssl rand -hex 24)\" | sudo tee -a .env >/dev/null
+    fi
     # From now on every plain 'docker compose' (and run.sh) on the VM includes the GCP overlay.
     sudo grep -q '^COMPOSE_FILE=' .env || echo 'COMPOSE_FILE=$COMPOSE_FILES' | sudo tee -a .env >/dev/null
     sudo $COMPOSE_GCP up -d --wait
@@ -152,9 +156,9 @@ print(\"agent ok\")'"
 }
 
 cmd_login() {
-  remote "cd $REMOTE_DIR && sudo grep -E '^(SITE_ADDRESS|BASIC_AUTH_USER|BASIC_AUTH_PASSWORD)=' .env" |
+  remote "cd $REMOTE_DIR && sudo grep -E '^(SITE_ADDRESS|BASIC_AUTH_USER|BASIC_AUTH_PASSWORD|MODEL_API_KEY)=' .env" |
     sed -e 's|^SITE_ADDRESS=|  URL       https://|' -e 's|^BASIC_AUTH_USER=|  User      |' \
-      -e 's|^BASIC_AUTH_PASSWORD=|  Password  |'
+      -e 's|^BASIC_AUTH_PASSWORD=|  Password  |' -e 's|^MODEL_API_KEY=|  Model key |'
 }
 
 cmd_destroy() {
