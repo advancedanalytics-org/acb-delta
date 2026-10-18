@@ -82,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(decisions.router, prefix="/api")
     # TAI-02: review packages from RIA analyze jobs (agent drafts the patches)
     app.include_router(analyses.router, prefix="/api")
+    app.include_router(analyses.regulation_router, prefix="/api")
 
     # MINH-01: regulation ingest + impact analysis (RIA), and their async jobs
     app.include_router(regulations.router, prefix="/api")

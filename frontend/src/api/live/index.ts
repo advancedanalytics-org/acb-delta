@@ -29,38 +29,25 @@ export const liveApi: ApiClient = {
       if (regRes.ok) {
         const regs = await regRes.json()
         if (Array.isArray(regs) && regs.length > 0) {
+          // Status and counts come from the regulation's HITL review package (backend).
           return regs.map((d: {
             document_id: string
             title?: string
             doc_number?: string
             issuer?: string
             owner?: string
-            version_id?: string
-            processing_status?: string
-            page_count?: number
             created_at?: string
+            status: Vbpl['status']
+            error?: string | null
             impact_count?: number
             pending_count?: number
           }) => {
-            const isDone = d.processing_status === 'AI_PROPOSED' || d.processing_status === 'PROPOSED'
-            const isFailed = d.processing_status === 'FAILED'
             const impactCount = d.impact_count || 0
-            const pendingCount = d.pending_count ?? impactCount
-            let status: Vbpl['status'] = 'processing'
-            if (isDone) {
-              if (impactCount === 0) {
-                status = 'not_found'
-              } else if (pendingCount === 0) {
-                status = 'done'
-              } else {
-                status = 'awaiting_review'
-              }
-            } else if (isFailed) {
-              status = 'failed'
-            } else {
-              status = 'processing'
-            }
-
+            const summary = {
+              processing: 'Đang phân tích tác động và soạn đề xuất chỉnh sửa...',
+              failed: 'Không thể phân tích tác động hoặc soạn đề xuất chỉnh sửa.',
+              not_found: 'AI không tìm thấy tác động nào đến văn bản nội bộ.',
+            }[d.status as string] ?? `Đã hoàn thành phân tích tác động pháp lý (${impactCount} điểm tác động).`
             return {
               id: d.document_id,
               number: d.doc_number || d.document_id,
@@ -69,16 +56,11 @@ export const liveApi: ApiClient = {
               issuedDate: d.created_at ? d.created_at.slice(0, 10) : '',
               effectiveDate: d.created_at ? d.created_at.slice(0, 10) : '',
               receivedAt: d.created_at || new Date().toISOString(),
-              summary: isDone
-                ? impactCount === 0
-                  ? 'AI không tìm thấy tác động nào đến văn bản nội bộ.'
-                  : `Đã hoàn thành phân tích tác động pháp lý (${impactCount} điểm tác động).`
-                : isFailed
-                  ? 'Không thể bóc tách nghĩa vụ hoặc phân tích tác động.'
-                  : 'Đang xử lý phân tích tác động...',
-              status,
+              summary,
+              status: d.status,
+              error: d.error ?? undefined,
               impactCount,
-              pendingCount,
+              pendingCount: d.pending_count ?? impactCount,
             }
           })
         }
@@ -164,33 +146,28 @@ export const liveApi: ApiClient = {
   },
 
   listImpacts: async (vbplId: string): Promise<Impact[]> => {
-    // 1. Try RIA regulations impacts endpoint
-    try {
-      const res = await fetch(`/api/regulations/${encodeURIComponent(vbplId)}/impacts`)
-      if (res.ok) {
-        const data = await res.json()
-        if (Array.isArray(data)) {
-          return data as Impact[]
-        }
-      }
-    } catch {
-      // Check vbpls impacts below
+    // RIA regulation: its review package (impacts + the agent's drafted patch). Created on first
+    // open when the analysis predates review packages; 409 while the analysis is still running.
+    const review = await fetch(`/api/regulations/${encodeURIComponent(vbplId)}/review`, { method: 'POST' })
+    let packageId = vbplId
+    if (review.ok) {
+      packageId = ((await review.json()) as { vbpl_id: string }).vbpl_id
+    } else if (review.status === 409) {
+      return []
+    } else if (review.status !== 404) {
+      throw new Error(`Không tải được gói duyệt (HTTP ${review.status})`)
     }
-
-    // 2. Try HITL vbpls impacts endpoint
-    try {
-      const vbplImpactRes = await fetch(`/api/vbpls/${encodeURIComponent(vbplId)}/impacts`)
-      if (vbplImpactRes.ok) {
-        const data = await vbplImpactRes.json()
-        if (Array.isArray(data)) {
-          return data as Impact[]
-        }
-      }
-    } catch {
-      // Empty
-    }
-
-    return []
+    // 404: not a RIA regulation but a VBPL posted to /api/vbpls (agent /invoke path).
+    const res = await fetch(`/api/vbpls/${encodeURIComponent(packageId)}/impacts`)
+    if (res.status === 404) return []
+    if (!res.ok) throw new Error(`Không tải được tác động (HTTP ${res.status})`)
+    const impacts = (await res.json()) as Impact[]
+    // The UI keys caches and routes by the regulation id, not the package id.
+    return impacts.map((impact) => ({
+      ...impact,
+      vbplId,
+      decision: impact.decision && { ...impact.decision, vbplId },
+    }))
   },
 
   listDocuments: async (): Promise<InternalDocument[]> => {

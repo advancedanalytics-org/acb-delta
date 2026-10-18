@@ -116,7 +116,11 @@ export function ReviewPage() {
   useReviewShortcuts({
     j: () => step(1),
     k: () => step(-1),
-    a: () => selected && onDecide(selected, { action: 'accept', reasonTags: [] }),
+    // No accept without an AI proposal (failed or skipped draft): edit or reject instead.
+    a: () =>
+      selected &&
+      (selected.finalText ?? selected.suggestedText) &&
+      onDecide(selected, { action: 'accept', reasonTags: [] }),
     r: () => selected && onDecide(selected, { action: 'reject', reasonTags: [] }),
     '?': () => setHelpOpen(true),
   })

@@ -109,3 +109,26 @@ def test_audit_entries_carry_ria_fields_only_when_set(client, four):
     entry = next(e for e in client.get("/api/audit").json() if e["impactId"] == impact["id"])
 
     assert (entry["findingId"], entry["category"]) == ("RIA-1", "VALUE_CHANGE")
+
+
+def test_accept_without_ai_proposal_is_422(client, four):
+    _, [impact, *_] = four
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE impacts SET draft_status = 'failed', suggested_text = '' WHERE id = :i"),
+            {"i": impact["id"]},
+        )
+
+    assert decide(client, impact["id"], "accept").status_code == 422
+    assert decide(client, impact["id"], "edit", editedText="Bản người duyệt.").status_code == 201
+
+
+def test_rows_without_model_output_are_not_labels(client, four):
+    vbpl_id, [impact, *_] = four
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE impacts SET model_output = '{}'::jsonb WHERE id = :i"), {"i": impact["id"]}
+        )
+    decide(client, impact["id"], "accept")
+
+    assert feedback(client, vbplId=vbpl_id) == {}

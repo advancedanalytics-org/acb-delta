@@ -33,12 +33,22 @@ export const useVbpls = () =>
     },
   })
 
-export const useImpacts = (vbplId: string | undefined) =>
-  useQuery({
+export const useImpacts = (vbplId: string | undefined) => {
+  const { data: vbpls } = useVbpls()
+  const vbpl = vbpls?.find((v) => v.id === vbplId)
+  return useQuery({
     queryKey: queryKeys.impacts(vbplId ?? ''),
     queryFn: () => api.listImpacts(vbplId!),
     enabled: Boolean(vbplId),
+    // Impacts arrive one by one while the agent drafts the review package. Keep polling until the
+    // list has as many impacts as the inbox counts: covers a package started by opening this page
+    // and drafts that land after the inbox already left 'processing'.
+    refetchInterval: (query) =>
+      vbpl?.status === 'processing' || (query.state.data?.length ?? 0) < (vbpl?.impactCount ?? 0)
+        ? 2000
+        : false,
   })
+}
 
 export const useDocuments = () =>
   useQuery({ queryKey: queryKeys.documents, queryFn: api.listDocuments, staleTime: Infinity })

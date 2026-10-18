@@ -144,6 +144,8 @@ def analyze(
 
 @router.get("")
 def list_regulations() -> list[dict]:
+    """Regulations for the inbox. Counts and status come from the HITL review package of the
+    latest analysis (`app.review_bridge`); before it exists, from RIA's processing state."""
     try:
         ensure_schema()
         with get_engine().connect() as conn:
@@ -152,16 +154,29 @@ def list_regulations() -> list[dict]:
                     text(
                         "SELECT d.document_id, d.title, d.doc_number, d.issuer, d.owner, "
                         "v.version_id, v.processing_status, v.page_count, v.created_at, "
-                        "(SELECT count(*) FROM impact_finding f "
-                        " WHERE f.regulation_version_id = v.version_id) AS impact_count, "
-                        "(SELECT count(*) FROM impact_finding f "
-                        " WHERE f.regulation_version_id = v.version_id "
-                        " AND NOT EXISTS ( "
-                        "   SELECT 1 FROM decisions dec "
-                        "   WHERE dec.impact_id = f.finding_id AND dec.undone_at IS NULL "
-                        " )) AS pending_count "
+                        "pkg.id AS vbpl_id, pkg.status AS review_status, "
+                        "pkg.error AS review_error, "
+                        "(SELECT count(*) FROM impacts i WHERE i.vbpl_id = pkg.id) "
+                        "AS impact_count, "
+                        "(SELECT count(*) FROM impacts i WHERE i.vbpl_id = pkg.id AND NOT EXISTS ("
+                        "  SELECT 1 FROM decisions dec "
+                        "  WHERE dec.impact_id = i.id AND dec.undone_at IS NULL)) "
+                        "AS pending_count, "
+                        # Analysed before review packages existed: reviewable findings of the
+                        # latest finished run; opening it builds the package.
+                        "(SELECT count(*) FROM impact_finding f WHERE f.status = 'AI_PROPOSED' "
+                        "  AND f.job_id = (SELECT j.job_id FROM job j WHERE j.job_type = 'analyze' "
+                        "  AND j.version_id = v.version_id AND j.status = 'succeeded' "
+                        "  ORDER BY j.created_at DESC LIMIT 1)) AS finding_count, "
+                        "(SELECT j.status FROM job j WHERE j.job_type = 'analyze' "
+                        "  AND j.version_id = v.version_id "
+                        "  ORDER BY j.created_at DESC LIMIT 1) AS analyze_status "
                         "FROM document d "
                         "JOIN document_version v ON v.document_id = d.document_id "
+                        "LEFT JOIN LATERAL (SELECT vb.id, vb.status, vb.error FROM vbpls vb "
+                        "  JOIN job j ON j.job_id = vb.ria_job_id "
+                        "  WHERE j.version_id = v.version_id "
+                        "  ORDER BY vb.received_at DESC LIMIT 1) pkg ON true "
                         "WHERE d.doc_type = 'regulation' "
                         "ORDER BY v.created_at DESC"
                     )
@@ -169,24 +184,28 @@ def list_regulations() -> list[dict]:
                 .mappings()
                 .all()
             )
-            results = []
-            for d in docs:
-                row = dict(d)
-                ps = row.get("processing_status")
-                ic = row.get("impact_count", 0)
-                pc = row.get("pending_count", 0)
-                if ps in ("AI_PROPOSED", "PROPOSED", "COMPLETED"):
-                    row["status"] = (
-                        "not_found" if ic == 0 else ("done" if pc == 0 else "awaiting_review")
-                    )
-                elif ps == "FAILED":
-                    row["status"] = "failed"
-                else:
-                    row["status"] = "processing"
-                results.append(row)
-            return results
+            return [_inbox_row(dict(d)) for d in docs]
     except OperationalError as exc:
         raise _db_unavailable(exc) from exc
+
+
+def _inbox_row(row: dict) -> dict:
+    review, ps = row.pop("review_status"), row.get("processing_status")
+    finding_count, analyze = row.pop("finding_count"), row.pop("analyze_status")
+    error = row.pop("review_error")
+    if review == "failed" or (review is None and (ps == "FAILED" or analyze == "failed")):
+        row["status"] = "failed"
+        # Job errors can hold internals; GET /api/jobs/{id} has the detail.
+        row["error"] = error or "Phân tích tác động thất bại"
+    elif review == "awaiting_review" or (review is None and ps == "AI_PROPOSED"):
+        if review is None:
+            row["impact_count"] = row["pending_count"] = finding_count
+        ic, pc = row["impact_count"], row["pending_count"]
+        row["status"] = "not_found" if ic == 0 else ("done" if pc == 0 else "awaiting_review")
+    else:
+        # Parsing, analysing, or the agent still drafting the review package.
+        row["status"] = "processing"
+    return row
 
 
 @router.get("/{regulation_id}")
@@ -226,120 +245,5 @@ def get_regulation(regulation_id: str) -> dict:
                 {"d": regulation_id},
             ).mappings()
             return {**doc, "versions": [dict(v) for v in versions]}
-    except OperationalError as exc:
-        raise _db_unavailable(exc) from exc
-
-
-@router.get("/{regulation_id}/impacts")
-def list_regulation_impacts(regulation_id: str) -> list[dict]:
-    """List impact findings for a regulation, formatted for the Review workspace."""
-    try:
-        ensure_schema()
-        with get_engine().connect() as conn:
-            rows = (
-                conn.execute(
-                    text(
-                        "SELECT f.finding_id, f.regulation_version_id, f.impacted_document_id, "
-                        "f.internal_clause_id, f.category, f.rationale, f.priority, f.status, "
-                        "f.source_span, f.target_span, f.citations, "
-                        "c.numbering, c.heading, c.page, c.bbox, c.text AS affected_text "
-                        "FROM impact_finding f "
-                        "JOIN document_version v ON v.version_id = f.regulation_version_id "
-                        "LEFT JOIN clause c ON c.clause_id = f.internal_clause_id "
-                        "WHERE v.document_id = :d "
-                        "ORDER BY f.priority DESC, f.created_at ASC"
-                    ),
-                    {"d": regulation_id},
-                )
-                .mappings()
-                .all()
-            )
-
-            # Query active decisions for these findings
-            decision_map = {}
-            if rows:
-                try:
-                    fids = [r["finding_id"] for r in rows]
-                    dec_rows = (
-                        conn.execute(
-                            text(
-                                "SELECT d.id, d.impact_id, d.action, d.edited_text, "
-                                "d.reason_tags, d.reviewer_id, d.at, "
-                                "r.name AS reviewer_name, r.role AS reviewer_role "
-                                "FROM decisions d "
-                                "JOIN reviewers r ON r.id = d.reviewer_id "
-                                "WHERE d.undone_at IS NULL AND d.impact_id = ANY(:fids) "
-                                "ORDER BY d.at DESC"
-                            ),
-                            {"fids": fids},
-                        )
-                        .mappings()
-                        .all()
-                    )
-                    for d in dec_rows:
-                        if d["impact_id"] not in decision_map:
-                            decision_map[d["impact_id"]] = d
-                except Exception:
-                    pass
-
-            results = []
-            for r in rows:
-                category_map = {
-                    "conflict": "conflict",
-                    "outdated_reference": "outdated_reference",
-                }
-                impact_type = category_map.get(str(r["category"]).lower(), "new_obligation")
-                loc = r.get("numbering") or r.get("heading") or "Điều khoản"
-                src_text = (r.get("source_span") or {}).get("text", "")
-                tgt_text = r.get("affected_text") or (r.get("target_span") or {}).get("text", "")
-
-                active_dec = decision_map.get(r["finding_id"])
-                if active_dec:
-                    action = active_dec["action"]
-                    status = "accepted" if action in ("accept", "edit") else "rejected"
-                    final_text = (
-                        active_dec["edited_text"] if action == "edit" else (src_text or tgt_text)
-                    )
-                    dec_obj = {
-                        "id": active_dec["id"],
-                        "impactId": r["finding_id"],
-                        "vbplId": regulation_id,
-                        "documentId": r["impacted_document_id"],
-                        "action": action,
-                        "editedText": active_dec.get("edited_text"),
-                        "reasonTags": active_dec.get("reason_tags") or [],
-                        "reviewer": {
-                            "id": active_dec["reviewer_id"],
-                            "name": active_dec.get("reviewer_name") or active_dec["reviewer_id"],
-                            "role": active_dec.get("reviewer_role") or "Chuyên viên",
-                        },
-                        "at": active_dec["at"].isoformat() if active_dec.get("at") else "",
-                    }
-                else:
-                    status = "pending"
-                    final_text = None
-                    dec_obj = None
-
-                results.append(
-                    {
-                        "id": r["finding_id"],
-                        "vbplId": regulation_id,
-                        "documentId": r["impacted_document_id"],
-                        "location": loc,
-                        "changeClause": src_text,
-                        "citation": ", ".join(r["citations"]) if r.get("citations") else "",
-                        "affectedText": tgt_text,
-                        "page": r.get("page") or 1,
-                        "bboxes": [r["bbox"]] if r.get("bbox") else [],
-                        "type": impact_type,
-                        "severity": (r.get("priority") or "medium").lower(),
-                        "reasoning": r.get("rationale") or "",
-                        "suggestedText": src_text or tgt_text,
-                        "status": status,
-                        "finalText": final_text,
-                        "decision": dec_obj,
-                    }
-                )
-            return results
     except OperationalError as exc:
         raise _db_unavailable(exc) from exc

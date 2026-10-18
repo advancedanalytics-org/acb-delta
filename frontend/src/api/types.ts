@@ -61,6 +61,9 @@ export interface Impact {
   severity: Severity
   reasoning: string
   suggestedText: string
+  /** RIA review packages: how the agent's draft went. No suggestion when 'failed' or 'skipped'. */
+  draftStatus?: 'review_required' | 'failed' | 'skipped'
+  draftError?: string
   status: ImpactStatus
   /** Text the reviewer approved: suggestedText on accept, the edited text on edit. */
   finalText?: string

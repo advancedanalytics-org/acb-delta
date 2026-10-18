@@ -3,6 +3,9 @@
 One finished RIA analyze job becomes one `vbpls` row; each reviewable finding becomes one
 `impacts` row carrying the agent's patch. Runs as a RIA job of type `review`. RIA tables are only
 read; the job row is written through `app.ria.jobs`.
+
+With REVIEW_AUTO_START the package is started as soon as an analyze job finishes: the `analyze`
+handler is re-registered here as "RIA analysis, then queue the review" (RIA's own code unchanged).
 """
 
 import json
@@ -18,7 +21,7 @@ from app import agent_client
 from app.config import get_settings
 from app.db import get_engine, get_sessionmaker
 from app.models.hitl import Decision, Impact, Vbpl, new_id
-from app.ria import jobs
+from app.ria import analysis, jobs
 
 log = logging.getLogger(__name__)
 
@@ -44,17 +47,18 @@ class ReviewError(Exception):
         self.status_code = status_code
 
 
-def start_review(analyze_job_id: str) -> tuple[dict, bool]:
+def start_review(analyze_job_id: str, require_succeeded: bool = True) -> tuple[dict, bool]:
     """Create (or return) the review package of an analyze job. Returns (body, started).
 
     A package is created once per analyze job (`vbpls.ria_job_id` is unique). Calling again
     returns it; only when its last review job failed is a new one started, which drafts the
-    findings still missing or failed.
+    findings still missing or failed. `require_succeeded=False` is for the analyze handler
+    itself: its findings are committed but the job row is marked succeeded only after it returns.
     """
     job = jobs.get_job(analyze_job_id)
     if job is None or job["job_type"] != "analyze":
         raise ReviewError(404, f"analyze job {analyze_job_id} not found")
-    if job["status"] != "succeeded":
+    if require_succeeded and job["status"] != "succeeded":
         raise ReviewError(409, f"analyze job {analyze_job_id} is {job['status']}, not succeeded")
     fields = _vbpl_fields(job)
     # One transaction with the package row locked: concurrent calls start at most one job.
@@ -89,6 +93,36 @@ def start_review(analyze_job_id: str) -> tuple[dict, bool]:
         )
     jobs.submit(review_job_id)
     return {"vbpl_id": vbpl_id, "review_job_id": review_job_id}, True
+
+
+def review_for_regulation(regulation_id: str) -> tuple[dict, bool]:
+    """The review package of the regulation's latest finished analysis (started if missing)."""
+    with get_engine().connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT job_id, status FROM job WHERE job_type = 'analyze' AND document_id = :d "
+                "ORDER BY created_at DESC"
+            ),
+            {"d": regulation_id},
+        ).all()
+    done = next((r.job_id for r in rows if r.status == "succeeded"), None)
+    if done is not None:
+        return start_review(done)
+    if any(r.status in ("queued", "running") for r in rows):
+        raise ReviewError(409, f"{regulation_id} is still being analyzed")
+    raise ReviewError(404, f"no finished analysis for {regulation_id}")
+
+
+def _analyze_then_review(job_id: str) -> dict:
+    """`analyze` job handler: RIA's analysis, then queue the review package (REVIEW_AUTO_START)."""
+    result = analysis.run_analysis(job_id)
+    if get_settings().review_auto_start:
+        try:
+            start_review(job_id, require_succeeded=False)
+        except Exception:
+            # The analysis itself succeeded; POST .../review can still start the package.
+            log.exception("could not start the review package of %s", job_id)
+    return result
 
 
 def _vbpl_fields(job: dict) -> dict:
@@ -129,12 +163,15 @@ def load_findings(analyze_job_id: str) -> list[dict]:
                 "f.rationale, f.status, f.priority, f.confidence, f.source_span, f.target_span, "
                 "f.verification, f.citations, f.method, f.impacted_document_id, "
                 "f.internal_clause_id, o.text AS obligation_text, o.source_clause_id, "
-                "rc.numbering AS regulation_numbering, ic.numbering AS clause_numbering, "
+                "rc.numbering AS regulation_numbering, rd.doc_number AS regulation_number, "
+                "ic.numbering AS clause_numbering, "
                 "ic.heading AS clause_heading, pc.heading AS parent_heading, "
                 "ic.text AS clause_text, ic.bbox AS clause_bbox, e.score "
                 "FROM impact_finding f "
                 "JOIN obligation o ON o.obligation_id = f.obligation_id "
                 "JOIN clause rc ON rc.clause_id = o.source_clause_id "
+                "JOIN document_version rv ON rv.version_id = rc.version_id "
+                "JOIN document rd ON rd.document_id = rv.document_id "
                 "LEFT JOIN clause ic ON ic.clause_id = f.internal_clause_id "
                 "LEFT JOIN clause pc ON pc.clause_id = ic.parent_id "
                 "LEFT JOIN evidence e ON e.evidence_id = f.evidence_id "
@@ -195,7 +232,6 @@ def impact_row(f: dict, position: int, proposal: dict | None, error: str | None)
     page, boxes = page_and_boxes(f["clause_bbox"])
     heading = f["clause_heading"] or f["parent_heading"]
     numbering = f["clause_numbering"] or ""
-    source_span = f["source_span"] or {}
     finding = {
         k: f[k]
         for k in (
@@ -209,8 +245,11 @@ def impact_row(f: dict, position: int, proposal: dict | None, error: str | None)
         "document_id": f["impacted_document_id"],
         "chunk_id": f["internal_clause_id"] or "",
         "location": f"{numbering}. {heading}" if heading else numbering,
-        "change_clause": f["regulation_numbering"],
-        "citation": source_span.get("text") or f["obligation_text"],
+        # The UI shows change_clause as the new rule's wording and citation as its reference.
+        "change_clause": f["obligation_text"],
+        "citation": ", ".join(
+            filter(None, [f["regulation_number"], f"điều khoản {f['regulation_numbering']}"])
+        ),
         "affected_text": clause_text,
         "page": page,
         "bboxes": boxes,
@@ -372,3 +411,4 @@ def _set_vbpl(vbpl_id: str, **values) -> None:
 
 
 jobs.register(JOB_TYPE, run_review)
+jobs.register("analyze", _analyze_then_review)
