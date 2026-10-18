@@ -315,6 +315,15 @@ function HoverLegalCard({
   const [feedback, setFeedback] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [isLoadingAi, setIsLoadingAi] = useState(false)
+  // Where "Quay lại" returns to from the reject form.
+  const [rejectFrom, setRejectFrom] = useState<'view' | 'edit'>('view')
+  const proposal = impact.finalText ?? impact.suggestedText
+
+  const openRejectFeedback = (from: 'view' | 'edit') => {
+    onSelect?.(impact.id)
+    setRejectFrom(from)
+    setMode('reject_feedback')
+  }
 
   // Keep draft updated in real-time when impact changes while in view mode
   useEffect(() => {
@@ -499,10 +508,62 @@ function HoverLegalCard({
             </div>
           )}
 
-          {onDecide && (
+          {/* Pending/rejected with an AI draft: show it right away so the reviewer only accepts or rejects. */}
+          {impact.status !== 'accepted' && proposal && (
+            <div className="mt-2.5 space-y-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                <PencilLine className="size-3" />
+                <span>Đề xuất chỉnh sửa từ AI:</span>
+              </div>
+              <p className="max-h-40 overflow-auto whitespace-pre-wrap rounded border border-primary/25 bg-accent/25 px-2.5 py-1.5 text-xs leading-relaxed">
+                {proposal}
+              </p>
+            </div>
+          )}
+
+          {onDecide && impact.status !== 'accepted' && proposal && (
+            <div className="mt-3 flex items-center justify-between border-t pt-2.5">
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={disabled}
+                onClick={() => {
+                  onSelect?.(impact.id)
+                  setMode('edit')
+                }}
+                className="gap-1 text-xs text-muted-foreground"
+              >
+                <PencilLine className="size-3" />
+                Sửa
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="xs"
+                  variant="destructive"
+                  disabled={disabled}
+                  onClick={() => openRejectFeedback('view')}
+                  className="gap-1 px-2.5 text-xs"
+                >
+                  <X className="size-3" />
+                  Từ chối
+                </Button>
+                <Button
+                  size="xs"
+                  disabled={disabled}
+                  onClick={handleAccept}
+                  className="gap-1 bg-emerald-600 px-2.5 text-xs text-white hover:bg-emerald-700"
+                >
+                  <Check className="size-3" />
+                  Chấp nhận
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {onDecide && (impact.status === 'accepted' || !proposal) && (
             <div className="mt-3 flex items-center justify-between border-t pt-2.5">
               <span className="text-[11px] text-muted-foreground">
-                {impact.status === 'accepted' ? 'Chỉnh sửa lại:' : 'Chỉnh sửa văn bản:'}
+                {impact.status === 'accepted' ? 'Chỉnh sửa lại:' : 'AI chưa có đề xuất:'}
               </span>
               <Button
                 size="sm"
@@ -560,7 +621,7 @@ function HoverLegalCard({
                 size="xs"
                 variant="destructive"
                 disabled={disabled}
-                onClick={() => setMode('reject_feedback')}
+                onClick={() => openRejectFeedback('edit')}
                 className="gap-1 px-2.5 text-xs"
               >
                 <X className="size-3" />
@@ -622,7 +683,7 @@ function HoverLegalCard({
             <Button
               size="xs"
               variant="ghost"
-              onClick={() => setMode('edit')}
+              onClick={() => setMode(rejectFrom)}
               className="text-xs text-muted-foreground"
             >
               Quay lại
