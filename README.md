@@ -33,7 +33,7 @@ Same with plain Compose: `cp .env.example .env` (replace every `CHANGEME`), then
 
 | Path | What | Owner slots |
 |---|---|---|
-| `backend/` | FastAPI: health probes; HITL router goes here | TAI-02 |
+| `backend/` | FastAPI: health probes, regulation ingest + impact analysis (`/api/regulations`, `/api/jobs`, see [`docs/ria-ingest-analyze.md`](docs/ria-ingest-analyze.md)); HITL router goes here | TAI-02 |
 | `agent/` | LangGraph graph on port 8080 (AgentBase Runtime contract), 4 stub nodes | TAI-01, MINH-01 (`retrieve`) |
 | `frontend/` | Vite + React UI prototype, all HUY-01 screens | HUY-01 (live API wiring) |
 | `db/init/` | Postgres init SQL (enables pgvector) | |

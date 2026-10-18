@@ -1,12 +1,15 @@
 """FastAPI entrypoint. Feature routers (documents, impacts, HITL decisions) mount under /api."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import ai, decisions, documents, health, vbpls
+from app.routers import ai, decisions, documents, health, jobs, regulations, vbpls
+
+log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -23,6 +26,16 @@ async def lifespan(app: FastAPI):
     from app.hitl import init_tables
 
     init_tables()
+    # RIA tables and recovery of jobs cut off by a restart. A down DB must not stop the API
+    # from starting: readiness reports it, and the RIA endpoints retry the schema on first use.
+    try:
+        from app.ria.jobs import recover_interrupted
+        from app.ria.schema import ensure_schema
+
+        ensure_schema()
+        recover_interrupted()
+    except Exception as exc:
+        log.warning("RIA schema/job recovery skipped: %s", exc)
     yield
 
 
@@ -49,6 +62,10 @@ def create_app() -> FastAPI:
     # TAI-02: VBPL intake, impacts, HITL decisions and audit trail.
     app.include_router(vbpls.router, prefix="/api")
     app.include_router(decisions.router, prefix="/api")
+
+    # MINH-01: regulation ingest + impact analysis (RIA), and their async jobs
+    app.include_router(regulations.router, prefix="/api")
+    app.include_router(jobs.router, prefix="/api")
     return app
 
 

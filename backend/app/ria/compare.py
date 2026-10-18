@@ -1,0 +1,356 @@
+"""Engine 2 — proposition matching and fine-grained diff (design sections 10, 11, 14).
+
+Deterministic checks run first (values / deadlines, modality). An optional LLM judge then
+classifies the pair, but its quotes must be found verbatim in the sources (grounding), and it
+can never downgrade a conflict the rules found to EQUIVALENT (no false-safe).
+"""
+
+import json
+import re
+
+from app.ria import llm
+from app.ria.obligations import find_modality
+from app.ria.textutil import Quantity, content_bigrams, extract_quantities
+
+LABELS = (
+    "EQUIVALENT",
+    "CONTRADICTION",
+    "ADDITION",
+    "SCOPE_CHANGE",
+    "VALUE_CHANGE",
+    "INDIRECT_IMPACT",
+)
+PRIORITY = {
+    "VALUE_CHANGE": "high",
+    "CONTRADICTION": "high",
+    "ADDITION": "medium",
+    "SCOPE_CHANGE": "medium",
+    "INDIRECT_IMPACT": "low",
+    "EQUIVALENT": "low",
+}
+_PERMISSIVE = re.compile(r"\b(có thể|được phép|được quyền|không bắt buộc)\b", re.I)
+
+
+def _permissive_sentence(
+    internal_text: str, shared: list[str], action_terms: set[str]
+) -> tuple[int, int, str] | None:
+    """A sentence that permits ("có thể", "được phép") the same action the obligation governs:
+    it shares two gated evidence terms and the words right after the marker share a term with
+    the obligation's action / object ("được phép cư trú" does not permit "yêu cầu giấy tờ")."""
+    for m in re.finditer(r"[^.;\n]+", internal_text):
+        sentence = m.group(0)
+        marker = _PERMISSIVE.search(sentence)
+        if not marker or len(set(content_bigrams(sentence)) & set(shared)) < 2:
+            continue
+        # The permitted verb phrase: the few words right after the marker.
+        permitted = set(content_bigrams(" ".join(sentence[marker.end() :].split()[:4])))
+        if permitted & action_terms:
+            lead = len(sentence) - len(sentence.lstrip())
+            return m.start() + lead, m.start() + len(sentence.rstrip()), marker.group(0)
+    return None
+
+
+# Words that sit next to any duration ("trong thời hạn 60 ngày") and say nothing about what
+# the duration measures.
+_VALUE_NOISE = frozenset({"thời hạn", "thời gian", "hạn ba", "hạn tối"})
+
+
+def _window_bigrams(text: str, q: Quantity, width: int = 80) -> set[str]:
+    """Topic around a quantity, the quantity itself excluded."""
+    around = f"{text[max(0, q.start - width) : q.start]} . {text[q.end : q.end + width]}"
+    return set(content_bigrams(around)) - _VALUE_NOISE
+
+
+def compare_values(source_text: str, target_text: str, topic_terms: set[str] | None = None) -> dict:
+    """Pair quantities of the same dimension measuring the same thing: their surroundings share
+    at least two bigrams, one of them a gated topic term when `topic_terms` is given."""
+    src_qs, tgt_qs = extract_quantities(source_text), extract_quantities(target_text)
+    pairs = []
+    for s in src_qs:
+        s_ctx = _window_bigrams(source_text, s)
+        for t in tgt_qs:
+            if s.dimension != t.dimension:
+                continue
+            shared = s_ctx & _window_bigrams(target_text, t)
+            if len(shared) < 2 or (topic_terms is not None and not shared & topic_terms):
+                continue
+            if s.bound == "max":
+                conflict = t.value > s.value
+            elif s.bound == "min":
+                conflict = t.value < s.value
+            else:
+                conflict = abs(t.value - s.value) > 1e-9
+            pairs.append({"source": s, "target": t, "conflict": conflict, "shared": sorted(shared)})
+    conflicts = [p for p in pairs if p["conflict"]]
+    return {"pairs": pairs, "conflicts": conflicts}
+
+
+def _span(text: str, start: int, end: int) -> dict:
+    return {"text": text[start:end], "start": start, "end": end}
+
+
+def _locate(haystack: str, quote: str | None) -> tuple[int, int] | None:
+    if not quote:
+        return None
+    quote = quote.strip().strip('"“”')
+    idx = haystack.find(quote)
+    if idx >= 0:
+        return idx, idx + len(quote)
+    # Whitespace in PDFs differs (line breaks): match on collapsed whitespace.
+    pattern = r"\s+".join(re.escape(w) for w in quote.split())
+    m = re.search(pattern, haystack) if pattern else None
+    return (m.start(), m.end()) if m else None
+
+
+def rule_classify(
+    obligation: dict, reg_clause_text: str, internal_text: str, evidence: dict
+) -> dict:
+    o_start = obligation["span_start"]
+    values = compare_values(
+        obligation["text"], internal_text, set(evidence.get("shared_terms", []))
+    )
+    checks = []
+    if values["pairs"]:
+        checks.append(
+            {
+                "check": "deterministic_values",
+                "status": "fail" if values["conflicts"] else "pass",
+                "detail": [_pair_detail(p) for p in values["pairs"]],
+            }
+        )
+    else:
+        checks.append({"check": "deterministic_values", "status": "not_applicable"})
+
+    target_default = evidence["span"]
+    if values["conflicts"]:
+        p = values["conflicts"][0]
+        s, t = p["source"], p["target"]
+        return {
+            "category": "VALUE_CHANGE",
+            "confidence": 0.7,
+            "rationale": (
+                f"Văn bản mới quy định '{s.text.strip()}' ({_bound_vi(s.bound)}), quy định nội bộ "
+                f"đang ghi '{t.text.strip()}' trong cùng ngữ cảnh ({', '.join(p['shared'][:3])})."
+            ),
+            "source_span": _span(reg_clause_text, o_start + s.start, o_start + s.end),
+            "target_span": _span(internal_text, t.start, t.end),
+            "checks": checks,
+        }
+
+    modality = obligation["modality"]
+    shared = evidence.get("shared_terms", [])
+    action_terms = set(content_bigrams(f"{obligation['action']} {obligation['object']}"))
+    permissive = (
+        _permissive_sentence(internal_text, shared, action_terms) if modality != "may" else None
+    )
+    if permissive:
+        sentence = internal_text[permissive[0] : permissive[1]]
+        internal_modality = find_modality(sentence)
+        if modality == "must_not" or (internal_modality and internal_modality[0] == "may"):
+            checks.append(
+                {
+                    "check": "modality",
+                    "status": "fail",
+                    "detail": f"nguồn: {modality}; nội bộ: '{permissive[2]}'",
+                }
+            )
+            return {
+                "category": "CONTRADICTION",
+                "confidence": 0.4,
+                "rationale": (
+                    f"Nghĩa vụ nguồn mang tính {_modality_vi(modality)}, điều khoản nội bộ "
+                    f"cùng chủ đề ({', '.join(shared[:3])}) dùng cách diễn đạt cho phép "
+                    f"'{permissive[2]}'. Cần xác minh phạm vi áp dụng."
+                ),
+                "source_span": _span(reg_clause_text, o_start, obligation["span_end"]),
+                "target_span": _span(internal_text, permissive[0], permissive[1]),
+                "checks": checks,
+            }
+
+    if values["pairs"] and not values["conflicts"]:
+        p = values["pairs"][0]
+        return {
+            "category": "EQUIVALENT",
+            "confidence": 0.5,
+            "rationale": (
+                f"Giá trị nội bộ '{p['target'].text.strip()}' đáp ứng yêu cầu "
+                f"'{p['source'].text.strip()}' ({_bound_vi(p['source'].bound)})."
+            ),
+            "source_span": _span(
+                reg_clause_text, o_start + p["source"].start, o_start + p["source"].end
+            ),
+            "target_span": _span(internal_text, p["target"].start, p["target"].end),
+            "checks": checks,
+        }
+
+    return {
+        "category": "INDIRECT_IMPACT",
+        "confidence": 0.3,
+        "rationale": (
+            "Điều khoản nội bộ cùng chủ đề với nghĩa vụ mới (thuật ngữ chung: "
+            f"{', '.join(shared[:5]) or 'tương đồng ngữ nghĩa'}). "
+            "Rule chưa xác định được khác biệt cụ thể; "
+            "cần chuyên gia xác minh có phải sửa đổi hay không."
+        ),
+        "source_span": _span(reg_clause_text, o_start, obligation["span_end"]),
+        "target_span": _span(internal_text, *target_default),
+        "checks": checks,
+    }
+
+
+_SYSTEM = """Bạn là chuyên gia pháp chế ngân hàng. So sánh MỘT nghĩa vụ trong văn bản pháp quy mới
+với MỘT điều khoản quy định nội bộ. Chỉ dựa vào văn bản được cung cấp, không suy đoán.
+Nhãn hợp lệ:
+- EQUIVALENT: cùng nghĩa vụ dù khác từ ngữ, nội bộ đã đáp ứng
+- CONTRADICTION: yêu cầu xung đột trong cùng phạm vi
+- ADDITION: nguồn thêm yêu cầu mà điều khoản nội bộ chưa có
+- SCOPE_CHANGE: khác đối tượng, điều kiện hoặc ngoại lệ
+- VALUE_CHANGE: khác số liệu, hạn mức, thời hạn
+- INDIRECT_IMPACT: chỉ liên quan gián tiếp, cần xác minh
+Trả về DUY NHẤT một JSON object:
+{"classification": "<nhãn>", "rationale": "<giải thích ngắn tiếng Việt>",
+ "source_quote": "<trích nguyên văn ngắn từ nghĩa vụ nguồn>",
+ "target_quote": "<trích nguyên văn ngắn từ điều khoản nội bộ>",
+ "confidence": <0..1>, "conditions_to_verify": ["..."]}
+Trích dẫn phải sao chép CHÍNH XÁC từ văn bản. Nếu không đủ căn cứ, dùng INDIRECT_IMPACT."""
+
+
+def llm_classify(
+    obligation: dict, reg_clause_text: str, internal: dict, context: list[dict], rule: dict
+) -> dict:
+    user = json.dumps(
+        {
+            "nghia_vu_nguon": {
+                "trich_dan": obligation["text"],
+                "chu_the": obligation["subject"],
+                "muc_bat_buoc": obligation["modality"],
+                "dieu_kien": obligation.get("condition"),
+                "thoi_han": obligation.get("deadline"),
+                "ngoai_le": obligation.get("exception"),
+                "dieu_khoan_day_du": reg_clause_text[:2000],
+            },
+            "dieu_khoan_noi_bo": {
+                "ma": internal["clause_id"],
+                "noi_dung": internal["text"][:2000],
+                "ngu_canh": [c["text"] for c in context][:4],
+            },
+            "ket_qua_rule": {"nhan": rule["category"], "kiem_tra": rule["checks"]},
+        },
+        ensure_ascii=False,
+    )
+    return llm.chat_json(_SYSTEM, user)
+
+
+def _ask_grounded(obligation, reg_clause_text, internal, context, rule, attempts: int = 2):
+    """Ask the LLM judge; retry once when its label or quotes cannot be found in the sources."""
+    answer, src, tgt = {}, None, None
+    for _ in range(attempts):
+        answer = llm_classify(obligation, reg_clause_text, internal, context, rule)
+        label = str(answer.get("classification", "")).upper()
+        src = _locate(obligation["text"], answer.get("source_quote"))
+        tgt = _locate(internal["text"], answer.get("target_quote"))
+        if label in LABELS and src is not None and tgt is not None:
+            return label, answer, src, tgt
+    return None, answer, src, tgt
+
+
+def classify(
+    obligation: dict,
+    reg_clause_text: str,
+    internal: dict,
+    evidence: dict,
+    context: list[dict],
+    use_llm: bool,
+) -> dict:
+    rule = rule_classify(obligation, reg_clause_text, internal["text"], evidence)
+    result = {**rule, "method": "rule"}
+    checks = list(rule["checks"])
+    if use_llm:
+        try:
+            label, answer, src, tgt = _ask_grounded(
+                obligation, reg_clause_text, internal, context, rule
+            )
+        except Exception as exc:  # LLM down or malformed: keep the rule result, say so
+            checks.append({"check": "llm_judge", "status": "error", "detail": str(exc)[:200]})
+        else:
+            if label is None:
+                # Fail closed: an answer we cannot trace to the sources is not used.
+                checks.append(
+                    {
+                        "check": "source_grounding",
+                        "status": "fail",
+                        "detail": {
+                            "reason": "LLM label or quote not found verbatim in the sources",
+                            "llm_label": answer.get("classification"),
+                            "source_quote": str(answer.get("source_quote"))[:300],
+                            "target_quote": str(answer.get("target_quote"))[:300],
+                        },
+                    }
+                )
+            else:
+                checks.append(
+                    {
+                        "check": "source_grounding",
+                        "status": "pass",
+                        "detail": "LLM quotes found verbatim",
+                    }
+                )
+                conflict = rule["category"] in ("VALUE_CHANGE", "CONTRADICTION")
+                if conflict and label in ("EQUIVALENT", "INDIRECT_IMPACT"):
+                    # Fail closed: a rule-detected conflict is never overridden as safe.
+                    checks.append(
+                        {
+                            "check": "verifier_agreement",
+                            "status": "fail",
+                            "detail": f"rule={rule['category']} llm={label}; giữ nhãn rule",
+                        }
+                    )
+                else:
+                    result.update(
+                        category=label,
+                        rationale=str(answer.get("rationale", ""))[:2000] or rule["rationale"],
+                        confidence=_clamp(answer.get("confidence")),
+                    )
+                    if not (conflict and label == rule["category"]):
+                        # Same conflict as the rule: keep the rule's exact value spans, which
+                        # a minimal patch needs; otherwise use the LLM's verified quotes.
+                        o_start = obligation["span_start"]
+                        result.update(
+                            source_span=_span(reg_clause_text, o_start + src[0], o_start + src[1]),
+                            target_span=_span(internal["text"], *tgt),
+                        )
+                    if conflict:
+                        checks.append(
+                            {
+                                "check": "verifier_agreement",
+                                "status": "pass" if label == rule["category"] else "warn",
+                                "detail": f"rule={rule['category']} llm={label}",
+                            }
+                        )
+                result["method"] = "llm+rule"
+                result["conditions_to_verify"] = [
+                    str(c) for c in answer.get("conditions_to_verify", [])
+                ][:10]
+    result["checks"] = checks
+    return result
+
+
+def _pair_detail(p: dict) -> str:
+    s, t = p["source"], p["target"]
+    verdict = "conflict" if p["conflict"] else "ok"
+    return f"{s.text.strip()} ({s.bound}) vs {t.text.strip()} → {verdict}"
+
+
+def _clamp(value) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return 0.5
+
+
+def _bound_vi(bound: str) -> str:
+    return {"max": "mức tối đa", "min": "mức tối thiểu"}.get(bound, "giá trị cụ thể")
+
+
+def _modality_vi(modality: str) -> str:
+    return {"must": "bắt buộc", "must_not": "cấm"}.get(modality, "cho phép")

@@ -1,0 +1,1042 @@
+{
+  "stage": "parsed",
+  "source_file": "db/DOC-102.md",
+  "note": "Kết quả parse cấu trúc DOC-102.md, trước embedding và trước khi ghi DB. Các bảng obligation, index_view, evidence, impact_finding, amendment chưa có ở bước này. page để trống vì nguồn là Markdown, chưa có số trang PDF. char_start/char_end là offset ký tự trong file nguồn; file[char_start:char_end] bằng text.",
+  "document": {
+    "document_id": "DOC-102",
+    "title": "Quy định nội bộ rà soát hồ sơ khách hàng",
+    "doc_type": "internal",
+    "owner": "Khối Tuân thủ"
+  },
+  "document_version": {
+    "version_id": "DOC-102@v4",
+    "document_id": "DOC-102",
+    "version_label": "v4",
+    "status": "effective",
+    "valid_from": "2024-01-15",
+    "valid_to": null,
+    "checksum": "sha256:3c2acc48f4ddc0d56e060f979431013e51a05cd7a3004c9099c3fc82dfd97f19"
+  },
+  "clause": [
+    {
+      "clause_id": "DOC-102@v4#QD",
+      "version_id": "DOC-102@v4",
+      "parent_id": null,
+      "numbering": "QD",
+      "text": "QUYẾT ĐỊNH",
+      "page": null,
+      "char_start": 437,
+      "char_end": 447
+    },
+    {
+      "clause_id": "DOC-102@v4#QD.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#QD",
+      "numbering": "QD.1",
+      "text": "Ban hành kèm theo Quyết định này Quy định nội bộ rà soát hồ sơ khách hàng, mã tài liệu DOC-102, phiên bản 4.0.",
+      "page": null,
+      "char_start": 912,
+      "char_end": 1022
+    },
+    {
+      "clause_id": "DOC-102@v4#QD.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#QD",
+      "numbering": "QD.2",
+      "text": "Quy định này có hiệu lực kể từ ngày 15 tháng 01 năm 2024 và thay thế Quy định nội bộ rà soát hồ sơ khách hàng mã DOC-102 phiên bản 3.0 ban hành kèm theo Quyết định số 88/2022/QĐ-TGĐ ngày 20 tháng 6 năm 2022.\n\nCác hợp đồng, thỏa thuận và hồ sơ khách hàng đã giao kết trước ngày Quy định này có hiệu lực tiếp tục được thực hiện theo thỏa thuận đã ký; việc rà soát, cập nhật thông tin thực hiện theo Quy định này kể từ ngày có hiệu lực.",
+      "page": null,
+      "char_start": 1036,
+      "char_end": 1469
+    },
+    {
+      "clause_id": "DOC-102@v4#QD.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#QD",
+      "numbering": "QD.3",
+      "text": "Giám đốc Khối Tuân thủ, Giám đốc các Khối, Trung tâm, Phòng thuộc Hội sở, Giám đốc Chi nhánh, Giám đốc Phòng giao dịch và các cá nhân có liên quan chịu trách nhiệm thi hành Quyết định này.",
+      "page": null,
+      "char_start": 1483,
+      "char_end": 1671
+    },
+    {
+      "clause_id": "DOC-102@v4#QDINH",
+      "version_id": "DOC-102@v4",
+      "parent_id": null,
+      "numbering": "QDINH",
+      "text": "QUY ĐỊNH",
+      "page": null,
+      "char_start": 1983,
+      "char_end": 1991
+    },
+    {
+      "clause_id": "DOC-102@v4#I",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#QDINH",
+      "numbering": "I",
+      "text": "QUY ĐỊNH CHUNG",
+      "page": null,
+      "char_start": 2260,
+      "char_end": 2274
+    },
+    {
+      "clause_id": "DOC-102@v4#1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#I",
+      "numbering": "1",
+      "text": "Phạm vi điều chỉnh",
+      "page": null,
+      "char_start": 2288,
+      "char_end": 2306
+    },
+    {
+      "clause_id": "DOC-102@v4#1.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#1",
+      "numbering": "1.1",
+      "text": "Quy định này điều chỉnh việc thu thập, xác minh, cập nhật, rà soát định kỳ và lưu trữ hồ sơ nhận biết khách hàng tại Ngân hàng TMCP Á Châu, bao gồm khách hàng đang quan hệ và khách hàng đề nghị thiết lập quan hệ.",
+      "page": null,
+      "char_start": 2311,
+      "char_end": 2523
+    },
+    {
+      "clause_id": "DOC-102@v4#1.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#1",
+      "numbering": "1.2",
+      "text": "Quy định này áp dụng đối với quan hệ được thiết lập tại quầy, qua ngân hàng số, qua đơn vị chấp nhận thanh toán và qua bên thứ ba được Ngân hàng ủy quyền thu thập hồ sơ.",
+      "page": null,
+      "char_start": 2528,
+      "char_end": 2697
+    },
+    {
+      "clause_id": "DOC-102@v4#1.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#1",
+      "numbering": "1.3",
+      "text": "Việc báo cáo giao dịch đáng ngờ, phong tỏa tài khoản theo yêu cầu của cơ quan nhà nước có thẩm quyền và lưu trữ chứng từ giao dịch thực hiện theo quy định riêng. Trường hợp quy định riêng dẫn chiếu đến hồ sơ nhận biết khách hàng thì thực hiện đồng thời theo Quy định này.",
+      "page": null,
+      "char_start": 2702,
+      "char_end": 2973
+    },
+    {
+      "clause_id": "DOC-102@v4#2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#I",
+      "numbering": "2",
+      "text": "Đối tượng áp dụng",
+      "page": null,
+      "char_start": 2987,
+      "char_end": 3004
+    },
+    {
+      "clause_id": "DOC-102@v4#2.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#2",
+      "numbering": "2.1",
+      "text": "Quy định này áp dụng đối với:",
+      "page": null,
+      "char_start": 3009,
+      "char_end": 3038
+    },
+    {
+      "clause_id": "DOC-102@v4#2.1.a",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#2.1",
+      "numbering": "2.1.a",
+      "text": "Khối Tuân thủ;",
+      "page": null,
+      "char_start": 3043,
+      "char_end": 3057
+    },
+    {
+      "clause_id": "DOC-102@v4#2.1.b",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#2.1",
+      "numbering": "2.1.b",
+      "text": "Khối Khách hàng cá nhân, Khối Khách hàng doanh nghiệp và các đơn vị kinh doanh;",
+      "page": null,
+      "char_start": 3062,
+      "char_end": 3141
+    },
+    {
+      "clause_id": "DOC-102@v4#2.1.c",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#2.1",
+      "numbering": "2.1.c",
+      "text": "Trung tâm Ngân hàng số và các đơn vị vận hành kênh điện tử;",
+      "page": null,
+      "char_start": 3146,
+      "char_end": 3205
+    },
+    {
+      "clause_id": "DOC-102@v4#2.1.d",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#2.1",
+      "numbering": "2.1.d",
+      "text": "Chi nhánh, Phòng giao dịch;",
+      "page": null,
+      "char_start": 3210,
+      "char_end": 3237
+    },
+    {
+      "clause_id": "DOC-102@v4#2.1.đ",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#2.1",
+      "numbering": "2.1.đ",
+      "text": "Cán bộ giao dịch, cán bộ quản lý quan hệ khách hàng, cán bộ kiểm soát và người phê duyệt hồ sơ.",
+      "page": null,
+      "char_start": 3242,
+      "char_end": 3337
+    },
+    {
+      "clause_id": "DOC-102@v4#2.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#2",
+      "numbering": "2.2",
+      "text": "Cá nhân, tổ chức là khách hàng không phải đối tượng thi hành nội bộ, nhưng có nghĩa vụ cung cấp thông tin trung thực theo hợp đồng và theo quy định của pháp luật.",
+      "page": null,
+      "char_start": 3342,
+      "char_end": 3504
+    },
+    {
+      "clause_id": "DOC-102@v4#3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#I",
+      "numbering": "3",
+      "text": "Giải thích từ ngữ\n\nTrong Quy định này, các từ ngữ dưới đây được hiểu như sau:",
+      "page": null,
+      "char_start": 3518,
+      "char_end": 3595
+    },
+    {
+      "clause_id": "DOC-102@v4#3.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#3",
+      "numbering": "3.1",
+      "text": "*Khách hàng* là cá nhân hoặc tổ chức đang sử dụng hoặc đề nghị sử dụng sản phẩm, dịch vụ của Ngân hàng.",
+      "page": null,
+      "char_start": 3600,
+      "char_end": 3703
+    },
+    {
+      "clause_id": "DOC-102@v4#3.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#3",
+      "numbering": "3.2",
+      "text": "*Hồ sơ khách hàng* là tập hợp thông tin, giấy tờ và dữ liệu điện tử dùng để nhận biết, xác minh danh tính, xác định chủ sở hữu hưởng lợi và đánh giá rủi ro rửa tiền của khách hàng.",
+      "page": null,
+      "char_start": 3708,
+      "char_end": 3888
+    },
+    {
+      "clause_id": "DOC-102@v4#3.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#3",
+      "numbering": "3.3",
+      "text": "*Rà soát hồ sơ* là việc đối chiếu thông tin đang lưu với giấy tờ, dữ liệu mới hoặc với khai báo của khách hàng để xác định thông tin còn đúng, còn đủ và còn phù hợp mức rủi ro.",
+      "page": null,
+      "char_start": 3893,
+      "char_end": 4069
+    },
+    {
+      "clause_id": "DOC-102@v4#3.4",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#3",
+      "numbering": "3.4",
+      "text": "*Đơn vị thực hiện* là chi nhánh, phòng giao dịch hoặc bộ phận được giao mở và quản lý quan hệ khách hàng.",
+      "page": null,
+      "char_start": 4074,
+      "char_end": 4179
+    },
+    {
+      "clause_id": "DOC-102@v4#3.5",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#3",
+      "numbering": "3.5",
+      "text": "*Khách hàng rủi ro cao* là khách hàng được phân loại rủi ro cao theo chính sách phân loại rủi ro rửa tiền hiện hành của Ngân hàng.",
+      "page": null,
+      "char_start": 4184,
+      "char_end": 4314
+    },
+    {
+      "clause_id": "DOC-102@v4#3.6",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#3",
+      "numbering": "3.6",
+      "text": "*Chủ sở hữu hưởng lợi* là cá nhân sở hữu thực tế hoặc kiểm soát thực tế khách hàng là tổ chức, theo tiêu chí Ngân hàng công bố trong hướng dẫn nghiệp vụ.",
+      "page": null,
+      "char_start": 4319,
+      "char_end": 4472
+    },
+    {
+      "clause_id": "DOC-102@v4#3.7",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#3",
+      "numbering": "3.7",
+      "text": "*Ngày rà soát gần nhất* là ngày đơn vị hoàn tất việc rà soát và ghi nhận kết quả trên hệ thống hồ sơ khách hàng.",
+      "page": null,
+      "char_start": 4477,
+      "char_end": 4589
+    },
+    {
+      "clause_id": "DOC-102@v4#4",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#I",
+      "numbering": "4",
+      "text": "Nguyên tắc",
+      "page": null,
+      "char_start": 4603,
+      "char_end": 4613
+    },
+    {
+      "clause_id": "DOC-102@v4#4.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#4",
+      "numbering": "4.1",
+      "text": "Thông tin nhận biết khách hàng phải được thu thập trước khi thiết lập quan hệ, trừ trường hợp pháp luật cho phép hoàn thiện sau và Ngân hàng đã có biện pháp kiểm soát tương ứng.",
+      "page": null,
+      "char_start": 4618,
+      "char_end": 4795
+    },
+    {
+      "clause_id": "DOC-102@v4#4.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#4",
+      "numbering": "4.2",
+      "text": "Ngân hàng không cung cấp sản phẩm, dịch vụ khi chưa hoàn thành các biện pháp nhận biết khách hàng bắt buộc đối với sản phẩm, dịch vụ đó.",
+      "page": null,
+      "char_start": 4800,
+      "char_end": 4936
+    },
+    {
+      "clause_id": "DOC-102@v4#4.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#4",
+      "numbering": "4.3",
+      "text": "Việc rà soát phải dựa trên hồ sơ lưu, không suy đoán thay cho chứng từ. Kết quả rà soát, người thực hiện và thời điểm thực hiện phải truy xuất được trên hệ thống.",
+      "page": null,
+      "char_start": 4941,
+      "char_end": 5103
+    },
+    {
+      "clause_id": "DOC-102@v4#4.4",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#4",
+      "numbering": "4.4",
+      "text": "Quy định này không thay thế nghĩa vụ của đơn vị trong việc từ chối giao dịch, tạm dừng quan hệ hoặc báo cáo khi có dấu hiệu đáng ngờ.",
+      "page": null,
+      "char_start": 5108,
+      "char_end": 5241
+    },
+    {
+      "clause_id": "DOC-102@v4#II",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#QDINH",
+      "numbering": "II",
+      "text": "THIẾT LẬP VÀ PHÂN LOẠI HỒ SƠ",
+      "page": null,
+      "char_start": 5265,
+      "char_end": 5293
+    },
+    {
+      "clause_id": "DOC-102@v4#5",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#II",
+      "numbering": "5",
+      "text": "Rà soát hồ sơ định kỳ",
+      "page": null,
+      "char_start": 5307,
+      "char_end": 5328
+    },
+    {
+      "clause_id": "DOC-102@v4#5.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5",
+      "numbering": "5.1",
+      "text": "Rà soát hồ sơ định kỳ nhằm bảo đảm thông tin nhận biết khách hàng, thông tin người đại diện hợp pháp và thông tin chủ sở hữu hưởng lợi còn chính xác so với hồ sơ Ngân hàng đang lưu.",
+      "page": null,
+      "char_start": 5333,
+      "char_end": 5514
+    },
+    {
+      "clause_id": "DOC-102@v4#5.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5",
+      "numbering": "5.2",
+      "text": "Đơn vị thực hiện rà soát hồ sơ khách hàng định kỳ 24 tháng.",
+      "page": null,
+      "char_start": 5519,
+      "char_end": 5578
+    },
+    {
+      "clause_id": "DOC-102@v4#5.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5",
+      "numbering": "5.3",
+      "text": "Thời hạn 24 tháng được tính từ ngày rà soát gần nhất. Trường hợp chưa có lần rà soát nào, thời hạn được tính từ ngày thiết lập quan hệ.",
+      "page": null,
+      "char_start": 5583,
+      "char_end": 5718
+    },
+    {
+      "clause_id": "DOC-102@v4#5.4",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5",
+      "numbering": "5.4",
+      "text": "Chậm nhất mười lăm ngày làm việc trước ngày đến hạn, hệ thống hồ sơ khách hàng tạo danh sách đến hạn và chuyển đơn vị đang quản lý khách hàng. Đơn vị hoàn tất rà soát trước ngày đến hạn.",
+      "page": null,
+      "char_start": 5723,
+      "char_end": 5909
+    },
+    {
+      "clause_id": "DOC-102@v4#5.5",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5",
+      "numbering": "5.5",
+      "text": "Đối với khách hàng rủi ro cao, thời hạn rà soát định kỳ là 12 tháng. Thời hạn ngắn hơn do cấp có thẩm quyền quyết định đối với từng khách hàng được ghi rõ lý do trong hồ sơ.",
+      "page": null,
+      "char_start": 5914,
+      "char_end": 6087
+    },
+    {
+      "clause_id": "DOC-102@v4#5.6",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5",
+      "numbering": "5.6",
+      "text": "Ngoài kỳ hạn tại khoản 2 và khoản 5 Điều này, đơn vị thực hiện rà soát trước hạn khi có một trong các căn cứ sau:",
+      "page": null,
+      "char_start": 6092,
+      "char_end": 6205
+    },
+    {
+      "clause_id": "DOC-102@v4#5.6.a",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5.6",
+      "numbering": "5.6.a",
+      "text": "Khách hàng thông báo thay đổi giấy tờ tùy thân, người đại diện theo pháp luật, địa chỉ trụ sở, ngành nghề hoặc chủ sở hữu hưởng lợi;",
+      "page": null,
+      "char_start": 6210,
+      "char_end": 6342
+    },
+    {
+      "clause_id": "DOC-102@v4#5.6.b",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5.6",
+      "numbering": "5.6.b",
+      "text": "Ngân hàng nhận thấy thông tin đang lưu mâu thuẫn với chứng từ giao dịch hoặc với kết quả sàng lọc;",
+      "page": null,
+      "char_start": 6347,
+      "char_end": 6445
+    },
+    {
+      "clause_id": "DOC-102@v4#5.6.c",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5.6",
+      "numbering": "5.6.c",
+      "text": "Sản phẩm, dịch vụ khách hàng sử dụng làm thay đổi mức rủi ro đã gán;",
+      "page": null,
+      "char_start": 6450,
+      "char_end": 6518
+    },
+    {
+      "clause_id": "DOC-102@v4#5.6.d",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5.6",
+      "numbering": "5.6.d",
+      "text": "Có yêu cầu của Khối Tuân thủ hoặc của cơ quan nhà nước có thẩm quyền.",
+      "page": null,
+      "char_start": 6523,
+      "char_end": 6592
+    },
+    {
+      "clause_id": "DOC-102@v4#5.7",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#5",
+      "numbering": "5.7",
+      "text": "Khách hàng đã chấm dứt mọi quan hệ và đã tất toán nghĩa vụ với Ngân hàng không đưa vào kỳ rà soát tiếp theo. Hồ sơ đã đóng vẫn được lưu theo thời hạn tại Điều 10 Quy định này.",
+      "page": null,
+      "char_start": 6597,
+      "char_end": 6772
+    },
+    {
+      "clause_id": "DOC-102@v4#6",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#II",
+      "numbering": "6",
+      "text": "Nội dung rà soát",
+      "page": null,
+      "char_start": 6786,
+      "char_end": 6802
+    },
+    {
+      "clause_id": "DOC-102@v4#6.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#6",
+      "numbering": "6.1",
+      "text": "Mỗi lần rà soát, đơn vị kiểm tra tối thiểu các nhóm thông tin sau:",
+      "page": null,
+      "char_start": 6807,
+      "char_end": 6873
+    },
+    {
+      "clause_id": "DOC-102@v4#6.1.a",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#6.1",
+      "numbering": "6.1.a",
+      "text": "Họ, tên, ngày sinh, quốc tịch, số định danh cá nhân hoặc số hộ chiếu, nơi cư trú đối với khách hàng cá nhân; tên giao dịch, mã số doanh nghiệp, địa chỉ trụ sở, người đại diện theo pháp luật đối với khách hàng tổ chức;",
+      "page": null,
+      "char_start": 6878,
+      "char_end": 7095
+    },
+    {
+      "clause_id": "DOC-102@v4#6.1.b",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#6.1",
+      "numbering": "6.1.b",
+      "text": "Nghề nghiệp, chức vụ hoặc ngành nghề kinh doanh; mục đích và bản chất mối quan hệ với Ngân hàng;",
+      "page": null,
+      "char_start": 7100,
+      "char_end": 7196
+    },
+    {
+      "clause_id": "DOC-102@v4#6.1.c",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#6.1",
+      "numbering": "6.1.c",
+      "text": "Thông tin chủ sở hữu hưởng lợi đối với khách hàng tổ chức;",
+      "page": null,
+      "char_start": 7201,
+      "char_end": 7259
+    },
+    {
+      "clause_id": "DOC-102@v4#6.1.d",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#6.1",
+      "numbering": "6.1.d",
+      "text": "Mẫu chữ ký, thông tin người được ủy quyền còn hiệu lực, nếu quan hệ còn sử dụng chứng từ giấy;",
+      "page": null,
+      "char_start": 7264,
+      "char_end": 7358
+    },
+    {
+      "clause_id": "DOC-102@v4#6.1.đ",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#6.1",
+      "numbering": "6.1.đ",
+      "text": "Kết quả phân loại rủi ro và căn cứ phân loại.",
+      "page": null,
+      "char_start": 7363,
+      "char_end": 7408
+    },
+    {
+      "clause_id": "DOC-102@v4#6.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#6",
+      "numbering": "6.2",
+      "text": "Đơn vị đối chiếu thông tin trên hệ thống với bản gốc hoặc bản điện tử được phép dùng của giấy tờ. Khi thông tin thay đổi, đơn vị cập nhật hệ thống và lưu chứng từ làm căn cứ cập nhật.",
+      "page": null,
+      "char_start": 7413,
+      "char_end": 7596
+    },
+    {
+      "clause_id": "DOC-102@v4#6.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#6",
+      "numbering": "6.3",
+      "text": "Kết quả mỗi lần rà soát được ghi một trong các trạng thái: thông tin còn phù hợp; đã cập nhật; chưa liên hệ được khách hàng; đề nghị chấm dứt hoặc hạn chế quan hệ. Trạng thái \"chưa liên hệ được khách hàng\" không được giữ quá sáu mươi ngày kể từ ngày đến hạn rà soát.",
+      "page": null,
+      "char_start": 7601,
+      "char_end": 7867
+    },
+    {
+      "clause_id": "DOC-102@v4#7",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#II",
+      "numbering": "7",
+      "text": "Hồ sơ mở quan hệ",
+      "page": null,
+      "char_start": 7881,
+      "char_end": 7897
+    },
+    {
+      "clause_id": "DOC-102@v4#7.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#7",
+      "numbering": "7.1",
+      "text": "Trước khi thiết lập quan hệ, đơn vị thu thập đủ hồ sơ theo Phụ lục I ban hành kèm theo Quy định này, phù hợp loại khách hàng và kênh tiếp nhận.",
+      "page": null,
+      "char_start": 7902,
+      "char_end": 8045
+    },
+    {
+      "clause_id": "DOC-102@v4#7.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#7",
+      "numbering": "7.2",
+      "text": "Cán bộ tiếp nhận kiểm tra tính đầy đủ, tính còn hiệu lực của giấy tờ và sự khớp giữa thông tin kê khai với giấy tờ. Cán bộ kiểm soát xác nhận trước khi phê duyệt mở quan hệ.",
+      "page": null,
+      "char_start": 8050,
+      "char_end": 8223
+    },
+    {
+      "clause_id": "DOC-102@v4#7.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#7",
+      "numbering": "7.3",
+      "text": "Khách hàng tổ chức phải có thông tin nhận biết chủ sở hữu hưởng lợi. Trường hợp chưa xác định được, đơn vị không hoàn tất mở quan hệ và ghi rõ thông tin còn thiếu.",
+      "page": null,
+      "char_start": 8228,
+      "char_end": 8391
+    },
+    {
+      "clause_id": "DOC-102@v4#7.4",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#7",
+      "numbering": "7.4",
+      "text": "Hồ sơ thu qua ngân hàng số phải lưu ảnh hoặc dữ liệu giấy tờ, dấu vết xác thực và kết quả đối chiếu. Ảnh hoặc dữ liệu không đủ điều kiện đọc được xử lý như hồ sơ chưa hoàn chỉnh.",
+      "page": null,
+      "char_start": 8396,
+      "char_end": 8574
+    },
+    {
+      "clause_id": "DOC-102@v4#III",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#QDINH",
+      "numbering": "III",
+      "text": "XỬ LÝ KẾT QUẢ VÀ LƯU TRỮ",
+      "page": null,
+      "char_start": 8599,
+      "char_end": 8623
+    },
+    {
+      "clause_id": "DOC-102@v4#8",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#III",
+      "numbering": "8",
+      "text": "Xử lý thông tin không còn phù hợp",
+      "page": null,
+      "char_start": 8637,
+      "char_end": 8670
+    },
+    {
+      "clause_id": "DOC-102@v4#8.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#8",
+      "numbering": "8.1",
+      "text": "Khi thông tin định danh không khớp giấy tờ hoặc khách hàng không bổ sung hồ sơ trong thời hạn đơn vị đã thông báo, đơn vị áp dụng biện pháp theo thẩm quyền đã được phân cấp, gồm hạn chế giao dịch, tạm dừng dịch vụ hoặc từ chối tiếp tục quan hệ.",
+      "page": null,
+      "char_start": 8675,
+      "char_end": 8919
+    },
+    {
+      "clause_id": "DOC-102@v4#8.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#8",
+      "numbering": "8.2",
+      "text": "Biện pháp hạn chế phải ghi nhận lý do, thời điểm áp dụng và người phê duyệt. Việc gỡ biện pháp chỉ được thực hiện khi căn cứ áp dụng không còn.",
+      "page": null,
+      "char_start": 8924,
+      "char_end": 9067
+    },
+    {
+      "clause_id": "DOC-102@v4#8.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#8",
+      "numbering": "8.3",
+      "text": "Dấu hiệu đáng ngờ phát hiện trong khi rà soát được chuyển Khối Tuân thủ theo quy trình báo cáo nội bộ. Việc rà soát không thay thế quy trình báo cáo đó.",
+      "page": null,
+      "char_start": 9072,
+      "char_end": 9224
+    },
+    {
+      "clause_id": "DOC-102@v4#9",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#III",
+      "numbering": "9",
+      "text": "Trách nhiệm của đơn vị và của khách hàng",
+      "page": null,
+      "char_start": 9238,
+      "char_end": 9278
+    },
+    {
+      "clause_id": "DOC-102@v4#9.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#9",
+      "numbering": "9.1",
+      "text": "Đơn vị đang quản lý khách hàng chịu trách nhiệm hoàn thành rà soát đúng hạn, đúng nội dung và lưu đủ chứng từ.",
+      "page": null,
+      "char_start": 9283,
+      "char_end": 9393
+    },
+    {
+      "clause_id": "DOC-102@v4#9.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#9",
+      "numbering": "9.2",
+      "text": "Giám đốc chi nhánh hoặc người đứng đầu đơn vị tương đương chịu trách nhiệm bố trí người thực hiện, theo dõi danh sách quá hạn và giải quyết các trường hợp tồn đọng trên sáu mươi ngày.",
+      "page": null,
+      "char_start": 9398,
+      "char_end": 9581
+    },
+    {
+      "clause_id": "DOC-102@v4#9.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#9",
+      "numbering": "9.3",
+      "text": "Khối Tuân thủ hướng dẫn nghiệp vụ, kiểm tra việc chấp hành, tổng hợp kết quả rà soát và đề xuất sửa đổi Quy định này khi pháp luật hoặc sản phẩm của Ngân hàng thay đổi.",
+      "page": null,
+      "char_start": 9586,
+      "char_end": 9754
+    },
+    {
+      "clause_id": "DOC-102@v4#9.4",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#9",
+      "numbering": "9.4",
+      "text": "Khách hàng có trách nhiệm cung cấp thông tin trung thực và thông báo cho Ngân hàng khi thông tin nhận biết đã cung cấp thay đổi. Việc khách hàng chưa thông báo không làm mất nghĩa vụ rà soát của đơn vị.",
+      "page": null,
+      "char_start": 9759,
+      "char_end": 9961
+    },
+    {
+      "clause_id": "DOC-102@v4#10",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#III",
+      "numbering": "10",
+      "text": "Lưu trữ",
+      "page": null,
+      "char_start": 9976,
+      "char_end": 9983
+    },
+    {
+      "clause_id": "DOC-102@v4#10.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#10",
+      "numbering": "10.1",
+      "text": "Hồ sơ nhận biết khách hàng, chứng từ rà soát và nhật ký cập nhật được lưu tối thiểu năm năm kể từ ngày đóng quan hệ hoặc kể từ ngày phát sinh giao dịch gần nhất, tùy thời điểm nào muộn hơn, trừ khi pháp luật hoặc quy định nội bộ về lưu trữ chứng từ yêu cầu thời hạn dài hơn.",
+      "page": null,
+      "char_start": 9988,
+      "char_end": 10262
+    },
+    {
+      "clause_id": "DOC-102@v4#10.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#10",
+      "numbering": "10.2",
+      "text": "Hồ sơ điện tử được lưu trên hệ thống hồ sơ khách hàng. Đơn vị không lưu bản sao ngoài hệ thống làm hồ sơ chính thức nếu bản đó không được kiểm soát phiên bản.",
+      "page": null,
+      "char_start": 10267,
+      "char_end": 10425
+    },
+    {
+      "clause_id": "DOC-102@v4#10.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#10",
+      "numbering": "10.3",
+      "text": "Hồ sơ phải tra cứu được theo mã khách hàng, ngày rà soát và người thực hiện. Khi xuất trình cho kiểm tra nội bộ hoặc cơ quan có thẩm quyền, đơn vị xuất đúng phiên bản đã lưu, không biên tập lại nội dung.",
+      "page": null,
+      "char_start": 10430,
+      "char_end": 10633
+    },
+    {
+      "clause_id": "DOC-102@v4#IV",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#QDINH",
+      "numbering": "IV",
+      "text": "TỔ CHỨC THỰC HIỆN",
+      "page": null,
+      "char_start": 10657,
+      "char_end": 10674
+    },
+    {
+      "clause_id": "DOC-102@v4#11",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#IV",
+      "numbering": "11",
+      "text": "Báo cáo",
+      "page": null,
+      "char_start": 10689,
+      "char_end": 10696
+    },
+    {
+      "clause_id": "DOC-102@v4#11.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#11",
+      "numbering": "11.1",
+      "text": "Định kỳ vào ngày làm việc thứ mười của tháng đầu mỗi quý, các đơn vị báo cáo Khối Tuân thủ:",
+      "page": null,
+      "char_start": 10701,
+      "char_end": 10792
+    },
+    {
+      "clause_id": "DOC-102@v4#11.1.a",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#11.1",
+      "numbering": "11.1.a",
+      "text": "Số khách hàng đến hạn rà soát trong quý trước;",
+      "page": null,
+      "char_start": 10797,
+      "char_end": 10843
+    },
+    {
+      "clause_id": "DOC-102@v4#11.1.b",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#11.1",
+      "numbering": "11.1.b",
+      "text": "Số hồ sơ đã hoàn thành, số hồ sơ quá hạn và lý do quá hạn;",
+      "page": null,
+      "char_start": 10848,
+      "char_end": 10906
+    },
+    {
+      "clause_id": "DOC-102@v4#11.1.c",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#11.1",
+      "numbering": "11.1.c",
+      "text": "Số trường hợp phải rà soát trước hạn theo khoản 6 Điều 5 Quy định này;",
+      "page": null,
+      "char_start": 10911,
+      "char_end": 10981
+    },
+    {
+      "clause_id": "DOC-102@v4#11.1.d",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#11.1",
+      "numbering": "11.1.d",
+      "text": "Các vướng mắc về hồ sơ, hệ thống hoặc phân cấp phê duyệt.",
+      "page": null,
+      "char_start": 10986,
+      "char_end": 11043
+    },
+    {
+      "clause_id": "DOC-102@v4#11.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#11",
+      "numbering": "11.2",
+      "text": "Khối Tuân thủ tổng hợp, báo cáo Tổng Giám đốc khi tỷ lệ hồ sơ quá hạn hoặc tính chất tồn đọng vượt mức cảnh báo nội bộ.",
+      "page": null,
+      "char_start": 11048,
+      "char_end": 11167
+    },
+    {
+      "clause_id": "DOC-102@v4#12",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#IV",
+      "numbering": "12",
+      "text": "Hiệu lực thi hành",
+      "page": null,
+      "char_start": 11182,
+      "char_end": 11199
+    },
+    {
+      "clause_id": "DOC-102@v4#12.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#12",
+      "numbering": "12.1",
+      "text": "Quy định này có hiệu lực kể từ ngày 15 tháng 01 năm 2024.",
+      "page": null,
+      "char_start": 11204,
+      "char_end": 11261
+    },
+    {
+      "clause_id": "DOC-102@v4#12.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#12",
+      "numbering": "12.2",
+      "text": "Khối Tuân thủ ban hành hướng dẫn biểu mẫu, cách tính kỳ rà soát trên hệ thống và cách ghi trạng thái kết quả trong thời hạn ba mươi ngày kể từ ngày Quy định này có hiệu lực. Hướng dẫn không được đặt thời hạn rà soát dài hơn thời hạn tại Điều 5.",
+      "page": null,
+      "char_start": 11266,
+      "char_end": 11510
+    },
+    {
+      "clause_id": "DOC-102@v4#12.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#12",
+      "numbering": "12.3",
+      "text": "Trong thời gian hướng dẫn chưa ban hành, các đơn vị tiếp tục dùng biểu mẫu phiên bản 3.0 nếu biểu mẫu đó không trái với Quy định này.",
+      "page": null,
+      "char_start": 11515,
+      "char_end": 11648
+    },
+    {
+      "clause_id": "DOC-102@v4#12.4",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#12",
+      "numbering": "12.4",
+      "text": "Trong quá trình thực hiện, nếu có vướng mắc, đơn vị phản ánh về Khối Tuân thủ để được hướng dẫn. Việc sửa đổi, bổ sung Quy định này do Tổng Giám đốc quyết định.",
+      "page": null,
+      "char_start": 11653,
+      "char_end": 11813
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#QDINH",
+      "numbering": "PL-I",
+      "text": "Danh mục hồ sơ tối thiểu khi mở quan hệ",
+      "page": null,
+      "char_start": 11837,
+      "char_end": 11876
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.1",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I",
+      "numbering": "PL-I.1",
+      "text": "Khách hàng cá nhân là người Việt Nam",
+      "page": null,
+      "char_start": 11941,
+      "char_end": 11977
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.1.a",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.1",
+      "numbering": "PL-I.1.a",
+      "text": "Giấy tờ chứng minh danh tính còn hiệu lực;",
+      "page": null,
+      "char_start": 11982,
+      "char_end": 12024
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.1.b",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.1",
+      "numbering": "PL-I.1.b",
+      "text": "Thông tin nghề nghiệp, chức vụ, số điện thoại và địa chỉ liên hệ;",
+      "page": null,
+      "char_start": 12029,
+      "char_end": 12094
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.1.c",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.1",
+      "numbering": "PL-I.1.c",
+      "text": "Thông tin mục đích quan hệ đối với sản phẩm có yêu cầu thu thập mục đích;",
+      "page": null,
+      "char_start": 12099,
+      "char_end": 12172
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.1.d",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.1",
+      "numbering": "PL-I.1.d",
+      "text": "Mẫu chữ ký hoặc dữ liệu xác thực điện tử tương ứng kênh mở quan hệ.",
+      "page": null,
+      "char_start": 12177,
+      "char_end": 12244
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.2",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I",
+      "numbering": "PL-I.2",
+      "text": "Khách hàng cá nhân là người nước ngoài",
+      "page": null,
+      "char_start": 12253,
+      "char_end": 12291
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.2.a",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.2",
+      "numbering": "PL-I.2.a",
+      "text": "Hộ chiếu hoặc giấy tờ nhập cảnh còn hiệu lực;",
+      "page": null,
+      "char_start": 12296,
+      "char_end": 12341
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.2.b",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.2",
+      "numbering": "PL-I.2.b",
+      "text": "Thị thực hoặc giấy tờ xác định thời hạn được phép cư trú tại Việt Nam, nếu pháp luật yêu cầu;",
+      "page": null,
+      "char_start": 12346,
+      "char_end": 12439
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.2.c",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.2",
+      "numbering": "PL-I.2.c",
+      "text": "Địa chỉ cư trú tại Việt Nam và địa chỉ tại nước mang quốc tịch, khi khách hàng có thông tin này;",
+      "page": null,
+      "char_start": 12444,
+      "char_end": 12540
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.2.d",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.2",
+      "numbering": "PL-I.2.d",
+      "text": "Các thông tin tại điểm b, c, d mục 1 Phụ lục này.",
+      "page": null,
+      "char_start": 12545,
+      "char_end": 12594
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.3",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I",
+      "numbering": "PL-I.3",
+      "text": "Khách hàng là tổ chức",
+      "page": null,
+      "char_start": 12603,
+      "char_end": 12624
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.3.a",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.3",
+      "numbering": "PL-I.3.a",
+      "text": "Giấy tờ chứng nhận đăng ký hoặc giấy tờ thành lập còn hiệu lực;",
+      "page": null,
+      "char_start": 12629,
+      "char_end": 12692
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.3.b",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.3",
+      "numbering": "PL-I.3.b",
+      "text": "Giấy tờ xác định người đại diện theo pháp luật và văn bản ủy quyền nếu giao dịch thông qua người được ủy quyền;",
+      "page": null,
+      "char_start": 12697,
+      "char_end": 12808
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.3.c",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.3",
+      "numbering": "PL-I.3.c",
+      "text": "Thông tin chủ sở hữu hưởng lợi và căn cứ xác định;",
+      "page": null,
+      "char_start": 12813,
+      "char_end": 12863
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.3.d",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I.3",
+      "numbering": "PL-I.3.d",
+      "text": "Địa chỉ trụ sở, ngành nghề kinh doanh và mục đích quan hệ với Ngân hàng.",
+      "page": null,
+      "char_start": 12868,
+      "char_end": 12940
+    },
+    {
+      "clause_id": "DOC-102@v4#PL-I.note",
+      "version_id": "DOC-102@v4",
+      "parent_id": "DOC-102@v4#PL-I",
+      "numbering": "PL-I.note",
+      "text": "Trường hợp sản phẩm cụ thể yêu cầu thêm chứng từ, đơn vị thực hiện theo quy định sản phẩm đó và vẫn phải đủ các mục của Phụ lục này.",
+      "page": null,
+      "char_start": 12942,
+      "char_end": 13074
+    }
+  ]
+}

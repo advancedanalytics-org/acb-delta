@@ -21,6 +21,20 @@ class Settings(BaseSettings):
     storage_local_dir: str = "/tmp/acb_delta/storage"
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
+    # Where uploaded originals live: "s3" (MinIO / vStorage) or "local" (dev and tests).
+    storage_backend: str = "local"
+    max_upload_mb: int = 50
+    # Background workers for parse / analyze jobs (in-process; no queue in Phase 1).
+    job_workers: int = 2
+
+    # Optional OpenAI-compatible LLM for impact judgement. Empty = rule-based comparison only.
+    openai_base_url: str = ""
+    openai_api_key: str = ""
+    llm_model: str = ""
+    # JSON merged into every chat request, e.g. {"reasoning": {"enabled": false}} on OpenRouter.
+    llm_extra_body: str = ""
+    llm_concurrency: int = 4
+
 
 @lru_cache
 def get_settings() -> Settings:
