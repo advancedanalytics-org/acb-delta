@@ -130,10 +130,10 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 
 ## Minh
 
-- [ ] **MINH-01** – Embed + search + metadata trên pgvector
-  - [ ] Chọn và test model embedding tiếng Việt trên MaaS
+- [~] **MINH-01** – Embed + search + metadata trên pgvector
+  - [ ] Chọn và test model embedding tiếng Việt trên MaaS (đã chạy thử `baai/bge-m3` qua OpenRouter, chưa thử MaaS)
   - [ ] Chốt schema chunk: `doc_id, doc_type, issuer, effective_date, article_path, page, bbox, text, embedding`
-  - [ ] Hybrid search: vector + keyword (Postgres full-text), filter theo metadata
+  - [x] Hybrid search: vector + keyword (Postgres full-text), filter theo metadata — `POST /api/regulations/{id}/analyze`, xem `docs/ria-ingest-analyze.md`
   - [ ] Rerank (tùy chọn nếu còn thời gian)
   - [ ] Đóng gói thành tool / hàm retrieve cho agent (`TAI-01`)
 - [ ] **MINH-02** – Làm việc với Tài để thống nhất document format cho tài liệu mock
