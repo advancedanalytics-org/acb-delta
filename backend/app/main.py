@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import ai, decisions, documents, health, jobs, regulations, vbpls
+from app.routers import ai, decisions, documents, evaluation, health, jobs, regulations, vbpls
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +26,10 @@ async def lifespan(app: FastAPI):
     from app.hitl import init_tables
 
     init_tables()
+    # KHOA-01: stored evaluation runs. Same reasoning as the HITL tables above, so not swallowed.
+    from app.evaluation.store import init_tables as init_eval_tables
+
+    init_eval_tables()
     # RIA tables and recovery of jobs cut off by a restart. A down DB must not stop the API
     # from starting: readiness reports it, and the RIA endpoints retry the schema on first use.
     try:
@@ -66,6 +70,9 @@ def create_app() -> FastAPI:
     # MINH-01: regulation ingest + impact analysis (RIA), and their async jobs
     app.include_router(regulations.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
+
+    # KHOA-01: evaluation runs for the dashboard
+    app.include_router(evaluation.router, prefix="/api")
     return app
 
 
