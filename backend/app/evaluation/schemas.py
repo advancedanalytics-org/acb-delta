@@ -6,6 +6,7 @@ dashboard reads every leaf unconditionally, so a missing group is a crash, not a
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -64,6 +65,30 @@ class EvalRunCreate(CamelModel):
     metrics: EvalMetricsOut
     # Settings behind these numbers, e.g. {"maxChanges": 10, "retrieveK": 5, "llmModel": "..."}.
     params: dict = Field(default_factory=dict)
+
+
+class FeedbackExample(CamelModel):
+    """One reviewer decision, shaped as a few-shot example (KHOA-02)."""
+
+    impact_id: str
+    category: str | None
+    reason_tags: list[str]
+    affected_text: str
+    # The text the reviewer wants, and the AI text they did not take. Either can be null: an
+    # accept has nothing rejected, and a failed draft has no AI text at all.
+    chosen: str | None
+    rejected: str | None
+    # Why RIA raised the finding. A negative judge example is only useful with this.
+    rationale: str | None
+
+
+class ExampleSet(CamelModel):
+    task: Literal["draft", "judge"]
+    positive: list[FeedbackExample]
+    negative: list[FeedbackExample]
+    # How many decisions were read and how many qualified, so a thin prompt is visibly thin
+    # rather than looking like there was no feedback.
+    counts: dict[str, int]
 
 
 class EvalRunOut(CamelModel):
