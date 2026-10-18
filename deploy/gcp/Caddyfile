@@ -1,0 +1,9 @@
+# Public entry point on the GCP VM: HTTPS (Let's Encrypt) + basic auth in front of the UI.
+# The UI's nginx already proxies /api to the backend, so one upstream is enough.
+{$SITE_ADDRESS} {
+	encode gzip
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+	reverse_proxy frontend:3000
+}
