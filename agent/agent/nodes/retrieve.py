@@ -1,10 +1,12 @@
-from agent.state import ImpactState
+from agent.config import get_settings
+from agent.retriever import retrieve_candidates
+from agent.schemas import Candidate, Change
 
 
-def retrieve(state: ImpactState) -> ImpactState:
-    """Find internal-document chunks related to each change (hybrid search on pgvector + rerank).
+def retrieve(change: Change) -> list[Candidate]:
+    """Find internal-document passages related to one change.
 
-    Owner: MINH-01 (retrieve tool), wired by TAI-01. Expected output:
-    {"candidates": [{"change", "chunk_id", "doc_id", "page", "bbox", "text"}, ...]}.
+    Search itself lives in `agent.retriever` (MINH-01 replaces it with pgvector hybrid search +
+    rerank); this helper only applies the run settings.
     """
-    return {"candidates": []}
+    return retrieve_candidates(change, k=get_settings().retrieve_k)

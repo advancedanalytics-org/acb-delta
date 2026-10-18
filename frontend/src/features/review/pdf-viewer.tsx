@@ -128,7 +128,7 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
 
   const pageWidth = Math.min(Math.max(width - 2 * PAGE_GAP, 0), MAX_PAGE_WIDTH)
   const selected = impacts.find((impact) => impact.id === selectedId)
-  const selectedPageReady = selected ? Boolean(pointWidths[selected.page]) : false
+  const selectedPageReady = selected?.page != null ? Boolean(pointWidths[selected.page]) : false
 
   useEffect(() => {
     if (!selectedPageReady) return
