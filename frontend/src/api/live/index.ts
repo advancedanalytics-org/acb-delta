@@ -1,5 +1,11 @@
 import type { ApiClient } from '@/api/client'
-import type { HealthReport, IngestDocumentResult, UploadVbplInput, Vbpl } from '@/api/types'
+import type {
+  EvalRun,
+  HealthReport,
+  IngestDocumentResult,
+  UploadVbplInput,
+  Vbpl,
+} from '@/api/types'
 
 /** Raised for endpoints whose backend task is not built yet. Shown in the screen's error state. */
 export class ApiNotAvailableError extends Error {
@@ -75,7 +81,12 @@ export const liveApi: ApiClient = {
   decide: notYet('TAI-02'),
   undoDecision: notYet('TAI-02'),
   listReviewers: notYet('TAI-02'),
-  listEvalRuns: notYet('KHOA-01'),
+  /** Oldest first: the dashboard reads the last run as current and the one before it as baseline. */
+  listEvalRuns: async (): Promise<EvalRun[]> => {
+    const response = await fetch('/api/eval/runs')
+    if (!response.ok) throw new ApiNotAvailableError('KHOA-01')
+    return response.json()
+  },
   getHealth: fetchHealth,
   resetDemo: () => Promise.resolve(),
 }
