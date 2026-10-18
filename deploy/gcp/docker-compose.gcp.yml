@@ -1,6 +1,12 @@
-# Overlay for the GCP VM: adds Caddy on 80/443. Used with the main file:
+# Overlay for the GCP VM: Caddy on 80/443, plus the models the api and agent call.
 #   docker compose -f docker-compose.yml -f deploy/gcp/docker-compose.gcp.yml up -d --wait
-# SITE_ADDRESS and BASIC_AUTH_* are written to .env on the VM by scripts/gcp.sh.
+# scripts/gcp.sh writes COMPOSE_FILE into the VM's .env, so plain `docker compose` and
+# scripts/run.sh on the VM always include this file. SITE_ADDRESS and BASIC_AUTH_* come from there too.
+#
+# Models on the VM (no OpenRouter, no API keys):
+#   chat       litellm   → Vertex AI Qwen3-Next-80B Instruct, authenticated as the VM's service account
+#   embedding  embedding → BAAI/bge-m3 (1024-dim) on Hugging Face text-embeddings-inference, CPU
+# These values replace whatever the VM's .env holds for the same variables.
 services:
   caddy:
     image: caddy:2.10-alpine
@@ -19,5 +25,73 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  litellm:
+    image: ghcr.io/berriai/litellm:main-v1.83.10-stable
+    command: [--config, /app/config.yaml, --port, "4000"]
+    volumes:
+      - ./deploy/gcp/litellm.yaml:/app/config.yaml:ro
+    # No ports: only the api and agent reach it, over the compose network. No master key for the
+    # same reason; both clients send a placeholder key.
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.3
+    # Measured on e2-standard-4: ~0.45 s per legal clause (DOC-102: 92 clauses in ~40 s).
+    # --max-batch-tokens=2048: TEI reserves memory for its largest batch up front; the default
+    #   took 10.3 GB idle, 2048 takes 2.3 GB. Longer inputs are truncated (with --auto-truncate)
+    #   instead of rejected; legal clauses are far shorter.
+    # --max-client-batch-size: the ingest path (langchain OpenAIEmbeddings) sends up to 1000 texts
+    #   per request; TEI's default of 32 would reject them.
+    command:
+      - --model-id=BAAI/bge-m3
+      - --auto-truncate
+      - --max-batch-tokens=2048
+      - --max-client-batch-size=1024
+    # A runaway request kills only this container (it restarts), never Postgres or the api.
+    mem_limit: 4g
+    volumes:
+      - embeddingdata:/data # model weights (~2.3 GB), downloaded on first start
+    healthcheck:
+      test: [CMD, curl, -fsS, http://localhost:80/health]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # First start downloads the weights before /health answers.
+      start_period: 600s
+    restart: unless-stopped
+
+  api:
+    environment:
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: unused
+      LLM_MODEL: qwen3-next-80b
+      # Instruct model: no thinking mode to switch off.
+      LLM_EXTRA_BODY: ""
+      EMBEDDING_BASE_URL: http://embedding:80/v1
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_API_KEY: unused
+    depends_on:
+      litellm:
+        condition: service_healthy
+      embedding:
+        condition: service_healthy
+
+  agent:
+    environment:
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: unused
+      LLM_MODEL: qwen3-next-80b
+      LLM_STRUCTURED_METHOD: json_schema
+    depends_on:
+      litellm:
+        condition: service_healthy
+
 volumes:
   caddydata:
+  embeddingdata:

@@ -77,11 +77,20 @@ A demo copy of the whole stack runs on one GCP VM (project `acb-delta-demo-2340`
 
 | Command | What it does |
 |---|---|
-| `./scripts/gcp.sh deploy` | Fetches `origin/main` (or `GCP_REF`), uploads it, builds and starts the stack, prints URL + login. Keeps the VM's `.env` and data |
+| `./scripts/gcp.sh deploy` | Fetches `origin/main` (or `GCP_REF`), uploads it, builds and starts the stack, prints URL + login. Keeps the VM's `.env` and data. Fails if the chat or embedding model, or the agent, does not answer one test call |
 | `./scripts/gcp.sh status` · `logs [service]` · `ssh` | Health, last 100 log lines, shell on the VM |
 | `./scripts/gcp.sh login` | Prints URL, user and password (from the VM's `.env`) |
 | `./scripts/gcp.sh stop` · `start` | Stops / starts the VM to save credit; data and IP are kept |
-| `./scripts/gcp.sh create` · `destroy` | Creates the VM, static IP and 80/443 firewall rule / deletes them with all data (asks first) |
+| `./scripts/gcp.sh create` · `destroy` | Creates the VM (`e2-standard-4`, runs as service account `acb-delta-vm`), static IP and 80/443 firewall rule / deletes them with all data (asks first) |
+
+Models on the VM come from `deploy/gcp/docker-compose.gcp.yml`, not from `.env`, and need no API key:
+
+| Role | Service | Model |
+|---|---|---|
+| Chat (api + agent) | `litellm` → Vertex AI, location `global` | Qwen3-Next-80B Instruct (`deploy/gcp/litellm.yaml`), called as `qwen3-next-80b`. Authenticated as the VM's service account (`roles/aiplatform.user`, `cloud-platform` scope) |
+| Embedding (api) | `embedding`: text-embeddings-inference on CPU | `BAAI/bge-m3`, 1024 dims; weights cached in the `embeddingdata` volume |
+
+`scripts/gcp.sh deploy` writes `COMPOSE_FILE` into the VM's `.env`, so `docker compose` and `scripts/run.sh` on the VM always include that overlay. The CI deployer (`github-deployer`) needs `roles/iam.serviceAccountUser` on `acb-delta-vm` to SSH in.
 
 Rules for agents: never print the login or `.env` in CI logs (the repo is public); never run `destroy` unless your human asked.
 
