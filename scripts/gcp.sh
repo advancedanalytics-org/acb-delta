@@ -21,8 +21,12 @@ REGION="${ZONE%-*}"
 VM=acb-delta
 IP_NAME=acb-delta-ip
 FW_RULE=acb-delta-web
-MACHINE="${GCP_MACHINE:-e2-medium}"
+# 16 GB: the bge-m3 embedding container needs ~2.3 GB next to the rest of the stack.
+MACHINE="${GCP_MACHINE:-e2-standard-4}"
 REF="${GCP_REF:-origin/main}"
+# The VM runs as this account; LiteLLM uses it to call Vertex AI, so no model key is stored.
+VM_SA=acb-delta-vm
+COMPOSE_FILES=docker-compose.yml:deploy/gcp/docker-compose.gcp.yml
 # Absolute, not ~: every SSH user (you, CI's service account) must share one checkout and one .env.
 REMOTE_DIR=/opt/acb-delta
 COMPOSE_GCP="docker compose -f docker-compose.yml -f deploy/gcp/docker-compose.gcp.yml"
@@ -47,7 +51,14 @@ site_address() { local ip; ip="$(static_ip)"; echo "${ip//./-}.sslip.io"; }
 
 cmd_create() {
   info "Project $PROJECT ($(gcloud config get-value account 2>/dev/null)), zone $ZONE, $MACHINE"
-  gcloud services enable compute.googleapis.com "${G[@]}"
+  gcloud services enable compute.googleapis.com aiplatform.googleapis.com "${G[@]}"
+  local sa="$VM_SA@$PROJECT.iam.gserviceaccount.com" role
+  gcloud iam service-accounts describe "$sa" "${G[@]}" >/dev/null 2>&1 ||
+    gcloud iam service-accounts create "$VM_SA" --display-name "acb-delta demo VM" "${G[@]}"
+  for role in roles/aiplatform.user roles/logging.logWriter roles/monitoring.metricWriter; do
+    gcloud projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$sa" --role "$role" \
+      --condition=None "${G[@]}" >/dev/null
+  done
   gcloud compute addresses describe "$IP_NAME" --region "$REGION" "${G[@]}" >/dev/null 2>&1 ||
     gcloud compute addresses create "$IP_NAME" --region "$REGION" "${G[@]}"
   gcloud compute firewall-rules describe "$FW_RULE" "${G[@]}" >/dev/null 2>&1 ||
@@ -61,9 +72,11 @@ cmd_create() {
       --image-family debian-12 --image-project debian-cloud \
       --boot-disk-size 30GB --boot-disk-type pd-balanced \
       --tags "$FW_RULE" --address "$IP_NAME" \
+      --service-account "$sa" --scopes cloud-platform \
       --metadata enable-oslogin=TRUE,startup-script='command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh' \
       "${G[@]}"
   fi
+  info "CI deploys over OS Login as the VM's account: grant its deployer roles/iam.serviceAccountUser on $sa"
   info "Next: ./scripts/gcp.sh deploy"
 }
 
@@ -106,14 +119,36 @@ cmd_deploy() {
       printf '\n# Public access, written by scripts/gcp.sh\nSITE_ADDRESS=%s\nBASIC_AUTH_USER=acb\nBASIC_AUTH_PASSWORD=%s\nBASIC_AUTH_HASH=%s\n' \
         '$site' \"\$pw\" \"'\$hash'\" | sudo tee -a .env >/dev/null
     fi
-    sudo $COMPOSE_GCP up -d --wait caddy
+    # From now on every plain 'docker compose' (and run.sh) on the VM includes the GCP overlay.
+    sudo grep -q '^COMPOSE_FILE=' .env || echo 'COMPOSE_FILE=$COMPOSE_FILES' | sudo tee -a .env >/dev/null
+    sudo $COMPOSE_GCP up -d --wait
     sudo ./scripts/run.sh status"
+  check_models
   # CI logs are public for this repo: print only the URL there, never the password.
   if [ -n "${CI:-}" ]; then
     info "Deployed: https://$site"
   else
     cmd_login
   fi
+}
+
+# Fail the deploy when a model does not answer, instead of a "healthy" stack that silently falls
+# back to rules (api) or 503s (agent). One short call each; prints no config or credentials.
+check_models() {
+  info "Checking the models: chat (Vertex AI via LiteLLM), embedding (bge-m3), agent"
+  remote "set -euo pipefail; cd $REMOTE_DIR
+    sudo $COMPOSE_GCP exec -T api python -c '
+from app.ria import embeddings, llm
+assert llm.llm_model(), \"LLM_MODEL is empty\"
+llm.chat_json(\"Return the JSON object {\\\"ok\\\": true}.\", \"ping\")
+print(\"chat ok:\", llm.llm_model())
+dim = len(embeddings.embed([\"ping\"])[0])
+print(\"embedding ok:\", embeddings.embedding_version(), dim, \"dims\")'
+    sudo $COMPOSE_GCP exec -T agent python -c '
+import json, urllib.request
+req = urllib.request.Request(\"http://localhost:8080/invoke\", json.dumps({\"vbpl_text\": \"Thông tư thử nghiệm.\"}).encode(), {\"Content-Type\": \"application/json\"})
+urllib.request.urlopen(req, timeout=300)
+print(\"agent ok\")'"
 }
 
 cmd_login() {
