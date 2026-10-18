@@ -17,6 +17,7 @@ services:
       SITE_ADDRESS: ${SITE_ADDRESS:?set by scripts/gcp.sh}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set by scripts/gcp.sh}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set by scripts/gcp.sh}
+      MODEL_API_KEY: ${MODEL_API_KEY:?set by scripts/gcp.sh}
     volumes:
       - ./deploy/gcp/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
