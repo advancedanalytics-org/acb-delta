@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import ai, documents, health
+from app.routers import ai, decisions, documents, health, vbpls
 
 
 @asynccontextmanager
@@ -19,6 +19,10 @@ async def lifespan(app: FastAPI):
     except Exception:
         # DB may not be reachable immediately in some test environments
         pass
+    # HITL tables + mock reviewers. Not swallowed: the decision API is useless without them.
+    from app.hitl import init_tables
+
+    init_tables()
     yield
 
 
@@ -42,7 +46,9 @@ def create_app() -> FastAPI:
     app.include_router(ai.router)
     app.include_router(ai.router, prefix="/api")
 
-    # TAI-02: mount the HITL decision router here under prefix="/api".
+    # TAI-02: VBPL intake, impacts, HITL decisions and audit trail.
+    app.include_router(vbpls.router, prefix="/api")
+    app.include_router(decisions.router, prefix="/api")
     return app
 
 

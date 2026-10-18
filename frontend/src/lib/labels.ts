@@ -4,6 +4,7 @@ export const vbplStatusLabel: Record<VbplStatus, string> = {
   processing: 'Đang xử lý',
   awaiting_review: 'Chờ duyệt',
   done: 'Hoàn tất',
+  failed: 'Lỗi phân tích',
 }
 
 export const impactStatusLabel: Record<ImpactStatus, string> = {
