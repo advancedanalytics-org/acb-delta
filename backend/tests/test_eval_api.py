@@ -100,6 +100,27 @@ def test_retrieval_k_defaults_to_the_value_the_label_hardcodes(eval_client):
     assert created.json()["metrics"]["retrieval"]["k"] == 5
 
 
+def test_unmeasured_leaves_round_trip_as_null_not_zero(eval_client):
+    metrics = _metrics()
+    metrics["amendment"] = {"judgeScore": None, "hitlAcceptRate": None}
+    metrics["system"] = {"latencySeconds": 91.2, "costUsdPerDocument": None}
+
+    created = eval_client.post(
+        "/api/eval/runs",
+        json={"label": "Chưa đo đủ", "datasetSize": 7, "metrics": metrics},
+    )
+    assert created.status_code == 201, created.text
+
+    run = eval_client.get("/api/eval/runs").json()[0]
+
+    # 0 would read as "measured and bad"; the dashboard shows a dash for null instead.
+    assert run["metrics"]["amendment"]["judgeScore"] is None
+    assert run["metrics"]["amendment"]["hitlAcceptRate"] is None
+    assert run["metrics"]["system"]["costUsdPerDocument"] is None
+    # Latency is always measurable, so it stays required.
+    assert run["metrics"]["system"]["latencySeconds"] == pytest.approx(91.2)
+
+
 def test_a_run_missing_a_metric_group_is_rejected(eval_client):
     incomplete = _metrics()
     del incomplete["amendment"]

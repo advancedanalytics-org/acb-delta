@@ -28,5 +28,6 @@ def create_eval_run(body: schemas.EvalRunCreate, session: SessionDep) -> schemas
         # Stored with the same camelCase keys the wire uses, so the JSONB mirrors the response.
         metrics=body.metrics.model_dump(by_alias=True),
         params=body.params,
+        created_at=body.created_at,
     )
     return schemas.EvalRunOut.model_validate(run)

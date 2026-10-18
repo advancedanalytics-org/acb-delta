@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils'
 
 interface Metric {
   label: string
-  read: (m: EvalMetrics) => number
+  /** `null` when that step was not measured for this run; the tile then shows a dash. */
+  read: (m: EvalMetrics) => number | null
   format: (value: number) => string
   /** Latency and cost improve when they go down. */
   lowerIsBetter?: boolean
@@ -135,14 +136,18 @@ export function EvaluationPage() {
 
 function MetricValue({ metric, run, baseline }: { metric: Metric; run: EvalRun; baseline?: EvalRun }) {
   const value = metric.read(run.metrics)
-  const before = baseline ? metric.read(baseline.metrics) : undefined
-  const delta = before === undefined ? undefined : value - before
+  const before = baseline ? metric.read(baseline.metrics) : null
+  // A delta needs both runs to have measured it; comparing against an unmeasured run would
+  // present "not measured" as a change.
+  const delta = value === null || before === null ? undefined : value - before
   const improved = delta !== undefined && (metric.lowerIsBetter ? delta < 0 : delta > 0)
   return (
     <div>
       <dt className="text-xs text-muted-foreground">{metric.label}</dt>
       <dd className="mt-1 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold">{metric.format(value)}</span>
+        <span className="text-2xl font-semibold">
+          {value === null ? <span title="Chưa đo được">—</span> : metric.format(value)}
+        </span>
         {delta !== undefined && delta !== 0 && (
           <span
             className={cn(
@@ -164,13 +169,19 @@ function MetricValue({ metric, run, baseline }: { metric: Metric; run: EvalRun; 
 
 function ComparisonChart({ run, baseline }: { run: EvalRun; baseline: EvalRun }) {
   const rows = steps.flatMap((step) =>
-    step.metrics
-      .filter((metric) => metric.chartLabel)
-      .map((metric) => ({
-        name: metric.chartLabel,
-        before: Math.round(metric.read(baseline.metrics) * 1000) / 10,
-        after: Math.round(metric.read(run.metrics) * 1000) / 10,
-      })),
+    step.metrics.flatMap((metric) => {
+      const before = metric.read(baseline.metrics)
+      const after = metric.read(run.metrics)
+      // A bar pair needs both sides. Plotting an unmeasured metric as 0 would invent a regression.
+      if (!metric.chartLabel || before === null || after === null) return []
+      return [
+        {
+          name: metric.chartLabel,
+          before: Math.round(before * 1000) / 10,
+          after: Math.round(after * 1000) / 10,
+        },
+      ]
+    }),
   )
   return (
     <section className="rounded-lg border bg-card p-4">

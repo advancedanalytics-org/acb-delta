@@ -81,6 +81,8 @@ class RunArtifacts:
     # the only key the review package shares with these rows: it carries no internal clause id.
     findings: list[tuple[str, str, str, str, str]] = field(default_factory=list)
     latency_seconds: float = 0.0
+    # When the analysis ran. Only set when scoring a finished job, where "now" is not the run time.
+    started_at: str | None = None
 
 
 def numbering(clause_id: str) -> str:
@@ -149,7 +151,7 @@ def _read_ria_tables(database_url: str, job_id: str) -> tuple[set[str], dict, li
         engine.dispose()
 
 
-def _job_timings(database_url: str, job_id: str) -> tuple[str, float]:
+def _job_timings(database_url: str, job_id: str) -> tuple[str, float, str | None]:
     """The review package of an analyze job, and how long that analysis plus its review took.
 
     `vbpls.ria_job_id` is unique per analyze job (contract §2), so the package is reachable from
@@ -172,7 +174,10 @@ def _job_timings(database_url: str, job_id: str) -> tuple[str, float]:
                 ),
                 {"job": job_id},
             ).scalar()
-            return vbpl_id, float(seconds or 0.0)
+            started = conn.execute(
+                text("SELECT started_at FROM job WHERE job_id = :job"), {"job": job_id}
+            ).scalar()
+            return vbpl_id, float(seconds or 0.0), started.isoformat() if started else None
     finally:
         engine.dispose()
 
@@ -183,7 +188,7 @@ def score_existing_job(client: httpx.Client, job_id: str, database_url: str) -> 
     `hitlAcceptRate` only exists once people have reviewed a run's output, so a freshly finished
     run can never carry it. Scoring is therefore a second pass over an earlier job.
     """
-    vbpl_id, latency = _job_timings(database_url, job_id)
+    vbpl_id, latency, started_at = _job_timings(database_url, job_id)
     impacts = client.get(f"/api/vbpls/{vbpl_id}/impacts").raise_for_status().json()
     obligations, ranked, findings = _read_ria_tables(database_url, job_id)
     return RunArtifacts(
@@ -195,6 +200,7 @@ def score_existing_job(client: httpx.Client, job_id: str, database_url: str) -> 
         retrieval=ranked,
         findings=findings,
         latency_seconds=latency,
+        started_at=started_at,
     )
 
 
@@ -403,7 +409,7 @@ def main() -> None:
             f"pipeline báo {len(run.impacts)} impact"
         )
 
-        missing = [
+        unmeasured = [
             name
             for name, value in (
                 ("amendment.judgeScore", judge),
@@ -412,14 +418,11 @@ def main() -> None:
             )
             if value is None
         ]
+        if unmeasured:
+            # Saved as null, not 0: the dashboard shows a dash for these.
+            print("\nLưu dạng chưa đo (null): " + ", ".join(unmeasured))
         if not args.post:
             print("\n--post không bật: chưa lưu run nào.")
-            return
-        if missing:
-            print(
-                "\nKhông lưu run: chưa đo được " + ", ".join(missing) + ". "
-                "Dashboard đọc mọi leaf không kiểm null, và điền 0 là số giả (AGENTS.md)."
-            )
             return
 
         body = {
@@ -448,6 +451,7 @@ def main() -> None:
                 },
             },
             "params": {**ANALYZE_PARAMS, "analyzeJobId": run.analyze_job_id},
+            **({"createdAt": run.started_at} if run.started_at else {}),
         }
         saved = client.post("/api/eval/runs", json=body).raise_for_status().json()
         print(f"\nđã lưu run {saved['id']}")
