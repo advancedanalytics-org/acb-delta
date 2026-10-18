@@ -97,12 +97,12 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 ## Khoa
 
 - [~] **KHOA-01** – Evaluation pipeline
-  - Đã có: metric core + dataset schema (`backend/app/evaluation/`), hợp đồng dữ liệu `docs/evaluation-data-contract.md`, API lưu / trả eval run (`/api/eval/runs`). Chưa có lượt chạy thật
-  - [ ] Họp với Minh + Tài thống nhất luồng dữ liệu cho evaluate
-  - [ ] Dựng Langfuse dataset từ ground truth của `TAI-03`
+  - Đã có: metric core + dataset schema (`backend/app/evaluation/`), hợp đồng dữ liệu `docs/evaluation-data-contract.md`, API lưu / trả eval run (`/api/eval/runs`), ground truth tổng hợp + runner trên đường RIA. Đã có lượt chạy thật (sparse + rule, chưa cấu hình LLM/embedding); chưa lưu được run nào vì thiếu `judgeScore` và cost
+  - [x] Họp với Minh + Tài thống nhất luồng dữ liệu cho evaluate — chốt ở **Quyết định đã thống nhất**: đo trên đường RIA
+  - [~] Dựng Langfuse dataset từ ground truth của `TAI-03` — nhãn của `TAI-03` không có trong repo, nên Khoa tự sinh `data/eval/dataset.json` (4 nghĩa vụ, 4 finding, 3 `EQUIVALENT`); chưa đưa lên Langfuse
   - [ ] Metric từng bước:
-    - [x] Tách thay đổi: Precision / Recall
-    - [x] Retrieval: Recall@k, MRR
+    - [x] Tách thay đổi: Precision / Recall — đo trên nghĩa vụ RIA tách được
+    - [x] Retrieval: Recall@k, MRR — từ `evidence` của cùng `job_id`, `evidence_per_obligation: 20`
     - [x] Phát hiện tác động: Precision / Recall / F1 (ưu tiên Recall)
     - [ ] Gợi ý chỉnh sửa: LLM-as-judge rubric (đúng, sửa tối thiểu, nhất quán pháp lý) + tỉ lệ accept từ HITL
     - [ ] Hệ thống: độ trễ, chi phí / văn bản (AgentBase Usage) — đã có hàm tính, chưa có nguồn đo
@@ -176,5 +176,5 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 - **HITL** (TAI-02): không dùng `interrupt()`. Graph chạy hết, impact lưu Postgres trạng thái `pending`, mỗi quyết định (accept / edit / reject / undo) là một dòng mới trong bảng quyết định (không sửa đè) → nguồn dữ liệu cho audit trail và `KHOA-02`
 - **Engine phân tích tác động** (TAI-01, MINH-01, 2026-10-18): phương án **A** theo blueprint RIA 4.0 (`docs/ACB_RIA_4_0_Final_E2E_6_Modules_6_Owners.html`). RIA (M01–M03, `MINH-01`) tìm finding; agent (M04, `TAI-01`) chỉ soạn patch. M05 backend (quyết định, audit, feedback) = `TAI-02`, M05 UI = `HUY-01`, M06 = `KHOA-01/02`. Luồng `/invoke` cũ giữ nguyên tới khi `KHOA-01` chuyển sang đường RIA. Không ghi bảng `amendment` của RIA; patch nằm ở `impacts.patch`. Hợp đồng: `docs/amendment-review-contract.md`
 - **Duyệt HITL** (TAI-02): một bước duyệt (accept / edit / reject / undo) + audit append-only; duyệt nhiều cấp / maker-checker để roadmap. Redline = dữ liệu before/after trên đúng span trong API, không xuất DOCX
-- **Luồng dữ liệu Evaluate + enrich test set** (KHOA-01): _chưa chốt_
+- **Luồng dữ liệu Evaluate + enrich test set** (KHOA-01, chốt 2026-10-18 bởi Khoa): đo trên đường RIA. Ground truth là `data/eval/dataset.json` (`RiaDatasetItem` ở `backend/app/evaluation/schema.py`) do `app.evaluation.ground_truth` sinh — thông tư tổng hợp neo vào điều khoản đã biết của `db/DOC-102.parsed.json`, nhãn đúng do cấu trúc và được validate lại trên văn bản thật; có cả nhãn `EQUIVALENT` để đo false positive. `app.evaluation.ria_runner` chạy đúng chuỗi endpoint production (`POST /api/regulations` → `/analyze` → `/review` → `GET /api/vbpls/{id}/impacts`) với `evidence_per_obligation: 20`, đọc nghĩa vụ / thứ hạng retrieval / finding từ bảng RIA theo `job_id`, rồi chấm bằng `app.evaluation.metrics` và lưu qua `POST /api/eval/runs`. Chi phí lấy từ Langfuse (truyền `--cost-usd`), không tự suy ra. Run chỉ được lưu khi đo đủ 5 nhóm metric — dashboard đọc mọi leaf không kiểm null. Enrich test set: _chưa làm_
 - **Luồng dữ liệu feedback loop** (KHOA-02, chốt 2026-10-18 bởi Tài): `KHOA-02` đọc `GET /api/feedback` theo định dạng ở `docs/amendment-review-contract.md` §4 — mỗi impact một dòng theo quyết định còn hiệu lực; `edit` → (chosen = bản người sửa, rejected = đề xuất AI), `reject` → (chosen = văn bản gốc, rejected = đề xuất AI), `accept` → chosen = đề xuất AI; bản nháp lỗi/bỏ qua → rejected = null; quyết định đã undo không vào feedback

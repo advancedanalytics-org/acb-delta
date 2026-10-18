@@ -19,3 +19,7 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Generated eval artifacts. The labels (dataset.json) are committed; the regulation PDF is not:
+# regenerate it with `cd backend && uv run python -m app.evaluation.ground_truth`.
+data/eval/*.pdf
