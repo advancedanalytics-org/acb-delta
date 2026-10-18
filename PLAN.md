@@ -82,6 +82,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [x] `.env.example` liệt kê đủ biến cấu hình (DB, LLM, embedding, S3, Langfuse); không commit `.env`
   - [x] Healthcheck cho từng service; README chạy 1 lệnh (`docker compose up -d --build --wait`)
 - [ ] **TAI-07** – Deploy Phase 2: chuyển sang GreenNode (khi có tài khoản)
+  - Tạm thời demo trên GCP VM (`scripts/gcp.sh`, tự deploy từ `main`, xem `AGENTS.md`); chỉ chuyển GreenNode khi có tài khoản
   - [ ] Tạo Service Account IAM, cấp quyền AgentBase
   - [ ] Endpoint LLM OpenAI-compatible trên MaaS (chuyển từ `TAI-06`)
   - [ ] Script `seed` (nạp VBPL + mock) và `reindex` (re-embed toàn bộ) (chuyển từ `TAI-06`)
@@ -96,14 +97,15 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 ## Khoa
 
 - [~] **KHOA-01** – Evaluation pipeline
+  - Đã có: metric core + dataset schema (`backend/app/evaluation/`), hợp đồng dữ liệu `docs/evaluation-data-contract.md`, API lưu / trả eval run (`/api/eval/runs`). Chưa có lượt chạy thật
   - [ ] Họp với Minh + Tài thống nhất luồng dữ liệu cho evaluate
   - [ ] Dựng Langfuse dataset từ ground truth của `TAI-03`
   - [ ] Metric từng bước:
-    - [ ] Tách thay đổi: Precision / Recall
-    - [ ] Retrieval: Recall@k, MRR
-    - [ ] Phát hiện tác động: Precision / Recall / F1 (ưu tiên Recall)
+    - [x] Tách thay đổi: Precision / Recall
+    - [x] Retrieval: Recall@k, MRR
+    - [x] Phát hiện tác động: Precision / Recall / F1 (ưu tiên Recall)
     - [ ] Gợi ý chỉnh sửa: LLM-as-judge rubric (đúng, sửa tối thiểu, nhất quán pháp lý) + tỉ lệ accept từ HITL
-    - [ ] Hệ thống: độ trễ, chi phí / văn bản (AgentBase Usage)
+    - [ ] Hệ thống: độ trễ, chi phí / văn bản (AgentBase Usage) — đã có hàm tính, chưa có nguồn đo
   - [ ] Cơ chế enrich test set: mỗi reject / edit từ HITL tự động thành dataset item mới
   - [ ] Script chạy experiment và xuất bảng kết quả cho dashboard (`HUY-01`)
 - [ ] **KHOA-02** – Feedback loop (RLHF)
@@ -114,18 +116,18 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 
 ## Huy
 
-- [ ] **HUY-01** – UI
-  - Đã có prototype đủ 5 màn hình chạy trên dữ liệu demo trong `frontend/` (làm cùng skeleton `TAI-06`). Phần còn lại của HUY-01: nối API thật (`VITE_API_MODE=live`, hợp đồng trong `frontend/src/api/types.ts`), PDF thật từ vStorage, hoàn thiện giao diện.
+- [x] **HUY-01** – UI
+  - Đủ 5 màn hình trong `frontend/`, đã nối API thật (`VITE_API_MODE=live`, hợp đồng trong `frontend/src/api/types.ts`), upload VBPL, PDF từ MinIO (vStorage khi chuyển `TAI-07`).
   - [x] Khởi tạo Vite + React + TS + Tailwind + shadcn/ui, design token màu trạng thái, dark mode, font hỗ trợ tiếng Việt
-  - [ ] Màn hình **Review workspace** (ưu tiên số 1)
-    - [ ] Trái: danh sách impact theo văn bản nội bộ, badge mức độ
-    - [ ] Giữa: PDF viewer với highlight theo bbox, màu theo trạng thái (pending / accepted / rejected), click card → scroll tới highlight
-    - [ ] Phải: điều khoản VBPL mới vs đoạn bị ảnh hưởng, lý do, diff đề xuất, nút Accept / Edit / Reject + reason chip
-    - [ ] Phím tắt `A` / `E` / `R`, `J` / `K`
-  - [ ] Màn hình **Inbox**: danh sách VBPL mới, trạng thái xử lý, số impact chờ duyệt
-  - [ ] Màn hình **Evaluation dashboard**: metric theo bước, so sánh trước / sau feedback
-  - [ ] Màn hình **Audit trail**
-  - [ ] Chất lượng production: skeleton, empty state, toast có Undo, optimistic update, user switcher
+  - [x] Màn hình **Review workspace** (ưu tiên số 1)
+    - [x] Trái: danh sách impact theo văn bản nội bộ, badge mức độ
+    - [x] Giữa: PDF viewer với highlight theo bbox, màu theo trạng thái (pending / accepted / rejected), click card → scroll tới highlight
+    - [x] Phải: điều khoản VBPL mới vs đoạn bị ảnh hưởng, lý do, diff đề xuất, nút Accept / Edit / Reject + reason chip
+    - [x] Phím tắt `A` / `E` / `R`, `J` / `K`
+  - [x] Màn hình **Inbox**: danh sách VBPL mới, trạng thái xử lý, số impact chờ duyệt
+  - [x] Màn hình **Evaluation dashboard**: metric theo bước, so sánh trước / sau feedback
+  - [x] Màn hình **Audit trail**
+  - [x] Chất lượng production: skeleton, empty state, toast có Undo, optimistic update, user switcher
 - [x] **HUY-02** – Luồng xử lý dữ liệu NHNN
   - [x] PDF → text bằng PyMuPDF, giữ `page` + `bbox`
   - [x] Chunk theo cấu trúc pháp lý (Chương / Mục / Điều / Khoản / Điểm)
@@ -141,7 +143,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [x] Hybrid search: vector + keyword (Postgres full-text), filter theo metadata — `POST /api/regulations/{id}/analyze`, xem `docs/ria-ingest-analyze.md`
   - [x] Rerank (tùy chọn nếu còn thời gian) — `qwen/qwen3-reranker-8b` qua OpenRouter, ngưỡng 0.2; kèm lọc nghĩa vụ không áp dụng, gộp lời gọi LLM theo nghĩa vụ và cache LLM
   - [ ] Đóng gói thành tool / hàm retrieve cho agent (`TAI-01`)
-- [ ] **MINH-02** – Làm việc với Tài để thống nhất document format cho tài liệu mock
+- [x] **MINH-02** – Làm việc với Tài để thống nhất document format cho tài liệu mock — mẫu `db/DOC-102.md` / `db/DOC-102.parsed.json`, mô hình dữ liệu `db/data-model.md`
 
 ---
 
@@ -166,7 +168,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 
 > Ghi kết quả các buổi thống nhất để cả nhóm tham chiếu.
 
-- **Document format tài liệu mock** (MINH-02): _chưa chốt_
+- **Document format tài liệu mock** (MINH-02): mẫu `db/DOC-102.md` → `db/DOC-102.parsed.json` (nạp bằng `python -m app.ria.seed`), mô hình dữ liệu `db/data-model.md`
 - **Schema chunk / metadata** (MINH-01): _chưa chốt_
 - **Model embedding** (MINH-01): _chưa chốt_ — phải chạy được cả trên server team và GreenNode MaaS
 - **Endpoint LLM** (TAI-07): GreenNode MaaS. Trước khi có tài khoản, code chỉ đọc `OPENAI_BASE_URL` + `LLM_MODEL` nên dùng tạm bất kỳ endpoint OpenAI-compatible nào; bỏ server team Phase 1
