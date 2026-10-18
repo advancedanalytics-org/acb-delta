@@ -108,11 +108,11 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
     - [ ] Hệ thống: độ trễ, chi phí / văn bản (AgentBase Usage) — đã có hàm tính, chưa có nguồn đo
   - [ ] Cơ chế enrich test set: mỗi reject / edit từ HITL tự động thành dataset item mới
   - [ ] Script chạy experiment và xuất bảng kết quả cho dashboard (`HUY-01`)
-- [ ] **KHOA-02** – Feedback loop (RLHF)
-  - [ ] Họp với Tài thống nhất luồng dữ liệu
-  - [ ] Vòng ngắn: lấy quyết định accept / edit làm few-shot động cho `judge_impact` và `draft_amendment`; reject làm ví dụ âm
-  - [ ] Đo metric trước / sau feedback (số liệu cho demo)
-  - [ ] Vòng dài: export cặp preference (chosen / rejected) dạng dataset DPO
+- [~] **KHOA-02** – Feedback loop (RLHF)
+  - [x] Họp với Tài thống nhất luồng dữ liệu — chốt ở **Quyết định đã thống nhất**: đọc `GET /api/feedback`
+  - [~] Vòng ngắn: lấy quyết định accept / edit làm few-shot động cho `judge_impact` và `draft_amendment`; reject làm ví dụ âm — `GET /api/eval/examples?task=draft|judge` đã phục vụ ví dụ dương / âm (`edit` dạy drafter, `reject` dạy judge). Chưa được `TAI-01` / `MINH-01` nạp vào prompt: prompt thuộc hai task đó nên họ tự quyết khi nào dùng
+  - [ ] Đo metric trước / sau feedback (số liệu cho demo) — cần vòng ngắn được nạp vào prompt trước
+  - [x] Vòng dài: export cặp preference (chosen / rejected) dạng dataset DPO — `python -m app.evaluation.dpo`, JSONL ra ngoài repo; chỉ `edit` / `reject` có bản nháp AI mới tạo được cặp
 
 ## Huy
 
