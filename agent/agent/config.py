@@ -6,7 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
+
+    # LLM Provider: "gemini" (langchain_google_genai) or "openai" (langchain_openai)
+    llm_type: str = "openai"
 
     # OpenAI-compatible LLM endpoint (any provider now, GreenNode MaaS later). Read only in llm.py.
     openai_base_url: str = ""
@@ -14,6 +17,10 @@ class Settings(BaseSettings):
     llm_model: str = ""
     # "json_schema" or "function_calling", for providers that reject JSON-schema output.
     llm_structured_method: str = "json_schema"
+
+    # Gemini settings (used when llm_type == "gemini")
+    gemini_api_key: str = ""
+    google_api_key: str = ""
 
     # Skeleton retriever corpus (demo-documents.json format). Empty = no candidates.
     corpus_path: str = ""

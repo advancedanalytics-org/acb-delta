@@ -23,7 +23,15 @@ export const queryKeys = {
   health: ['health'] as const,
 }
 
-export const useVbpls = () => useQuery({ queryKey: queryKeys.vbpls, queryFn: api.listVbpls })
+export const useVbpls = () =>
+  useQuery({
+    queryKey: queryKeys.vbpls,
+    queryFn: api.listVbpls,
+    refetchInterval: (query) => {
+      const hasProcessing = query.state.data?.some((v) => v.status === 'processing')
+      return hasProcessing ? 1500 : false
+    },
+  })
 
 export const useImpacts = (vbplId: string | undefined) =>
   useQuery({
@@ -97,9 +105,12 @@ function writeImpact(qc: QueryClient, next: Impact) {
   const delta = (next.status === 'pending' ? 1 : 0) - (previousStatus === 'pending' ? 1 : 0)
   qc.setQueryData<Vbpl[]>(queryKeys.vbpls, (list) =>
     list?.map((vbpl) => {
-      if (vbpl.id !== next.vbplId || vbpl.status === 'processing') return vbpl
       const pendingCount = vbpl.pendingCount + delta
-      return { ...vbpl, pendingCount, status: pendingCount > 0 ? 'awaiting_review' : 'done' }
+      return {
+        ...vbpl,
+        pendingCount,
+        status: vbpl.impactCount === 0 ? 'not_found' : pendingCount > 0 ? 'awaiting_review' : 'done',
+      }
     }),
   )
 }

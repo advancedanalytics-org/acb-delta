@@ -1,6 +1,14 @@
 import type { ApiClient } from '@/api/client'
 import { fetchHealth } from '@/api/live'
-import type { AuditEntry, Decision, Impact, ImpactStatus, Vbpl, VbplStatus } from '@/api/types'
+import type {
+  AuditEntry,
+  Decision,
+  Impact,
+  ImpactStatus,
+  IngestDocumentResult,
+  Vbpl,
+  VbplStatus,
+} from '@/api/types'
 
 import { documents, evalRuns, impactSeeds, reviewers, vbplSeeds } from './fixtures'
 import { store } from './store'
@@ -29,9 +37,13 @@ function latestDecisions(): Map<string, Decision> {
   return latest
 }
 
+function getAllImpactSeeds(): Omit<Impact, 'status'>[] {
+  return [...impactSeeds, ...store.impacts()]
+}
+
 function buildImpacts(): Impact[] {
   const latest = latestDecisions()
-  return impactSeeds.map((seed) => {
+  return getAllImpactSeeds().map((seed) => {
     const decision = latest.get(seed.id)
     if (!decision) return { ...seed, status: 'pending' }
     return {
@@ -45,18 +57,29 @@ function buildImpacts(): Impact[] {
 
 function buildVbpls(): Vbpl[] {
   const impacts = buildImpacts()
+  const customVbpls = store.vbpls().map((vbpl) => {
+    const own = impacts.filter((impact) => impact.vbplId === vbpl.id)
+    if (vbpl.status === 'processing') return vbpl
+    if (own.length === 0) {
+      return { ...vbpl, status: 'not_found' as const, impactCount: 0, pendingCount: 0 }
+    }
+    const pendingCount = own.filter((impact) => impact.status === 'pending').length
+    const status: VbplStatus = pendingCount > 0 ? 'awaiting_review' : 'done'
+    return { ...vbpl, status, impactCount: own.length, pendingCount }
+  })
   const base: Vbpl[] = vbplSeeds.map(({ processing, ...seed }) => {
     const own = impacts.filter((impact) => impact.vbplId === seed.id)
     const pendingCount = own.filter((impact) => impact.status === 'pending').length
-    const status: VbplStatus = processing ? 'processing' : pendingCount > 0 ? 'awaiting_review' : 'done'
+    const status: VbplStatus = processing ? 'processing' : own.length === 0 ? 'not_found' : pendingCount > 0 ? 'awaiting_review' : 'done'
     return { ...seed, status, impactCount: own.length, pendingCount }
   })
-  return [...store.vbpls(), ...base]
+  return [...customVbpls, ...base]
 }
 
 function buildAuditTrail(): AuditEntry[] {
+  const allSeeds = getAllImpactSeeds()
   return [...store.decisions()].reverse().map((decision) => {
-    const impact = impactSeeds.find((seed) => seed.id === decision.impactId)
+    const impact = allSeeds.find((seed) => seed.id === decision.impactId)
     const reviewerObj =
       typeof decision.reviewer === 'object' && decision.reviewer && decision.reviewer.name
         ? decision.reviewer
@@ -81,15 +104,15 @@ export const mockApi: ApiClient = {
   uploadVbpl: async (input) => {
     const formData = new FormData()
     formData.append('file', input.file)
-    formData.append('doc_type', 'vbpl')
-    if (input.code) formData.append('code', input.code)
+    if (input.code) formData.append('doc_number', input.code)
     if (input.title) formData.append('title', input.title)
-    if (input.issuer) formData.append('issuer', input.issuer)
-    if (input.effectiveDate) formData.append('effective_date', input.effectiveDate)
+    if (input.issuer) formData.append('owner', input.issuer)
+    if (input.effectiveDate) formData.append('valid_from', input.effectiveDate)
 
-    let result
+    let regulationId = `REG-${newId().toUpperCase()}`
     try {
-      const response = await fetch('/api/documents/upload', {
+      // 1. Call POST /api/regulations (create) in backend/app/routers/regulations.py
+      const response = await fetch('/api/regulations', {
         method: 'POST',
         body: formData,
       })
@@ -97,53 +120,117 @@ export const mockApi: ApiClient = {
         const err = await response.json().catch(() => ({}))
         throw new Error(err.detail || `Tải lên thất bại (HTTP ${response.status})`)
       }
-      result = await response.json()
+      const data = (await response.json()) as { regulation_id?: string }
+      if (data.regulation_id) {
+        regulationId = data.regulation_id
+      }
     } catch (err) {
       if (err instanceof Error && !err.message.includes('Failed to fetch')) {
         throw err
       }
-      result = {
-        status: 'success',
-        document: {
-          id: `vbpl-${newId()}`,
-          code: input.code || input.file.name.replace(/\.pdf$/i, ''),
-          title: input.title || input.file.name,
-          doc_type: 'vbpl',
-          issuer: input.issuer || 'Ngân hàng Nhà nước Việt Nam',
-          effective_date: input.effectiveDate || new Date().toISOString().slice(0, 10),
-          page_count: 1,
-          created_at: new Date().toISOString(),
-        },
-        chunk_count: 8,
-        chunks: [],
-      }
     }
 
+    // 2. Call POST /api/regulations/{regulation_id}/analyze
+    const triggerAnalyze = async () => {
+      for (let i = 0; i < 5; i++) {
+        try {
+          const res = await fetch(`/api/regulations/${encodeURIComponent(regulationId)}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          })
+          if (res.ok) break
+          if (res.status === 409) {
+            // Wait for parse job to reach PARSED
+            await new Promise((r) => setTimeout(r, 600))
+            continue
+          }
+          break
+        } catch {
+          break
+        }
+      }
+    }
+    triggerAnalyze()
+
+    // 3. Show document in UI with status "Đang xử lý" (processing)
     const newVbpl: Vbpl = {
-      id: result.document.id,
-      number: result.document.code || result.document.id,
-      title: result.document.title || result.document.code || input.file.name,
-      issuer: result.document.issuer || 'Ngân hàng Nhà nước Việt Nam',
-      issuedDate: result.document.effective_date || new Date().toISOString().slice(0, 10),
-      effectiveDate: result.document.effective_date || new Date().toISOString().slice(0, 10),
-      receivedAt: result.document.created_at || new Date().toISOString(),
-      summary: `Đã chunking ${result.chunk_count} đoạn quy phạm pháp luật vào Vector DB.`,
-      status: 'awaiting_review',
+      id: regulationId,
+      number: input.code || regulationId,
+      title: input.title || input.file.name,
+      issuer: input.issuer || 'Ngân hàng Nhà nước Việt Nam',
+      issuedDate: input.effectiveDate || new Date().toISOString().slice(0, 10),
+      effectiveDate: input.effectiveDate || new Date().toISOString().slice(0, 10),
+      receivedAt: new Date().toISOString(),
+      summary: 'Hệ thống đang bóc tách điều khoản và phân tích tác động...',
+      status: 'processing',
       impactCount: 0,
       pendingCount: 0,
     }
     store.addVbpl(newVbpl)
 
+    // Pre-create impacts for this new regulation
+    const newImpacts: Impact[] = impactSeeds.slice(0, 8).map((seed, idx) => ({
+      ...seed,
+      id: `${regulationId}-imp-${idx + 1}`,
+      vbplId: regulationId,
+      status: 'pending' as const,
+    }))
+    store.addImpacts(newImpacts)
+
+    // 4. When processing completes, transition to "Chờ duyệt" (awaiting_review)
+    setTimeout(() => {
+      store.updateVbpl(regulationId, {
+        status: 'awaiting_review',
+        summary: 'Đã hoàn thành phân tích tác động pháp lý.',
+        impactCount: newImpacts.length,
+        pendingCount: newImpacts.length,
+      })
+    }, 3500)
+
+    const result: IngestDocumentResult = {
+      status: 'processing',
+      document: {
+        id: regulationId,
+        code: input.code || regulationId,
+        title: input.title || input.file.name,
+        doc_type: 'vbpl',
+        issuer: input.issuer || 'Ngân hàng Nhà nước Việt Nam',
+        effective_date: input.effectiveDate || new Date().toISOString().slice(0, 10),
+        page_count: 1,
+        created_at: new Date().toISOString(),
+      },
+      chunk_count: newImpacts.length,
+      chunks: [],
+    }
+
     return delay(result)
   },
-  listImpacts: (vbplId) => delay(buildImpacts().filter((impact) => impact.vbplId === vbplId)),
+  listImpacts: (vbplId) => {
+    let items = buildImpacts().filter((impact) => impact.vbplId === vbplId)
+    // If no impacts exist for this uploaded vbpl, auto-generate them so review screen always works
+    if (items.length === 0) {
+      const vbpl = store.vbpls().find((v) => v.id === vbplId)
+      if (vbpl) {
+        const autoImpacts: Impact[] = impactSeeds.slice(0, 8).map((seed, idx) => ({
+          ...seed,
+          id: `${vbplId}-imp-${idx + 1}`,
+          vbplId: vbplId,
+          status: 'pending' as const,
+        }))
+        store.addImpacts(autoImpacts)
+        items = buildImpacts().filter((impact) => impact.vbplId === vbplId)
+      }
+    }
+    return delay(items)
+  },
   listDocuments: () => delay(documents),
   listAuditTrail: () => delay(buildAuditTrail()),
   listReviewers: () => delay(reviewers),
   listEvalRuns: () => delay(evalRuns),
 
   decide(input) {
-    const impact = impactSeeds.find((seed) => seed.id === input.impactId)
+    const impact = getAllImpactSeeds().find((seed) => seed.id === input.impactId)
     const reviewer = reviewers.find((r) => r.id === input.reviewerId)
     if (!impact || !reviewer) return Promise.reject(new Error('Không tìm thấy tác động hoặc người duyệt'))
     const decision: Decision = {

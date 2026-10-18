@@ -1,5 +1,4 @@
 import { liveApi } from '@/api/live'
-import { mockApi } from '@/api/mock'
 import type {
   AuditEntry,
   Decision,
@@ -14,7 +13,7 @@ import type {
   Vbpl,
 } from '@/api/types'
 
-/** Everything the screens need from the backend. Mock and live implement the same interface. */
+/** Everything the screens need from the backend. Live API queries the real database and AI pipelines. */
 export interface ApiClient {
   listVbpls(): Promise<Vbpl[]>
   uploadVbpl(input: UploadVbplInput): Promise<IngestDocumentResult>
@@ -26,12 +25,12 @@ export interface ApiClient {
   undoDecision(decisionId: string): Promise<void>
   listReviewers(): Promise<Reviewer[]>
   listEvalRuns(): Promise<EvalRun[]>
-  /** Always the real backend, in both modes. */
+  /** Always the real backend. */
   getHealth(): Promise<HealthReport>
-  /** Restore the seeded demo state. Mock only; live is a no-op. */
+  /** Restore the seeded demo state. */
   resetDemo(): Promise<void>
 }
 
-export const apiMode: 'mock' | 'live' = import.meta.env.VITE_API_MODE === 'live' ? 'live' : 'mock'
+export const apiMode: 'mock' | 'live' = 'live'
 
-export const api: ApiClient = apiMode === 'live' ? liveApi : mockApi
+export const api: ApiClient = liveApi

@@ -138,15 +138,16 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
 
   // When selection changes, anchor hover card to the selected impact
   useEffect(() => {
-    if (!selected || !selectedPageReady) return
+    if (!selected || selected.page == null || !selectedPageReady) return
+    const pageNumber = selected.page
     if (hoveredImpactIdRef.current === selected.id) return
-    const scale = pointWidths[selected.page] ? pageWidth / pointWidths[selected.page] : 0
+    const scale = pointWidths[pageNumber] ? pageWidth / pointWidths[pageNumber] : 0
     if (scale > 0 && selected.bboxes.length > 0) {
       hoveredImpactIdRef.current = selected.id
       const bbox = getImpactBoundingBox(selected.bboxes)
       setHoveredInfo({
         impact: selected,
-        pageNumber: selected.page,
+        pageNumber,
         top: bbox.y0 * scale,
         left: bbox.x0 * scale,
         width: (bbox.x1 - bbox.x0) * scale,

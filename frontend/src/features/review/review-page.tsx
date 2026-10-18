@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
-import type { Impact } from '@/api/types'
+import type { Impact, InternalDocument } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/query-states'
 import { VbplStatusBadge } from '@/components/status-badges'
 import { Button } from '@/components/ui/button'
@@ -36,13 +36,28 @@ export function ReviewPage() {
   const vbpl = vbpls.data?.find((v) => v.id === vbplId)
   const all = impacts.data ?? []
   const docs = documents.data ?? []
-  // Keep list order stable and grouped by document, matching the left pane.
-  const ordered = docs.flatMap((doc) => all.filter((impact) => impact.documentId === doc.id))
+  // Keep list order stable and grouped by document, keeping any remaining impacts at the end.
+  const matchedFromDocs = docs.flatMap((doc) => all.filter((impact) => impact.documentId === doc.id))
+  const remainingImpacts = all.filter((impact) => !docs.some((doc) => doc.id === impact.documentId))
+  const ordered = [...matchedFromDocs, ...remainingImpacts]
   const visible = filter === 'all' ? ordered : ordered.filter((impact) => impact.status === filter)
 
   const requestedId = params.get('impact')
   const selected = ordered.find((impact) => impact.id === requestedId) ?? visible[0] ?? ordered[0]
-  const selectedDoc = docs.find((doc) => doc.id === selected?.documentId)
+  const fallbackDoc: InternalDocument | undefined = selected
+    ? {
+        id: selected.documentId,
+        code: selected.documentId,
+        title: selected.documentId,
+        department: 'Ban Pháp chế',
+        version: 'v1.0',
+        effectiveDate: new Date().toISOString().slice(0, 10),
+        pageCount: 1,
+        pdfUrl: `/api/documents/${encodeURIComponent(selected.documentId)}/pdf`,
+      }
+    : undefined
+  const selectedDoc: InternalDocument | undefined =
+    docs.find((doc) => doc.id === selected?.documentId) ?? fallbackDoc
   const reviewed = all.filter((impact) => impact.status !== 'pending').length
 
   const select = (impactId: string) =>

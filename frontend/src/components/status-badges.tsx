@@ -73,6 +73,7 @@ const vbplStatusStyle: Record<VbplStatus, { className: string; Icon: typeof Cloc
   processing: { className: 'bg-secondary text-secondary-foreground', Icon: Loader2, spin: true },
   awaiting_review: { className: 'bg-status-pending/15 text-status-pending-fg', Icon: CircleDashed },
   done: { className: 'bg-status-accepted/15 text-status-accepted-fg', Icon: CheckCircle2 },
+  not_found: { className: 'bg-status-accepted/15 text-status-accepted-fg', Icon: CheckCircle2 },
   failed: { className: 'bg-destructive/15 text-destructive', Icon: XCircle },
 }
 

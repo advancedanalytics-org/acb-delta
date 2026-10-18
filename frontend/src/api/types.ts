@@ -8,7 +8,7 @@
  * When those are agreed, change this file and the mock fixtures; screens follow via TS errors.
  */
 
-export type VbplStatus = 'processing' | 'awaiting_review' | 'done' | 'failed'
+export type VbplStatus = 'processing' | 'awaiting_review' | 'done' | 'failed' | 'not_found'
 
 export interface Vbpl {
   id: string

@@ -67,4 +67,3 @@ class SuggestEditResponse(BaseModel):
     suggested_text: str
     reasoning: str | None = None
     confidence: float = 0.95
-

@@ -17,6 +17,7 @@ dependencies = [
     "langchain-core>=0.3",
     "langchain-postgres>=0.0.12",
     "langchain-openai>=0.3",
+    "langchain-google-genai>=4.4.2",
 ]
 
 [dependency-groups]

@@ -82,14 +82,14 @@ export function UploadVbplDialog() {
     if (!file) return
 
     try {
-      const result = await uploadMutation.mutateAsync({
+      await uploadMutation.mutateAsync({
         file,
         code: code.trim() || undefined,
         title: title.trim() || undefined,
       })
 
-      toast.success('Tải lên và ingest thành công', {
-        description: `Đã chunking ${result.chunk_count} đoạn quy phạm pháp luật và ingest vào Vector DB.`,
+      toast.success('Tải lên thành công', {
+        description: 'Văn bản đang được phân tích tác động pháp lý.',
       })
       setOpen(false)
       resetState()
