@@ -201,13 +201,17 @@ def _dense_articles(
     if not ids:
         return [], {}
     own = dict(_dense(conn, vector, model, corpus, len(ids), ids=ids))
+    # origin must cover exactly the returned clauses: fuse_for_obligation looks each one up
+    # in the fused results, so a clause dropped by the cap must not keep an article score.
     ranked, origin = [], {}
     for aid, a_score in articles:
         for cid in sorted(members[aid], key=lambda c: -own.get(c, 0.0)):
+            if len(ranked) >= params.candidates_per_query:
+                return ranked, origin
             if cid not in origin and cid in own:
                 ranked.append((cid, own[cid]))
                 origin[cid] = a_score
-    return ranked[: params.candidates_per_query], origin
+    return ranked, origin
 
 
 def rrf(ranked_lists: dict[str, list[tuple[str, float]]], k: int) -> dict[str, dict]:

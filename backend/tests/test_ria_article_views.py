@@ -47,3 +47,23 @@ def test_article_lists_count_as_dense_evidence():
     )
     assert fused["D#5.2"]["dense"] == 0.66
     assert set(fused["D#5.2"]["ranks"]) == {"article:legal_text", "sparse:legal_text"}
+
+
+def test_article_origin_only_covers_returned_clauses(monkeypatch):
+    # An article larger than candidates_per_query: clauses cut from the list must not keep an
+    # article score, or fuse_for_obligation looks them up in the fused results and fails.
+    clauses = {"D#5": _clause("D#5", None, "article")}
+    clauses.update({f"D#5.{i}": _clause(f"D#5.{i}", "D#5", "clause") for i in range(1, 8)})
+    children = {"D#5": [f"D#5.{i}" for i in range(1, 8)]}
+    corpus = retrieval.InternalCorpus(clauses, {}, {}, children)
+
+    def fake_dense(conn, vector, model, corpus, limit, view="context", ids=None):
+        if view == "article":
+            return [("D#5", 0.8)]
+        return [(cid, 0.9 - i / 100) for i, cid in enumerate(ids)][:limit]
+
+    monkeypatch.setattr(retrieval, "_dense", fake_dense)
+    params = retrieval.RetrievalParams(candidates_per_query=3)
+    ranked, origin = retrieval._dense_articles(None, [1.0], "m", corpus, params)
+    assert len(ranked) == 3
+    assert set(origin) == {cid for cid, _ in ranked}
