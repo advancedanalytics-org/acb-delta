@@ -27,3 +27,9 @@ data/eval/*.pdf
 # Reference code (research/README.md): generated ReasonAug data stays out of git.
 research/DICE/**/*.jsonl
 research/DICE/**/*.pkl
+
+# Local agent tooling and per-machine env copies (never commit secrets)
+.claude
+.agentkit
+gcp-vm.env
+*-vm.env
