@@ -10,9 +10,12 @@ handler is re-registered here as "RIA analysis, then queue the review" (RIA's ow
 
 import json
 import logging
+import re
 import threading
 from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from datetime import date
+from functools import lru_cache
+from pathlib import Path
 
 from sqlalchemy import exists, select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -96,14 +99,31 @@ def start_review(analyze_job_id: str, require_succeeded: bool = True) -> tuple[d
 
 
 def review_for_regulation(regulation_id: str) -> tuple[dict, bool]:
-    """The review package of the regulation's latest finished analysis (started if missing)."""
+    """The review package of the regulation, version, or vbpl_id (started if missing)."""
     with get_engine().connect() as conn:
+        # 1. If regulation_id is already a vbpls.id
+        pkg = conn.execute(
+            text("SELECT id, ria_job_id, status FROM vbpls WHERE id = :k"), {"k": regulation_id}
+        ).first()
+        if pkg is not None:
+            latest = conn.execute(
+                text(
+                    "SELECT job_id, status FROM job WHERE job_type = :t "
+                    "AND params->>'vbpl_id' = :v ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"t": JOB_TYPE, "v": pkg.id},
+            ).first()
+            review_job_id = latest.job_id if latest else pkg.id
+            return {"vbpl_id": pkg.id, "review_job_id": review_job_id}, False
+
+        # 2. Check by version_id or document_id
         rows = conn.execute(
             text(
-                "SELECT job_id, status FROM job WHERE job_type = 'analyze' AND document_id = :d "
+                "SELECT job_id, status FROM job WHERE job_type = 'analyze' "
+                "AND (version_id = :k OR document_id = :k) "
                 "ORDER BY created_at DESC"
             ),
-            {"d": regulation_id},
+            {"k": regulation_id},
         ).all()
     done = next((r.job_id for r in rows if r.status == "succeeded"), None)
     if done is not None:
@@ -203,16 +223,176 @@ def draft_request(f: dict) -> dict:
     }
 
 
-def page_and_boxes(bbox: list | None) -> tuple[int | None, list[list[float]]]:
-    """RIA `[[page, x0, y0, x1, y1], …]` → first box's page + the boxes on that page."""
+def page_and_boxes(
+    bbox: list | None, default_page: int | None = None
+) -> tuple[int | None, list[list[float]]]:
+    """Parse bounding boxes in 5-element [page, x0, y0, x1, y1] or 4-element [x0, y0, x1, y1]."""
     if not bbox:
         return None, []
-    page = int(bbox[0][0])
-    return page, [list(map(float, b[1:5])) for b in bbox if int(b[0]) == page]
+    first = bbox[0]
+    if isinstance(first, list):
+        if len(first) == 5:
+            page = int(first[0])
+            return page, [list(map(float, b[1:5])) for b in bbox if int(b[0]) == page]
+        elif len(first) == 4:
+            return default_page, [list(map(float, b)) for b in bbox]
+    return None, []
 
 
 def apply_patch(clause_text: str, patch: dict) -> str:
     return clause_text[: patch["start"]] + patch["new_text"] + clause_text[patch["end"] :]
+
+
+_locate_lock = threading.Lock()
+
+
+@lru_cache(maxsize=16)
+def _get_doc_pdf_bytes(doc_id: str) -> bytes | None:
+    for base in [Path("/"), Path("."), Path(".."), Path("/app")]:
+        for candidate in [
+            base / f"frontend/public/demo/{doc_id}.pdf",
+            base / f"frontend/public/demo/{doc_id.lower()}.pdf",
+            base / f"data/{doc_id}.pdf",
+            base / f"data/{doc_id.lower()}.pdf",
+            base / f"db/{doc_id}.pdf",
+        ]:
+            if candidate.is_file():
+                try:
+                    raw = candidate.read_bytes()
+                    if raw.startswith(b"%PDF-"):
+                        return raw
+                except Exception:
+                    pass
+    try:
+        import boto3
+
+        from app.config import get_settings
+
+        settings = get_settings()
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=settings.s3_endpoint,
+            aws_access_key_id=settings.s3_access_key or settings.postgres_user,
+            aws_secret_access_key=settings.s3_secret_key or settings.postgres_password,
+        )
+        for key in [
+            f"{doc_id}/{doc_id}.pdf",
+            f"documents/{doc_id}.pdf",
+            f"internal/{doc_id}/{doc_id}.pdf",
+            f"internal/{doc_id}.pdf",
+            f"{doc_id}.pdf",
+        ]:
+            try:
+                raw = s3.get_object(Bucket=settings.s3_bucket, Key=key)["Body"].read()
+                if raw.startswith(b"%PDF-"):
+                    return raw
+            except Exception:
+                continue
+    except Exception:
+        pass
+    try:
+        from app.routers.documents import get_document_pdf
+
+        resp = get_document_pdf(doc_id)
+        if resp and resp.body and resp.body.startswith(b"%PDF-"):
+            return resp.body
+    except Exception:
+        pass
+    return None
+
+
+def _locate_in_document(
+    doc_id: str, clause_text: str, numbering: str | None = None
+) -> tuple[int, list[list[float]]] | None:
+    try:
+        import pymupdf
+    except ImportError:
+        return None
+    raw_bytes = _get_doc_pdf_bytes(doc_id)
+    if not raw_bytes:
+        return None
+    with _locate_lock:
+        try:
+            pdf = pymupdf.open(stream=raw_bytes, filetype="pdf")
+        except Exception:
+            return None
+        clean = re.sub(r"[*#_]", "", clause_text).replace("`", "").strip()
+        if not clean:
+            return None
+        norm = " ".join(clean.split())
+        num = (numbering or "").strip()
+        last_num = num.split(".")[-1].strip() if num else ""
+
+        candidates = []
+        if last_num:
+            candidates.append(f"{last_num}. {norm}")
+            candidates.append(f"{last_num}) {norm}")
+            candidates.append(f"Điều {last_num}. {norm}")
+        if num and num != last_num:
+            candidates.append(f"{num}. {norm}")
+            candidates.append(f"{num} {norm}")
+        candidates.append(norm)
+
+        # 1. Full text candidates (matches across line wraps)
+        for cand in candidates:
+            for page_num in range(len(pdf)):
+                page = pdf[page_num]
+                rects = page.search_for(cand)
+                if rects:
+                    m_lines: list[pymupdf.Rect] = []
+                    for rect in sorted(rects, key=lambda r: (round(r.y0), r.x0)):
+                        if m_lines and abs(m_lines[-1].y0 - rect.y0) < 3:
+                            m_lines[-1] |= rect
+                        else:
+                            m_lines.append(pymupdf.Rect(rect))
+                    boxes = [[round(v, 2) for v in (r.x0, r.y0, r.x1, r.y1)] for r in m_lines]
+                    return page_num + 1, boxes
+
+        # 2. Line by line fallback across pages to cover full paragraph
+        lines = [line.strip() for line in clean.split("\n") if line.strip()]
+        if len(lines) > 1:
+            for page_num in range(len(pdf)):
+                page = pdf[page_num]
+                all_rects = []
+                for line in lines:
+                    l_norm = " ".join(line.split())
+                    if len(l_norm) < 4:
+                        continue
+                    r_list = page.search_for(l_norm)
+                    if r_list:
+                        all_rects.extend(r_list)
+                if all_rects:
+                    m_lines = []
+                    for rect in sorted(all_rects, key=lambda r: (round(r.y0), r.x0)):
+                        if m_lines and abs(m_lines[-1].y0 - rect.y0) < 3:
+                            m_lines[-1] |= rect
+                        else:
+                            m_lines.append(pymupdf.Rect(rect))
+                    boxes = [[round(v, 2) for v in (r.x0, r.y0, r.x1, r.y1)] for r in m_lines]
+                    return page_num + 1, boxes
+
+        # 3. Fallbacks on initial lines/numbering
+        first_line = lines[0] if lines else clean
+        first_norm = " ".join(first_line.split())
+        fallbacks = [first_norm]
+        if len(first_norm) > 60:
+            fallbacks.append(first_norm[:60])
+        for cand in fallbacks:
+            if len(cand) < 6:
+                continue
+            for page_num in range(len(pdf)):
+                page = pdf[page_num]
+                rects = page.search_for(cand)
+                if rects:
+                    m_lines: list[pymupdf.Rect] = []
+                    for rect in sorted(rects, key=lambda r: (round(r.y0), r.x0)):
+                        if m_lines and abs(m_lines[-1].y0 - rect.y0) < 3:
+                            m_lines[-1] |= rect
+                        else:
+                            m_lines.append(pymupdf.Rect(rect))
+                    boxes = [[round(v, 2) for v in (r.x0, r.y0, r.x1, r.y1)] for r in m_lines]
+                    return page_num + 1, boxes
+    return None
 
 
 def impact_row(f: dict, position: int, proposal: dict | None, error: str | None) -> dict:
@@ -229,7 +409,22 @@ def impact_row(f: dict, position: int, proposal: dict | None, error: str | None)
         draft_status, draft_error = "failed", verification.get("reason") or "no usable patch"
     else:
         draft_status, draft_error = "review_required", None
-    page, boxes = page_and_boxes(f["clause_bbox"])
+    page, boxes = page_and_boxes(f.get("clause_bbox"), f.get("clause_page"))
+    if (
+        (
+            not boxes
+            or any(not isinstance(b, list) or len(b) != 4 for b in boxes)
+            or not page
+            or page > 50
+        )
+        and f.get("impacted_document_id")
+        and clause_text
+    ):
+        loc = _locate_in_document(f["impacted_document_id"], clause_text, f.get("clause_numbering"))
+        if loc:
+            page, boxes = loc
+    if page is None:
+        page = f.get("clause_page") or 1
     heading = f["clause_heading"] or f["parent_heading"]
     numbering = f["clause_numbering"] or ""
     finding = {

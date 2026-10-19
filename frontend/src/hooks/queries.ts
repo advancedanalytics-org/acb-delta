@@ -51,7 +51,7 @@ export const useImpacts = (vbplId: string | undefined) => {
 }
 
 export const useDocuments = () =>
-  useQuery({ queryKey: queryKeys.documents, queryFn: api.listDocuments, staleTime: Infinity })
+  useQuery({ queryKey: queryKeys.documents, queryFn: api.listDocuments, staleTime: 30_000 })
 
 export const useAuditTrail = () => useQuery({ queryKey: queryKeys.auditTrail, queryFn: api.listAuditTrail })
 

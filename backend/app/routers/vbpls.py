@@ -29,6 +29,14 @@ def list_vbpls(session: SessionDep) -> list[schemas.VbplOut]:
     return hitl.vbpl_rows(session)
 
 
+@router.get("/vbpls/{vbpl_id}")
+def get_vbpl(vbpl_id: str, session: SessionDep) -> schemas.VbplOut:
+    rows = hitl.vbpl_rows(session, vbpl_id)
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "VBPL not found")
+    return rows[0]
+
+
 @router.get("/vbpls/{vbpl_id}/impacts")
 def list_impacts(vbpl_id: str, session: SessionDep) -> list[schemas.ImpactOut]:
     if session.get(models.Vbpl, vbpl_id) is None:

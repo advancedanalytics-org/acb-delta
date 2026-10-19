@@ -31,7 +31,10 @@ export const liveApi: ApiClient = {
         if (Array.isArray(regs) && regs.length > 0) {
           // Status and counts come from the regulation's HITL review package (backend).
           return regs.map((d: {
+            id?: string
             document_id: string
+            version_id?: string
+            vbpl_id?: string
             title?: string
             doc_number?: string
             issuer?: string
@@ -48,8 +51,9 @@ export const liveApi: ApiClient = {
               failed: 'Không thể phân tích tác động hoặc soạn đề xuất chỉnh sửa.',
               not_found: 'AI không tìm thấy tác động nào đến văn bản nội bộ.',
             }[d.status as string] ?? `Đã hoàn thành phân tích tác động pháp lý (${impactCount} điểm tác động).`
+            const uniqueId = d.vbpl_id || d.id || d.version_id || d.document_id
             return {
-              id: d.document_id,
+              id: uniqueId,
               number: d.doc_number || d.document_id,
               title: d.title || d.doc_number || d.document_id,
               issuer: d.issuer || d.owner || 'Ngân hàng Nhà nước Việt Nam',
@@ -146,8 +150,22 @@ export const liveApi: ApiClient = {
   },
 
   listImpacts: async (vbplId: string): Promise<Impact[]> => {
-    // RIA regulation: its review package (impacts + the agent's drafted patch). Created on first
-    // open when the analysis predates review packages; 409 while the analysis is still running.
+    // 1. Direct fetch if vbplId is already a review package ID (/api/vbpls/{vbplId}/impacts)
+    try {
+      const direct = await fetch(`/api/vbpls/${encodeURIComponent(vbplId)}/impacts`)
+      if (direct.ok) {
+        const impacts = (await direct.json()) as Impact[]
+        return impacts.map((impact) => ({
+          ...impact,
+          vbplId,
+          decision: impact.decision && { ...impact.decision, vbplId },
+        }))
+      }
+    } catch {
+      // Fallback
+    }
+
+    // 2. Otherwise request or build the review package via /api/regulations/{vbplId}/review
     const review = await fetch(`/api/regulations/${encodeURIComponent(vbplId)}/review`, { method: 'POST' })
     let packageId = vbplId
     if (review.ok) {
@@ -162,7 +180,7 @@ export const liveApi: ApiClient = {
     if (res.status === 404) return []
     if (!res.ok) throw new Error(`Không tải được tác động (HTTP ${res.status})`)
     const impacts = (await res.json()) as Impact[]
-    // The UI keys caches and routes by the regulation id, not the package id.
+    // The UI keys caches and routes by the unique ID
     return impacts.map((impact) => ({
       ...impact,
       vbplId,
