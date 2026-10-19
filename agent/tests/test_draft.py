@@ -237,6 +237,32 @@ def test_happy_path_replace(fake_llm):
     assert "định kỳ tối đa 12 tháng một lần" in verify_user
 
 
+def test_related_findings_reach_drafter_and_verifier(fake_llm):
+    replies, calls = fake_llm
+    replies[PatchDraft] = GOOD_PATCH
+    replies[Verdict] = AGREE
+    related = {
+        "finding_id": "RIA-test000002",
+        "category": "SCOPE_CHANGE",
+        "rationale": "Phải cập nhật cả hồ sơ khách hàng tổ chức.",
+        "obligation": {
+            "clause_id": "REG-99-2026-TT-NHNN@v1#2.3",
+            "text": "Việc rà soát áp dụng cho cả khách hàng tổ chức.",
+        },
+    }
+
+    body = post(REQUEST | {"related_findings": [related]})
+
+    assert body["verification"]["status"] == "review_required"
+    assert body["finding_id"] == REQUEST["finding_id"]
+    draft_user = next(user for schema, user in calls if schema is PatchDraft)
+    verify_user = next(user for schema, user in calls if schema is Verdict)
+    for user in (draft_user, verify_user):
+        assert REQUEST["obligation"]["text"] in user
+        assert related["obligation"]["text"] in user
+    assert related["rationale"] in draft_user
+
+
 def test_text_not_in_clause_retries_once_then_fails(fake_llm):
     replies, calls = fake_llm
     replies[PatchDraft] = GOOD_PATCH | {"old_text": "36 tháng"}

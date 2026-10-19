@@ -72,7 +72,7 @@ def _proposal(f: dict, new_text: str = "tối đa 12 tháng", status: str = "rev
 
 def test_impact_row_maps_finding_and_patch():
     f = _finding()
-    row = review_bridge.impact_row(f, 3, _proposal(f), None)
+    row = review_bridge.impact_row([f], 3, _proposal(f), None)
     assert row["patch"] == {
         "operation": "REPLACE", "start": f["target_span"]["start"], "end": f["target_span"]["end"],
         "old_text": "24 tháng", "new_text": "tối đa 12 tháng",
@@ -90,13 +90,76 @@ def test_impact_row_maps_finding_and_patch():
 
 def test_impact_row_failed_and_skipped_drafts_have_no_patch():
     f = _finding()
-    failed = review_bridge.impact_row(f, 0, _proposal(f, status="failed"), None)
+    failed = review_bridge.impact_row([f], 0, _proposal(f, status="failed"), None)
     assert (failed["draft_status"], failed["draft_error"]) == ("failed", "span_unique: x")
     assert failed["patch"] is None and failed["suggested_text"] == ""
-    agent_down = review_bridge.impact_row(f, 0, None, "Agent unreachable: ConnectError")
+    agent_down = review_bridge.impact_row([f], 0, None, "Agent unreachable: ConnectError")
     assert agent_down["draft_status"] == "failed"
-    skipped = review_bridge.impact_row(f, 0, None, review_bridge.SKIPPED + "no target_span")
+    skipped = review_bridge.impact_row([f], 0, None, review_bridge.SKIPPED + "no target_span")
     assert (skipped["draft_status"], skipped["draft_error"]) == ("skipped", "no target_span")
+
+
+def test_findings_on_one_clause_become_one_group_led_by_the_first():
+    a = _finding()
+    b = _finding(finding_id="RIA-2", priority="medium")
+    other = _finding(finding_id="RIA-3", internal_clause_id="DOC-102@v4#6.1")
+    no_clause = _finding(finding_id="RIA-4", internal_clause_id=None)
+    groups = review_bridge.group_by_clause([a, other, b, no_clause])
+    assert [[g["finding_id"] for g in group] for group in groups] == [
+        ["RIA-1", "RIA-2"], ["RIA-3"], ["RIA-4"],
+    ]  # fmt: skip
+
+
+def test_merged_span_covers_every_target_span():
+    a = _finding()
+    clause = a["clause_text"]
+    start = clause.index("định kỳ")
+    b = _finding(
+        finding_id="RIA-2", target_span={"text": "định kỳ", "start": start, "end": start + 7}
+    )
+    assert review_bridge.merged_span([a]) == a["target_span"]
+    span = review_bridge.merged_span([a, b])
+    assert span["start"] == start and span["end"] == a["target_span"]["end"]
+    assert span["text"] == clause[span["start"] : span["end"]] == "định kỳ 24 tháng"
+    assert review_bridge.merged_span([_finding(target_span=None)]) is None
+
+
+def test_draft_request_sends_related_findings():
+    a = _finding()
+    b = _finding(
+        finding_id="RIA-2", category="SCOPE_CHANGE", rationale="Cả khách hàng tổ chức.",
+        obligation_text="Áp dụng cho khách hàng tổ chức.", source_clause_id="REG-1@v1#2.3",
+        citations=["REG-1@v1#2.3", "DOC-102@v4#5.2"],
+    )  # fmt: skip
+    request = review_bridge.draft_request([a, b])
+    assert request["finding_id"] == "RIA-1"
+    assert request["citations"] == ["REG-1@v1#2.1", "DOC-102@v4#5.2", "REG-1@v1#2.3"]
+    assert request["related_findings"] == [
+        {
+            "finding_id": "RIA-2", "category": "SCOPE_CHANGE",
+            "rationale": "Cả khách hàng tổ chức.",
+            "obligation": {"clause_id": "REG-1@v1#2.3", "text": "Áp dụng cho khách hàng tổ chức."},
+        }
+    ]  # fmt: skip
+    assert review_bridge.draft_request([a])["related_findings"] == []
+
+
+def test_impact_row_of_a_group_shows_every_obligation():
+    a = _finding()
+    b = _finding(
+        finding_id="RIA-2", priority="medium", rationale="Cả khách hàng tổ chức.",
+        obligation_text="Áp dụng cho khách hàng tổ chức.", regulation_numbering="2.3",
+    )  # fmt: skip
+    row = review_bridge.impact_row([a, b], 0, _proposal(a), None)
+    assert row["finding_id"] == "RIA-1" and row["severity"] == "high"
+    assert (
+        row["change_clause"] == "Phải rà soát tối đa 12 tháng.\n\nÁp dụng cho khách hàng tổ chức."
+    )
+    assert row["reasoning"] == "12 tháng thay vì 24 tháng.\n\nCả khách hàng tổ chức."
+    assert row["citation"] == "99/2026/TT-NHNN, điều khoản 2.1, 2.3"
+    assert row["model_output"]["finding"]["finding_id"] == "RIA-1"
+    assert [f["finding_id"] for f in row["model_output"]["related_findings"]] == ["RIA-2"]
+    assert review_bridge.impact_row([a], 0, None, None)["model_output"]["related_findings"] == []
 
 
 def test_invalid_proposal():
@@ -286,6 +349,71 @@ def test_review_package_from_analyze_job(ria_client, drafter):
     assert again.status_code == 200
     assert again.json() == body
     assert len(drafter.requests) == sent
+
+
+def _second_finding_on_clause_of(job_id: str, lead: dict, other: dict) -> str:
+    """Copy `other` (another obligation) onto `lead`'s clause, as RIA does when two obligations
+    of the regulation hit one internal clause. Returns the new finding id."""
+    from app.db import get_engine
+
+    finding_id = f"RIA-same-{job_id}"
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO impact_finding (finding_id, job_id, regulation_version_id, "
+                "impacted_document_id, internal_clause_id, obligation_id, evidence_id, category, "
+                "rationale, status, priority, confidence, source_span, target_span, citations, "
+                "method) SELECT :id, job_id, regulation_version_id, "
+                "l.impacted_document_id, l.internal_clause_id, o.obligation_id, o.evidence_id, "
+                "o.category, o.rationale, o.status, 'low', o.confidence, o.source_span, "
+                "l.target_span, o.citations, o.method "
+                "FROM impact_finding o, (SELECT impacted_document_id, internal_clause_id, "
+                "target_span FROM impact_finding WHERE finding_id = :lead) l "
+                "WHERE o.finding_id = :other"
+            ),
+            {"id": finding_id, "lead": lead["finding_id"], "other": other["finding_id"]},
+        )
+    return finding_id
+
+
+@needs_db
+def test_findings_on_one_clause_become_one_impact(ria_client, drafter):
+    job_id = _analyze(ria_client)
+    proposed = [f for f in _findings(job_id) if f["status"] == "AI_PROPOSED"]
+    lead = next(f for f in proposed if f["category"] == "VALUE_CHANGE")
+    other = next(f for f in proposed if f["finding_id"] != lead["finding_id"])
+    extra = _second_finding_on_clause_of(job_id, lead, other)
+
+    # Before the package exists the inbox already counts one impact per clause.
+    inbox = next(
+        r
+        for r in ria_client.get("/api/regulations").json()
+        if r["document_id"] == "REG-99-2026-TT-NHNN"
+    )
+    assert inbox["impact_count"] == len(proposed)
+
+    body = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    review = _wait(ria_client, body["review_job_id"])
+    assert review["status"] == "succeeded", review["error"]
+    assert review["result"]["findings"] == len(proposed) + 1
+    assert review["result"]["impacts"] == len(proposed)
+
+    impacts = ria_client.get(f"/api/vbpls/{body['vbpl_id']}/impacts").json()
+    assert len(impacts) == len(proposed)
+    assert extra not in {i["findingId"] for i in impacts}
+    merged = next(i for i in impacts if i["findingId"] == lead["finding_id"])
+    other_impact = next(i for i in impacts if i["findingId"] == other["finding_id"])
+    # Both obligations are on the one impact, and the agent drafted one patch for both.
+    assert other_impact["changeClause"] in merged["changeClause"]
+    assert merged["changeClause"] != other_impact["changeClause"]
+    sent = next(r for r in drafter.requests if r["finding_id"] == lead["finding_id"])
+    assert [r["finding_id"] for r in sent["related_findings"]] == [extra]
+    assert merged["patch"]["oldText"] == "24 tháng"
+
+    # A rerun finds every finding of the group stored and drafts nothing.
+    count = len(drafter.requests)
+    assert ria_client.post(f"/api/analyses/{job_id}/review").status_code == 200
+    assert len(drafter.requests) == count
 
 
 @needs_db

@@ -86,6 +86,15 @@ class DraftClause(BaseModel):
     text: str
 
 
+class RelatedFinding(BaseModel):
+    """Another finding on the same internal clause: the one patch must satisfy it too."""
+
+    finding_id: str
+    category: str
+    rationale: str
+    obligation: DraftObligation
+
+
 class DraftRequest(BaseModel):
     finding_id: str
     category: str
@@ -96,6 +105,8 @@ class DraftRequest(BaseModel):
     # Offsets into `clause.text`: the part RIA found in conflict. Null when RIA had no span.
     target_span: Span | None = None
     citations: list[str] = []
+    # Other findings on `clause`; empty when only one obligation affects it.
+    related_findings: list[RelatedFinding] = []
 
     @model_validator(mode="after")
     def target_span_matches_clause(self) -> "DraftRequest":
