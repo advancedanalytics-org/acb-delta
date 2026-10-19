@@ -108,7 +108,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
     - [ ] Hệ thống: độ trễ, chi phí / văn bản (AgentBase Usage) — đã có hàm tính, chưa có nguồn đo
   - [ ] Cơ chế enrich test set: mỗi reject / edit từ HITL tự động thành dataset item mới
   - [ ] Script chạy experiment và xuất bảng kết quả cho dashboard (`HUY-01`)
-  - [x] Seed baseline cho dashboard: `app.evaluation.seed` idempotent (chỉ nạp khi `eval_runs` rỗng, không ghi đè run thật, thiếu file thì bỏ qua) + cờ `--save` cho `ria_runner` xuất seed, gắn bước seed vào `scripts/gcp.sh deploy` để VM mới / sau reset không bị trống. Còn thiếu: commit `backend/app/evaluation/baseline_run.json` từ một lượt chạy thật trên VM
+  - [x] Seed baseline cho dashboard: `app.evaluation.seed` idempotent (chỉ nạp khi `eval_runs` rỗng, không ghi đè run thật, thiếu file thì bỏ qua) + cờ `--save` cho `ria_runner` xuất seed, gắn bước seed vào `scripts/gcp.sh deploy` để VM mới / sau reset không bị trống. Đã có `backend/app/evaluation/baseline_run.json` từ một lượt chạy thật trên VM demo (extraction P/R 1.0, retrieval Recall@5 0.33 / MRR 0.17, impact P 1.0 / R 0.75 / F1 0.86, judge 2.33/5)
 - [~] **KHOA-02** – Feedback loop (RLHF)
   - [x] Họp với Tài thống nhất luồng dữ liệu — chốt ở **Quyết định đã thống nhất**: đọc `GET /api/feedback`
   - [~] Vòng ngắn: lấy quyết định accept / edit làm few-shot động cho `judge_impact` và `draft_amendment`; reject làm ví dụ âm — `GET /api/eval/examples?task=draft|judge` đã phục vụ ví dụ dương / âm (`edit` dạy drafter, `reject` dạy judge). Chưa được `TAI-01` / `MINH-01` nạp vào prompt: prompt thuộc hai task đó nên họ tự quyết khi nào dùng

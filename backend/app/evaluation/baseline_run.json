@@ -1,0 +1,35 @@
+{
+  "label": "Baseline",
+  "datasetSize": 7,
+  "note": "Baseline đo thật trên VM demo (KHOA-01)",
+  "createdAt": "2026-10-19T06:34:30.122349Z",
+  "metrics": {
+    "extraction": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "retrieval": {
+      "recallAtK": 0.3333333333333333,
+      "k": 5,
+      "mrr": 0.16666666666666666
+    },
+    "impact": {
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1": 0.8571428571428571
+    },
+    "amendment": {
+      "judgeScore": 2.3333333333333335,
+      "hitlAcceptRate": null
+    },
+    "system": {
+      "latencySeconds": 69.21976850599458,
+      "costUsdPerDocument": null
+    }
+  },
+  "params": {
+    "analyzeJobId": "JOB-895655250706",
+    "candidates_per_query": 20,
+    "evidence_per_obligation": 20
+  }
+}
