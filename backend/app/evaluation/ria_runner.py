@@ -41,8 +41,8 @@ from app.evaluation.schema import (
     load_ria_dataset,
 )
 
-# RetrievalParams keeps only the top 3 evidence rows per obligation by default
-# (app/ria/retrieval.py), which would cap Recall@5 at 3 for a reason unrelated to the retriever.
+# RetrievalParams keeps only the top 5 evidence rows per obligation by default
+# (app/ria/retrieval.py); 20 keeps Recall@5 from being capped by that cut rather than the ranking.
 ANALYZE_PARAMS = {"evidence_per_obligation": 20, "candidates_per_query": 20}
 JOB_POLL_SECONDS = 3
 JOB_TIMEOUT_SECONDS = 1800
@@ -169,8 +169,10 @@ def _job_timings(database_url: str, job_id: str) -> tuple[str, float, str | None
             seconds = conn.execute(
                 text(
                     "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - started_at))), 0) "
-                    "FROM job WHERE job_id = :job OR (job_type = 'review' AND version_id = "
-                    "(SELECT version_id FROM job WHERE job_id = :job))"
+                    # Only this analysis's own review jobs: matching on version_id also summed
+                    # the reviews of every earlier analysis of the same regulation version.
+                    "FROM job WHERE job_id = :job "
+                    "OR (job_type = 'review' AND params->>'analyze_job_id' = :job)"
                 ),
                 {"job": job_id},
             ).scalar()
