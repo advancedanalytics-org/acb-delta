@@ -1,7 +1,13 @@
 from fastapi.testclient import TestClient
 
 from agent import server
-from agent.draft_graph import apply_patch, insert_text, locate_patch
+from agent.draft_graph import (
+    apply_patch,
+    edit_bounds,
+    insert_text,
+    locate_patch,
+    splits_a_sentence,
+)
 from agent.schemas import PatchDraft, Span, Verdict
 
 CLAUSE = "5.2. Hồ sơ nhận biết khách hàng được rà soát, cập nhật định kỳ 24 tháng một lần."
@@ -99,6 +105,108 @@ def test_insert_text_adds_missing_spaces():
 
 def test_apply_patch():
     assert apply_patch("ab24cd", 2, 4, "12") == "ab12cd"
+
+
+# DOC-102 clauses used by the evaluation labels (backend/app/evaluation/ground_truth.py).
+EXCEPTION_CLAUSE = (
+    "Thông tin nhận biết khách hàng phải được thu thập trước khi thiết lập quan hệ, trừ trường "
+    "hợp pháp luật cho phép hoàn thiện sau và Ngân hàng đã có biện pháp kiểm soát tương ứng."
+)
+EXCEPTION_SPAN = "trừ trường hợp pháp luật cho phép hoàn thiện sau"
+REPORT_CLAUSE = (
+    "Định kỳ vào ngày làm việc thứ mười của tháng đầu mỗi quý, các đơn vị báo cáo Khối Tuân thủ:"
+)
+
+
+def span_of(text: str, part: str) -> dict:
+    start = text.index(part)
+    return {"text": part, "start": start, "end": start + len(part)}
+
+
+def test_edit_bounds_widen_over_spaces_and_punctuation_only():
+    target = Span(**span_of(EXCEPTION_CLAUSE, EXCEPTION_SPAN))
+    lo, hi = edit_bounds(EXCEPTION_CLAUSE, target)
+    assert EXCEPTION_CLAUSE[lo:hi] == ", trừ trường hợp pháp luật cho phép hoàn thiện sau "
+
+
+def test_splits_a_sentence():
+    at = REPORT_CLAUSE.index(":")
+    sentence = "Đơn vị báo cáo Ngân hàng Nhà nước kết quả rà soát định kỳ hằng quý."
+    assert splits_a_sentence(REPORT_CLAUSE, at, sentence)
+    # A continuing phrase may go mid-sentence; a sentence may go at the end or after a full stop.
+    assert not splits_a_sentence(REPORT_CLAUSE, at, "và Ngân hàng Nhà nước")
+    assert not splits_a_sentence(REPORT_CLAUSE, len(REPORT_CLAUSE), sentence)
+    assert not splits_a_sentence("Câu một. Câu hai.", 8, sentence)
+
+
+def test_delete_may_take_the_comma_before_the_target_span(fake_llm):
+    replies, _ = fake_llm
+    replies[PatchDraft] = {
+        "operation": "DELETE",
+        "old_text": ", trừ trường hợp pháp luật cho phép hoàn thiện sau",
+        "new_text": "",
+        "rationale": "Thông tư cấm tuyệt đối.",
+    }
+    replies[Verdict] = AGREE
+    request = REQUEST | {
+        "category": "CONTRADICTION",
+        "clause": {"clause_id": "DOC-102@v4#4.1", "numbering": "4.1", "text": EXCEPTION_CLAUSE},
+        "target_span": span_of(EXCEPTION_CLAUSE, EXCEPTION_SPAN),
+    }
+
+    body = post(request)
+
+    assert body["verification"]["status"] == "review_required"
+    assert checks(body)["inside_target_span"] == "pass"
+    after = apply_patch(EXCEPTION_CLAUSE, body["start"], body["end"], body["new_text"])
+    assert "thiết lập quan hệ và Ngân hàng" in after
+
+
+def test_insert_of_a_sentence_mid_sentence_fails_then_a_phrase_passes(fake_llm):
+    replies, calls = fake_llm
+    sentence = {
+        "operation": "INSERT",
+        "old_text": "",
+        "new_text": "Đơn vị báo cáo Ngân hàng Nhà nước kết quả rà soát định kỳ hằng quý.",
+        "rationale": "Nghĩa vụ báo cáo mới.",
+    }
+    phrase = sentence | {"new_text": "và Ngân hàng Nhà nước"}
+    attempts = iter([sentence, phrase])
+    replies[PatchDraft] = lambda user: next(attempts)
+    replies[Verdict] = AGREE
+    request = REQUEST | {
+        "category": "ADDITION",
+        "clause": {"clause_id": "DOC-102@v4#11.1", "numbering": "11.1", "text": REPORT_CLAUSE},
+        "target_span": span_of(REPORT_CLAUSE, "báo cáo Khối Tuân thủ"),
+    }
+
+    body = post(request)
+
+    assert "insert_position" in calls[1][1]  # the retry prompt names the failed check
+    assert body["verification"]["status"] == "review_required"
+    assert checks(body)["insert_position"] == "pass"
+    after = apply_patch(REPORT_CLAUSE, body["start"], body["end"], body["new_text"])
+    assert after.endswith("báo cáo Khối Tuân thủ và Ngân hàng Nhà nước:")
+
+
+def test_insert_of_a_sentence_mid_sentence_twice_is_failed(fake_llm):
+    replies, _ = fake_llm
+    replies[PatchDraft] = {
+        "operation": "INSERT",
+        "old_text": "",
+        "new_text": "Đơn vị báo cáo Ngân hàng Nhà nước kết quả rà soát định kỳ hằng quý.",
+        "rationale": "Nghĩa vụ báo cáo mới.",
+    }
+    request = REQUEST | {
+        "category": "ADDITION",
+        "clause": {"clause_id": "DOC-102@v4#11.1", "numbering": "11.1", "text": REPORT_CLAUSE},
+        "target_span": span_of(REPORT_CLAUSE, "báo cáo Khối Tuân thủ"),
+    }
+
+    body = post(request)
+
+    assert body["verification"]["status"] == "failed"
+    assert body["verification"]["reason"].startswith("insert_position")
 
 
 # --- /draft graph with a fake LLM ---

@@ -34,7 +34,16 @@ MAX_ATTEMPTS = 2
 # A patch replacing more than this share of the clause is flagged (warn, not fail).
 MAX_CHANGED_SHARE = 0.5
 # Checks whose failure means the patch is unusable (retry, then `failed`).
-BLOCKING_CHECKS = {"span_matches_source", "span_unique", "inside_target_span", "minimal_change"}
+BLOCKING_CHECKS = {
+    "span_matches_source",
+    "span_unique",
+    "inside_target_span",
+    "insert_position",
+    "minimal_change",
+}
+# An edit may run past either end of `target_span` over these characters only: the spaces and
+# punctuation around a phrase. RIA's span "trừ trường hợp …" is deleted as ", trừ trường hợp …".
+SPAN_EDGE = frozenset(" \t\n,;:.")
 
 # System prompts + output schemas (their field descriptions are prompt text too).
 PROMPT_VERSION = hashlib.sha256(
@@ -88,6 +97,16 @@ def _matches(clause_text: str, old_text: str) -> list[tuple[int, int]]:
     return out
 
 
+def edit_bounds(clause_text: str, target_span: Span) -> tuple[int, int]:
+    """Where an edit may reach: `target_span` widened over adjacent spaces and punctuation."""
+    lo, hi = target_span.start, target_span.end
+    while lo > 0 and clause_text[lo - 1] in SPAN_EDGE:
+        lo -= 1
+    while hi < len(clause_text) and clause_text[hi] in SPAN_EDGE:
+        hi += 1
+    return lo, hi
+
+
 def locate_patch(
     clause_text: str, operation: str, old_text: str, target_span: Span | None
 ) -> tuple[int, int] | str:
@@ -95,7 +114,7 @@ def locate_patch(
 
     INSERT goes at the end of `target_span` (or of the clause). REPLACE / DELETE need `old_text`
     found exactly once; when it occurs several times, exactly one occurrence inside `target_span`
-    is still a unique locator.
+    (see `edit_bounds`) is still a unique locator.
     """
     if operation == "INSERT":
         at = target_span.end if target_span else len(clause_text)
@@ -104,7 +123,8 @@ def locate_patch(
     if not matches:
         return "span_matches_source: old_text không có trong điều khoản nội bộ"
     if len(matches) > 1 and target_span:
-        inside = [(s, e) for s, e in matches if target_span.start <= s and e <= target_span.end]
+        lo, hi = edit_bounds(clause_text, target_span)
+        inside = [(s, e) for s, e in matches if lo <= s and e <= hi]
         if len(inside) == 1:
             return inside[0]
     if len(matches) > 1:
@@ -123,6 +143,21 @@ def insert_text(clause_text: str, at: int, new_text: str) -> str:
     if at < len(clause_text) and not clause_text[at].isspace() and clause_text[at] not in ".,;:)":
         text += " "
     return text
+
+
+def splits_a_sentence(clause_text: str, at: int, new_text: str) -> bool:
+    """True when `new_text` is a whole sentence (capital first letter, ends with '.' or ';') and
+    `at` sits inside a sentence of the clause. Such an INSERT reads as two sentences glued
+    together: "…báo cáo Khối Tuân thủ Đơn vị báo cáo Ngân hàng Nhà nước … hằng quý.:".
+    A continuing phrase ("và lưu kết quả") may go anywhere."""
+    text = new_text.strip()
+    first = next((ch for ch in text if ch.isalpha()), "")
+    if not (first.isupper() and text.endswith((".", ";"))):
+        return False
+    if not clause_text[at:].strip():
+        return False  # end of the clause
+    before = clause_text[:at].rstrip(" \t")
+    return bool(before) and before[-1] not in ".;\n"
 
 
 def _rule_checks(
@@ -145,7 +180,7 @@ def _rule_checks(
     ]
     if target is None:
         checks.append(Check(check="inside_target_span", status="skipped"))
-    elif target.start <= start and end <= target.end:
+    elif (bounds := edit_bounds(clause_text, target))[0] <= start and end <= bounds[1]:
         checks.append(Check(check="inside_target_span", status="pass"))
     else:
         checks.append(
@@ -155,6 +190,20 @@ def _rule_checks(
                 detail=f"inside_target_span: chỉ được sửa trong đoạn {target.text!r}",
             )
         )
+    if draft.operation == "INSERT":
+        if splits_a_sentence(clause_text, start, draft.new_text):
+            checks.append(
+                Check(
+                    check="insert_position",
+                    status="fail",
+                    detail=(
+                        "insert_position: new_text là một câu hoàn chỉnh nhưng điểm chèn nằm "
+                        "giữa câu; hãy chèn một cụm từ nối tiếp hoặc dùng REPLACE"
+                    ),
+                )
+            )
+        else:
+            checks.append(Check(check="insert_position", status="pass"))
     new_text = {"DELETE": "", "INSERT": insert_text(clause_text, start, draft.new_text)}.get(
         draft.operation, draft.new_text
     )
@@ -200,7 +249,10 @@ def draft(state: DraftState) -> DraftState:
     ]
     if request.target_span:
         parts.append(f"Đoạn cần sửa: {request.target_span.text}")
-        parts.append("Nếu INSERT, nội dung mới được chèn ngay sau 'Đoạn cần sửa'.")
+        parts.append(
+            "Nếu INSERT, nội dung mới được chèn ngay sau 'Đoạn cần sửa'. Nếu chỗ đó nằm giữa câu, "
+            "chỉ chèn một cụm từ nối tiếp, không chèn một câu hoàn chỉnh."
+        )
     else:
         parts.append("Nếu INSERT, nội dung mới được chèn vào cuối điều khoản.")
     parts.append(f"Lý do phải sửa: {request.rationale}")

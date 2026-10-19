@@ -76,11 +76,12 @@ Các check (`status`: `pass` \| `fail` \| `warn` \| `skipped`):
 |---|---|---|
 | `span_matches_source` | quy tắc | `old_text` không có trong `clause.text` (khoảng trắng được phép khác, chữ thì không; không khớp giữa một từ: `30 ngày` không khớp trong `130 ngày`) |
 | `span_unique` | quy tắc | `old_text` xuất hiện nhiều lần, kể cả chồng lấn (locator không duy nhất). Nhiều lần nhưng đúng một lần nằm trong `target_span` vẫn là duy nhất |
-| `inside_target_span` | quy tắc | có `target_span` mà vùng sửa nằm ngoài nó (`skipped` khi không có `target_span`) |
+| `inside_target_span` | quy tắc | có `target_span` mà vùng sửa nằm ngoài nó (`skipped` khi không có `target_span`). Vùng sửa được lấn ra hai đầu span qua khoảng trắng và dấu `, ; : .`, không qua chữ: span `trừ trường hợp …` cho phép xoá `, trừ trường hợp …` |
+| `insert_position` | quy tắc | chỉ có khi `INSERT`: `new_text` là một câu hoàn chỉnh (chữ đầu viết hoa, kết thúc bằng `.` hoặc `;`) mà điểm chèn nằm giữa câu, ví dụ ngay trước dấu `:`. Chèn ở cuối điều khoản, sau `.`/`;`/xuống dòng, hoặc chèn cụm từ nối tiếp thì `pass` |
 | `minimal_change` | quy tắc | `new_text == old_text`, hoặc patch rỗng. `warn` khi thay > 50% điều khoản |
 | `independent_verifier` | LLM (lần gọi thứ 2, prompt khác) | verifier không đồng ý. Chỉ tư vấn: không chặn, không duyệt. Lỗi LLM → `skipped` |
 
-Bốn check quy tắc (trừ `warn`) fail, hoặc LLM soạn lỗi → agent gọi lại bước soạn một lần kèm lý do; vẫn fail → `failed`.
+Một check quy tắc (trừ `warn`) fail, hoặc LLM soạn lỗi → agent gọi lại bước soạn một lần kèm lý do; vẫn fail → `failed`.
 
 ## 2. Bảng HITL mở rộng (M05)
 
