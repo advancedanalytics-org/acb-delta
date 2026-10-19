@@ -207,6 +207,8 @@ def _inbox_row(row: dict) -> dict:
     else:
         # Parsing, analysing, or the agent still drafting the review package.
         row["status"] = "processing"
+    # Ensure each file/upload has a distinct unique ID
+    row["id"] = row.get("vbpl_id") or row.get("version_id") or row.get("document_id")
     return row
 
 

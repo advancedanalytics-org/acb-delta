@@ -99,14 +99,31 @@ def start_review(analyze_job_id: str, require_succeeded: bool = True) -> tuple[d
 
 
 def review_for_regulation(regulation_id: str) -> tuple[dict, bool]:
-    """The review package of the regulation's latest finished analysis (started if missing)."""
+    """The review package of the regulation, version, or vbpl_id (started if missing)."""
     with get_engine().connect() as conn:
+        # 1. If regulation_id is already a vbpls.id
+        pkg = conn.execute(
+            text("SELECT id, ria_job_id, status FROM vbpls WHERE id = :k"), {"k": regulation_id}
+        ).first()
+        if pkg is not None:
+            latest = conn.execute(
+                text(
+                    "SELECT job_id, status FROM job WHERE job_type = :t "
+                    "AND params->>'vbpl_id' = :v ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"t": JOB_TYPE, "v": pkg.id},
+            ).first()
+            review_job_id = latest.job_id if latest else pkg.id
+            return {"vbpl_id": pkg.id, "review_job_id": review_job_id}, False
+
+        # 2. Check by version_id or document_id
         rows = conn.execute(
             text(
-                "SELECT job_id, status FROM job WHERE job_type = 'analyze' AND document_id = :d "
+                "SELECT job_id, status FROM job WHERE job_type = 'analyze' "
+                "AND (version_id = :k OR document_id = :k) "
                 "ORDER BY created_at DESC"
             ),
-            {"d": regulation_id},
+            {"k": regulation_id},
         ).all()
     done = next((r.job_id for r in rows if r.status == "succeeded"), None)
     if done is not None:
