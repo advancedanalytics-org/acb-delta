@@ -38,6 +38,7 @@ Same with plain Compose: `cp .env.example .env` (replace every `CHANGEME`), then
 | `frontend/` | Vite + React UI prototype, all HUY-01 screens | HUY-01 (live API wiring) |
 | `db/init/` | Postgres init SQL (enables pgvector) | |
 | `docs/` | Longer-lived notes; data contracts shared across tasks | |
+| `research/` | Reference code RIA borrows ideas from (DICE, SLeDoC submodule); not built or tested, see [`research/README.md`](research/README.md) | MINH-01 |
 | `scripts/run.sh` | Run / stop / test the stack | |
 | `scripts/demo-data/` | Generates the demo PDFs and highlight positions | |
 
