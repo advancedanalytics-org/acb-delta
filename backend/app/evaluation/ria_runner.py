@@ -377,6 +377,11 @@ def main() -> None:
         "--cost-usd", type=float, default=None, help="Cost per document, read from Langfuse"
     )
     parser.add_argument("--post", action="store_true", help="Save via POST /api/eval/runs")
+    # The POST body written to disk is a seed for `app.evaluation.seed`, so the demo dashboard can
+    # be restored from a real measured run after a fresh deploy. Works with or without --post.
+    parser.add_argument(
+        "--save", type=Path, default=None, help="Write the POST body to this JSON file (a seed)"
+    )
     # hitlAcceptRate only exists after people review a run, so recording a run is a second pass.
     parser.add_argument(
         "--job", default=None, help="Score an analyze job that already ran, instead of running one"
@@ -421,9 +426,6 @@ def main() -> None:
         if unmeasured:
             # Saved as null, not 0: the dashboard shows a dash for these.
             print("\nLưu dạng chưa đo (null): " + ", ".join(unmeasured))
-        if not args.post:
-            print("\n--post không bật: chưa lưu run nào.")
-            return
 
         body = {
             "label": args.label,
@@ -453,6 +455,15 @@ def main() -> None:
             "params": {**ANALYZE_PARAMS, "analyzeJobId": run.analyze_job_id},
             **({"createdAt": run.started_at} if run.started_at else {}),
         }
+
+        if args.save:
+            args.save.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"\nđã ghi seed: {args.save}")
+
+        if not args.post:
+            print("\n--post không bật: chưa lưu run nào.")
+            return
+
         saved = client.post("/api/eval/runs", json=body).raise_for_status().json()
         print(f"\nđã lưu run {saved['id']}")
 
