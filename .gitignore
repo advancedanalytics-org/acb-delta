@@ -33,3 +33,4 @@ research/DICE/**/*.pkl
 .agentkit
 gcp-vm.env
 *-vm.env
+plans
