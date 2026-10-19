@@ -1,6 +1,8 @@
-import { ArrowRight, Search } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { ArrowRight, Check, Search } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 
+import { api } from '@/api/client'
 import type { VbplStatus } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/query-states'
 import { VbplStatusBadge } from '@/components/status-badges'
@@ -8,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { useVbpls } from '@/hooks/queries'
+import { queryKeys, useVbpls } from '@/hooks/queries'
 import { formatDate } from '@/lib/format'
 import { vbplStatusLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
@@ -20,6 +22,7 @@ const normalize = (text: string) => text.normalize('NFD').replace(/\p{Diacritic}
 
 export function InboxPage() {
   const { data, error, isPending, refetch } = useVbpls()
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
@@ -122,6 +125,14 @@ export function InboxPage() {
                     key={vbpl.id}
                     onClick={open}
                     onKeyDown={(event) => event.key === 'Enter' && open()}
+                    onMouseEnter={() => {
+                      if (canOpen) {
+                        queryClient.prefetchQuery({
+                          queryKey: queryKeys.impacts(vbpl.id),
+                          queryFn: () => api.listImpacts(vbpl.id),
+                        })
+                      }
+                    }}
                     tabIndex={canOpen ? 0 : -1}
                     aria-label={canOpen ? `Mở ${vbpl.number}` : vbpl.number}
                     className={cn(
@@ -143,11 +154,38 @@ export function InboxPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {vbpl.status === 'processing' ? (
-                        <span className="text-muted-foreground">Chưa có</span>
+                        <span className="text-xs text-muted-foreground">Chưa có</span>
+                      ) : canOpen ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            open()
+                          }}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all cursor-pointer shadow-xs',
+                            vbpl.pendingCount > 0
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 border border-amber-500/30'
+                              : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/25',
+                          )}
+                          title={`Nhấn để duyệt ${vbpl.number}`}
+                        >
+                          {vbpl.pendingCount > 0 ? (
+                            <>
+                              <span className="font-semibold">{vbpl.pendingCount}</span>
+                              <span className="opacity-75">/{vbpl.impactCount} chờ duyệt</span>
+                              <ArrowRight className="size-3 opacity-75 group-hover:translate-x-0.5 transition-transform" />
+                            </>
+                          ) : (
+                            <>
+                              <Check className="size-3 text-emerald-600" />
+                              <span>{vbpl.impactCount}/{vbpl.impactCount} đã duyệt</span>
+                            </>
+                          )}
+                        </button>
                       ) : (
-                        <span>
-                          <span className="font-semibold">{vbpl.pendingCount}</span>
-                          <span className="text-muted-foreground">/{vbpl.impactCount}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {vbpl.pendingCount}/{vbpl.impactCount}
                         </span>
                       )}
                     </TableCell>
