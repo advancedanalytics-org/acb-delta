@@ -82,6 +82,8 @@ cmd_up() {
   ensure_env
   grep -qE '=CHANGEME$' .env && fail ".env still has CHANGEME values; replace them first."
   check_ports
+  info "Clearing existing data and containers (docker compose down -v)"
+  docker compose down -v
   info "Building and starting the stack (first run takes a few minutes)"
   docker compose up -d --build --wait
   cmd_status

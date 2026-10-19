@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronUp, Keyboard, Loader2 } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, ChevronUp, Download, Keyboard, Loader2 } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -25,6 +25,7 @@ export function ReviewPage() {
   const [params, setParams] = useSearchParams()
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [helpOpen, setHelpOpen] = useState(false)
+  const downloadEditedPdfRef = useRef<(() => void) | null>(null)
 
   const vbpls = useVbpls()
   const impacts = useImpacts(vbplId)
@@ -213,7 +214,25 @@ export function ReviewPage() {
           </div>
           <Progress value={all.length ? (reviewed / all.length) * 100 : 0} aria-label="Tiến độ duyệt" />
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {selectedDoc && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (downloadEditedPdfRef.current) {
+                  downloadEditedPdfRef.current()
+                } else {
+                  toast.error('Đang chuẩn bị tệp PDF, vui lòng thử lại sau giây lát.')
+                }
+              }}
+              className="h-8 gap-1.5 text-xs font-medium cursor-pointer"
+              title={`Tải file PDF ${selectedDoc.code} kèm các đề xuất đã chỉnh sửa`}
+            >
+              <Download className="size-3.5" />
+              <span>Tải PDF đã chỉnh sửa</span>
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Tác động trước (K)">
             <ChevronUp aria-hidden />
           </Button>
@@ -274,6 +293,9 @@ export function ReviewPage() {
                 onSelect={select}
                 onDecide={(impact, request) => onDecide(impact, request)}
                 disabled={!reviewer || decide.isPending}
+                onRegisterDownload={(fn) => {
+                  downloadEditedPdfRef.current = fn
+                }}
               />
             )}
           </section>

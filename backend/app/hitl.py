@@ -136,16 +136,32 @@ def impact_rows(session: Session, vbpl_id: str) -> list[schemas.ImpactOut]:
             or page > 50
             or any(not isinstance(b, list) or len(b) != 4 for b in bboxes)
         )
-        if is_invalid and impact.document_id and impact.affected_text:
+        if impact.document_id and impact.affected_text:
             try:
                 from app.review_bridge import _locate_in_document
 
-                loc = _locate_in_document(impact.document_id, impact.affected_text)
+                loc = _locate_in_document(
+                    impact.document_id,
+                    impact.affected_text,
+                    impact.change_clause or impact.location,
+                )
                 if loc:
-                    page, bboxes = loc
-                    impact.page = page
-                    impact.bboxes = bboxes
-                    updated_any = True
+                    loc_page, loc_bboxes = loc
+                    should_update = is_invalid
+                    if not should_update and loc_bboxes:
+                        if len(loc_bboxes) > len(bboxes):
+                            should_update = True
+                        elif (
+                            len(loc_bboxes) == len(bboxes)
+                            and bboxes
+                            and loc_bboxes[-1][2] > bboxes[-1][2] + 20
+                        ):
+                            should_update = True
+                    if should_update:
+                        page, bboxes = loc_page, loc_bboxes
+                        impact.page = page
+                        impact.bboxes = bboxes
+                        updated_any = True
             except Exception:
                 pass
         out.append(

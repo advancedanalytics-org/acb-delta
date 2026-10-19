@@ -284,7 +284,9 @@ def _get_doc_pdf_bytes(doc_id: str) -> bytes | None:
     return None
 
 
-def _locate_in_document(doc_id: str, clause_text: str) -> tuple[int, list[list[float]]] | None:
+def _locate_in_document(
+    doc_id: str, clause_text: str, numbering: str | None = None
+) -> tuple[int, list[list[float]]] | None:
     try:
         import pymupdf
     except ImportError:
@@ -297,13 +299,68 @@ def _locate_in_document(doc_id: str, clause_text: str) -> tuple[int, list[list[f
             pdf = pymupdf.open(stream=raw_bytes, filetype="pdf")
         except Exception:
             return None
-        clean = re.sub(r"[*#_]", "", clause_text).replace("`", "")
-        lines = [line.strip() for line in clean.split("\n") if line.strip()]
-        if not lines:
+        clean = re.sub(r"[*#_]", "", clause_text).replace("`", "").strip()
+        if not clean:
             return None
-        candidates = [clean[:120], lines[0][:80], lines[0][:50], lines[0].split(".")[0]]
+        norm = " ".join(clean.split())
+        num = (numbering or "").strip()
+        last_num = num.split(".")[-1].strip() if num else ""
+
+        candidates = []
+        if last_num:
+            candidates.append(f"{last_num}. {norm}")
+            candidates.append(f"{last_num}) {norm}")
+            candidates.append(f"Điều {last_num}. {norm}")
+        if num and num != last_num:
+            candidates.append(f"{num}. {norm}")
+            candidates.append(f"{num} {norm}")
+        candidates.append(norm)
+
+        # 1. Full text candidates (matches across line wraps)
         for cand in candidates:
-            cand = cand.strip()
+            for page_num in range(len(pdf)):
+                page = pdf[page_num]
+                rects = page.search_for(cand)
+                if rects:
+                    m_lines: list[pymupdf.Rect] = []
+                    for rect in sorted(rects, key=lambda r: (round(r.y0), r.x0)):
+                        if m_lines and abs(m_lines[-1].y0 - rect.y0) < 3:
+                            m_lines[-1] |= rect
+                        else:
+                            m_lines.append(pymupdf.Rect(rect))
+                    boxes = [[round(v, 2) for v in (r.x0, r.y0, r.x1, r.y1)] for r in m_lines]
+                    return page_num + 1, boxes
+
+        # 2. Line by line fallback across pages to cover full paragraph
+        lines = [line.strip() for line in clean.split("\n") if line.strip()]
+        if len(lines) > 1:
+            for page_num in range(len(pdf)):
+                page = pdf[page_num]
+                all_rects = []
+                for line in lines:
+                    l_norm = " ".join(line.split())
+                    if len(l_norm) < 4:
+                        continue
+                    r_list = page.search_for(l_norm)
+                    if r_list:
+                        all_rects.extend(r_list)
+                if all_rects:
+                    m_lines = []
+                    for rect in sorted(all_rects, key=lambda r: (round(r.y0), r.x0)):
+                        if m_lines and abs(m_lines[-1].y0 - rect.y0) < 3:
+                            m_lines[-1] |= rect
+                        else:
+                            m_lines.append(pymupdf.Rect(rect))
+                    boxes = [[round(v, 2) for v in (r.x0, r.y0, r.x1, r.y1)] for r in m_lines]
+                    return page_num + 1, boxes
+
+        # 3. Fallbacks on initial lines/numbering
+        first_line = lines[0] if lines else clean
+        first_norm = " ".join(first_line.split())
+        fallbacks = [first_norm]
+        if len(first_norm) > 60:
+            fallbacks.append(first_norm[:60])
+        for cand in fallbacks:
             if len(cand) < 6:
                 continue
             for page_num in range(len(pdf)):
@@ -346,7 +403,7 @@ def impact_row(f: dict, position: int, proposal: dict | None, error: str | None)
         and f.get("impacted_document_id")
         and clause_text
     ):
-        loc = _locate_in_document(f["impacted_document_id"], clause_text)
+        loc = _locate_in_document(f["impacted_document_id"], clause_text, f.get("clause_numbering"))
         if loc:
             page, boxes = loc
     if page is None:

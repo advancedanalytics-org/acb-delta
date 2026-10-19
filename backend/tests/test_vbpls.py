@@ -28,11 +28,11 @@ def test_create_runs_agent_and_stores_pending_impacts(client, agent, create_vbpl
     assert impacts[1]["page"] == 2
 
 
-def test_no_impacts_means_done(client, create_vbpl):
+def test_no_impacts_means_not_found(client, create_vbpl):
     create_vbpl([])
 
     [vbpl] = client.get("/api/vbpls").json()
-    assert (vbpl["status"], vbpl["impactCount"]) == ("done", 0)
+    assert (vbpl["status"], vbpl["impactCount"]) == ("not_found", 0)
 
 
 def test_agent_error_marks_vbpl_failed(client, agent, create_vbpl):

@@ -280,6 +280,7 @@ def run_analysis(job_id: str) -> dict:
         corpus = load_internal_corpus(conn, options.get("internal_document_ids"))
         if not corpus.clauses:
             from pathlib import Path
+
             from app.ria.seed import seed_parsed_document
 
             for cand in [

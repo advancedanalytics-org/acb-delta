@@ -1,5 +1,5 @@
 import { Check, FileText, Loader2, PencilLine, Scale, X } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 
 import type { Impact, InternalDocument } from '@/api/types'
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { reasonTags } from '@/lib/labels'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import type { DecisionRequest } from './impact-detail'
 
 // react-pdf + our own overlay instead of react-pdf-highlighter-extended, which does not support React 19.
@@ -70,6 +71,7 @@ interface PdfViewerProps {
   onSelect: (impactId: string) => void
   onDecide?: (impact: Impact, request: DecisionRequest) => void
   disabled?: boolean
+  onRegisterDownload?: (downloadFn: () => void) => void
 }
 
 function getImpactBoundingBox(bboxes: [number, number, number, number][]) {
@@ -89,9 +91,864 @@ function getImpactBoundingBox(bboxes: [number, number, number, number][]) {
   return { x0, y0, x1, y1 }
 }
 
+function inferPrefixFromLocation(loc: string): string {
+  if (!loc) return ''
+  const trimmed = loc.trim()
+  // 1. Sub-item letters, e.g. "5.6.d", "2.1.đ", "Khoản 2.a"
+  const letterMatch = trimmed.match(/\.([a-zđĐ])(?:\b|$|\s|\.)/i)
+  if (letterMatch) {
+    return `${letterMatch[1]}) `
+  }
+  // 2. Specific article format, e.g. "Điều 5"
+  const dieuMatch = trimmed.match(/^Điều\s+(\d+[a-zđĐ]?)/i)
+  if (dieuMatch) {
+    return `${dieuMatch[0]}. `
+  }
+  // 3. Clause numbering at start of location, e.g. "2.2. Đối tượng áp dụng", "3. Rà soát"
+  const firstToken = trimmed.split(/\s+/)[0]?.replace(/\.+$/, '')
+  if (firstToken) {
+    const parts = firstToken.split('.')
+    const lastPart = parts[parts.length - 1]
+    if (lastPart && /^\d+$/.test(lastPart)) {
+      return `${lastPart}. `
+    }
+  }
+  return ''
+}
+
+export function getReplacementParts(impact: Impact): {
+  prefix: string
+  content: string
+  fullText: string
+} {
+  const rawText = (impact.finalText ?? impact.suggestedText ?? '')
+    .trim()
+    .replace(/\s+,/g, ',')
+    .replace(/\s+\./g, '.')
+    .normalize('NFC')
+  if (!rawText) {
+    return { prefix: '', content: '', fullText: '' }
+  }
+
+  const prefixRegex = /^((?:(?:Điều|Khoản|Điểm)\s+\d+[a-zđĐ]?(?:\.\d+)*[.)]?|\d+(?:\.\d+)*[.)]|[a-zđĐ][.)]|[-+•*])\s*)/i
+
+  // 1. Check if rawText already starts with a prefix (e.g. "1. ", "a) ")
+  const rawMatch = rawText.match(prefixRegex)
+  if (rawMatch) {
+    const prefix = rawMatch[1]
+    const content = rawText.slice(prefix.length).trim()
+    return {
+      prefix: prefix.trimEnd() + ' ',
+      content,
+      fullText: rawText,
+    }
+  }
+
+  // 2. Check if affectedText starts with a prefix
+  const affectedMatch = (impact.affectedText || '').trim().match(prefixRegex)
+  let prefix = ''
+  if (affectedMatch) {
+    prefix = affectedMatch[1].trimEnd() + ' '
+  } else if (impact.location) {
+    prefix = inferPrefixFromLocation(impact.location)
+  }
+
+  const content = rawText
+  const fullText = prefix ? `${prefix}${content}` : content
+  return { prefix, content, fullText }
+}
+
+
+function CanvasSlice({
+  sourceCanvas,
+  startY,
+  endY,
+  pageWidth,
+  renderTrigger,
+}: {
+  sourceCanvas: HTMLCanvasElement | null
+  startY: number
+  endY: number
+  pageWidth: number
+  renderTrigger: number
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const sliceHeight = Math.max(0, Math.round(endY - startY))
+
+  useEffect(() => {
+    const target = canvasRef.current
+    if (!target || !sourceCanvas || sliceHeight <= 0) return
+
+    const dpr = sourceCanvas.width > 0 && pageWidth > 0 ? sourceCanvas.width / pageWidth : 1
+    const targetW = Math.round(pageWidth * dpr)
+    const targetH = Math.round(sliceHeight * dpr)
+
+    if (target.width !== targetW || target.height !== targetH) {
+      target.width = targetW
+      target.height = targetH
+    }
+
+    const ctx = target.getContext('2d')
+    if (!ctx) return
+
+    ctx.clearRect(0, 0, target.width, target.height)
+
+    const sy = Math.round(startY * dpr)
+    const sh = Math.min(Math.round(sliceHeight * dpr), Math.max(0, sourceCanvas.height - sy))
+    const sw = sourceCanvas.width
+
+    if (sw > 0 && sh > 0) {
+      ctx.drawImage(sourceCanvas, 0, sy, sw, sh, 0, 0, target.width, sh)
+    }
+  }, [sourceCanvas, startY, endY, pageWidth, sliceHeight, renderTrigger])
+
+  if (sliceHeight <= 0) return null
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        width: `${pageWidth}px`,
+        height: `${sliceHeight}px`,
+        display: 'block',
+      }}
+      className="pointer-events-none select-none bg-white"
+    />
+  )
+}
+
+function ReplacedClauseBlock({
+  impact,
+  scale,
+  pageWidth,
+  docMaxX1,
+  isSelected,
+  selectedRef,
+  onSelect,
+  onMouseEnter,
+  onMouseLeave,
+  onHeightChange,
+}: {
+  impact: Impact
+  scale: number
+  pageWidth: number
+  docMaxX1: number
+  isSelected: boolean
+  selectedRef: { current: HTMLDivElement | null }
+  onSelect: (impactId: string) => void
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+  onHeightChange: (id: string, height: number) => void
+}) {
+  const blockRef = useRef<HTMLDivElement>(null)
+  const bbox = getImpactBoundingBox(impact.bboxes)
+  const { prefix, content } = getReplacementParts(impact)
+
+  useLayoutEffect(() => {
+    if (!blockRef.current) return
+    const h = blockRef.current.offsetHeight
+    if (h > 0) {
+      onHeightChange(impact.id, h)
+    }
+  }, [onHeightChange, impact.id, impact.finalText, impact.suggestedText])
+
+  useEffect(() => {
+    const el = blockRef.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return
+      const h = Math.round(entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height)
+      if (h > 0) {
+        onHeightChange(impact.id, h)
+      }
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [onHeightChange, impact.id])
+
+  const left = Math.max(0, (bbox.x0 - 2) * scale)
+  // Expand width to match the document's maximum text margin (matching paragraphs above/below)
+  const targetRight = (docMaxX1 && docMaxX1 > bbox.x1 ? docMaxX1 : Math.max(bbox.x1, 516.0)) * scale
+  const width = Math.min(
+    pageWidth - left - 12,
+    Math.max(targetRight - left, (bbox.x1 - bbox.x0) * scale),
+  )
+
+  return (
+    <div
+      ref={blockRef}
+      className="w-full bg-white relative py-1"
+      style={{ width: `${pageWidth}px` }}
+    >
+      <div
+        ref={isSelected ? selectedRef : undefined}
+        id={`impact-highlight-${impact.id}`}
+        onClick={() => onSelect(impact.id)}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        aria-label="Đoạn văn đã được thay thế bằng đề xuất của AI"
+        className={cn(
+          'cursor-pointer transition-all duration-200 select-text',
+          'bg-white rounded-r-xs',
+          'hover:bg-emerald-50/20',
+          isSelected ? 'ring-2 ring-emerald-600 ring-offset-1 z-20' : 'ring-1 ring-emerald-500/20 z-10',
+        )}
+        style={{
+          marginLeft: `${left}px`,
+          width: `${width}px`,
+          paddingLeft: `${Math.max(4, 5 * scale)}px`,
+          paddingRight: `${Math.max(4, 5 * scale)}px`,
+          paddingTop: `${Math.max(2, 3 * scale)}px`,
+          paddingBottom: `${Math.max(2, 3 * scale)}px`,
+        }}
+      >
+        <p
+          className="font-sans text-slate-900 leading-[1.38] text-justify whitespace-pre-line m-0"
+          style={{
+            fontSize: `${Math.max(11, 11.2 * scale)}px`,
+          }}
+        >
+          {prefix && (
+            <span className="font-bold text-slate-950 mr-1 select-none">
+              {prefix}
+            </span>
+          )}
+          <span className="text-slate-900 font-normal">
+            {content}
+          </span>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+export interface PageCanvasData {
+  canvas: HTMLCanvasElement
+  ptWidth: number
+  ptHeight: number
+}
+
+export function downloadCanvasesAsPdf(pages: PageCanvasData[], filename: string) {
+  if (pages.length === 0) return
+
+  const encoder = new TextEncoder()
+  const pad10 = (n: number) => n.toString().padStart(10, '0')
+
+  const header = encoder.encode('%PDF-1.4\n')
+  const numPages = pages.length
+
+  const obj1 = encoder.encode('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n')
+
+  const kidsStr = Array.from({ length: numPages }, (_, i) => `${3 + i * 3} 0 R`).join(' ')
+  const obj2 = encoder.encode(`2 0 obj\n<< /Type /Pages /Kids [${kidsStr}] /Count ${numPages} >>\nendobj\n`)
+
+  const bodyObjs: Uint8Array[] = [obj1, obj2]
+
+  for (let i = 0; i < numPages; i++) {
+    const k = i + 1
+    const pageId = 3 + i * 3
+    const contentId = pageId + 1
+    const imgId = pageId + 2
+
+    const pageData = pages[i]
+    const ptW = pageData.ptWidth
+    const ptH = pageData.ptHeight
+    const canvas = pageData.canvas
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
+    const binaryString = atob(dataUrl.split(',')[1] || '')
+    const len = binaryString.length
+    const jpegBytes = new Uint8Array(len)
+    for (let j = 0; j < len; j++) {
+      jpegBytes[j] = binaryString.charCodeAt(j)
+    }
+
+    const contentStream = encoder.encode(
+      `q\n${ptW.toFixed(2)} 0 0 ${ptH.toFixed(2)} 0 0 cm\n/Im${k} Do\nQ\n`,
+    )
+
+    const pageObj = encoder.encode(
+      `${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${ptW.toFixed(2)} ${ptH.toFixed(2)}] /Contents ${contentId} 0 R /Resources << /XObject << /Im${k} ${imgId} 0 R >> /ProcSet [/PDF /ImageC] >> >>\nendobj\n`,
+    )
+
+    const contentObj = new Uint8Array([
+      ...encoder.encode(`${contentId} 0 obj\n<< /Length ${contentStream.length} >>\nstream\n`),
+      ...contentStream,
+      ...encoder.encode('endstream\nendobj\n'),
+    ])
+
+    const imgHeader = encoder.encode(
+      `${imgId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`,
+    )
+    const imgFooter = encoder.encode('\nendstream\nendobj\n')
+    const imgObj = new Uint8Array(imgHeader.length + jpegBytes.length + imgFooter.length)
+    imgObj.set(imgHeader, 0)
+    imgObj.set(jpegBytes, imgHeader.length)
+    imgObj.set(imgFooter, imgHeader.length + jpegBytes.length)
+
+    bodyObjs.push(pageObj, contentObj, imgObj)
+  }
+
+  let currentOffset = header.length
+  const objOffsets: number[] = [0]
+  for (const obj of bodyObjs) {
+    objOffsets.push(currentOffset)
+    currentOffset += obj.length
+  }
+
+  const xrefPos = currentOffset
+  const totalObjs = bodyObjs.length + 1
+
+  let xrefStr = `xref\n0 ${totalObjs}\n0000000000 65535 f \n`
+  for (let idx = 1; idx < objOffsets.length; idx++) {
+    xrefStr += `${pad10(objOffsets[idx])} 00000 n \n`
+  }
+  const xref = encoder.encode(xrefStr)
+  const trailer = encoder.encode(
+    `trailer\n<< /Size ${totalObjs} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`,
+  )
+
+  const totalLength = xrefPos + xref.length + trailer.length
+  const pdfBytes = new Uint8Array(totalLength)
+  let pos = 0
+  pdfBytes.set(header, pos)
+  pos += header.length
+  for (const obj of bodyObjs) {
+    pdfBytes.set(obj, pos)
+    pos += obj.length
+  }
+  pdfBytes.set(xref, pos)
+  pos += xref.length
+  pdfBytes.set(trailer, pos)
+
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => {
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, 1000)
+}
+
+interface PdfPageViewProps {
+  pageNumber: number
+  pageWidth: number
+  numPages: number
+  scale: number
+  impacts: Impact[]
+  selectedId: string | undefined
+  selectedRef: { current: HTMLDivElement | null }
+  hoveredInfo: HoveredInfo | null
+  onSelect: (impactId: string) => void
+  onMouseEnter: (
+    impact: Impact,
+    pageNumber: number,
+    scale: number,
+    customTop?: number,
+    customHeight?: number,
+  ) => void
+  onMouseLeave: () => void
+  clearHoverTimeout: () => void
+  handlePageLoadSuccess: (pageNumber: number, originalWidth: number) => void
+  onDecide?: (impact: Impact, request: DecisionRequest) => void
+  isEditingRef: { current: boolean }
+  hoveredImpactIdRef: { current: string | null }
+  setHoveredInfo: React.Dispatch<React.SetStateAction<HoveredInfo | null>>
+  disabled?: boolean
+  onRegisterPageExport?: (pageNumber: number, getter: (() => PageCanvasData | null) | null) => void
+}
+
+function PdfPageView({
+  pageNumber,
+  pageWidth,
+  numPages,
+  scale,
+  impacts,
+  selectedId,
+  selectedRef,
+  hoveredInfo,
+  onSelect,
+  onMouseEnter,
+  onMouseLeave,
+  clearHoverTimeout,
+  handlePageLoadSuccess,
+  onDecide,
+  isEditingRef,
+  hoveredImpactIdRef,
+  setHoveredInfo,
+  disabled,
+  onRegisterPageExport,
+}: PdfPageViewProps) {
+  const sourceContainerRef = useRef<HTMLDivElement>(null)
+  const [sourceCanvas, setSourceCanvas] = useState<HTMLCanvasElement | null>(null)
+  const [renderTrigger, setRenderTrigger] = useState(0)
+  const [clauseHeights, setClauseHeights] = useState<Record<string, number>>({})
+  const [measuredPageHeight, setMeasuredPageHeight] = useState<number>(0)
+
+  const docMaxX1 = useMemo(() => {
+    let max = 0
+    for (const imp of impacts) {
+      for (const bbox of imp.bboxes || []) {
+        if (bbox[2] > max) max = bbox[2]
+      }
+    }
+    return max > 0 ? max : 516.0
+  }, [impacts])
+
+  const updateSourceCanvas = useCallback(() => {
+    const container = sourceContainerRef.current
+    if (!container) return
+    const canvas = container.querySelector('canvas')
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      setSourceCanvas(canvas)
+      const h =
+        container.clientHeight ||
+        (canvas.width > 0 && pageWidth > 0 ? (canvas.height / canvas.width) * pageWidth : 0)
+      if (h > 0) {
+        setMeasuredPageHeight((prev) => (Math.abs(prev - h) < 1 ? prev : h))
+      }
+      setRenderTrigger((prev) => prev + 1)
+    }
+  }, [pageWidth])
+
+  const pageImpacts = useMemo(
+    () => impacts.filter((impact) => impact.page === pageNumber),
+    [impacts, pageNumber],
+  )
+
+  const acceptedImpacts = useMemo(
+    () =>
+      pageImpacts.filter(
+        (impact) => impact.status === 'accepted' && impact.bboxes && impact.bboxes.length > 0,
+      ),
+    [pageImpacts],
+  )
+
+  const sortedAccepted = useMemo(() => {
+    return [...acceptedImpacts].sort((a, b) => {
+      const boxA = getImpactBoundingBox(a.bboxes)
+      const boxB = getImpactBoundingBox(b.bboxes)
+      return boxA.y0 - boxB.y0
+    })
+  }, [acceptedImpacts])
+
+  const onHeightChange = useCallback((id: string, height: number) => {
+    setClauseHeights((prev) => {
+      if (prev[id] && Math.abs(prev[id] - height) < 1) return prev
+      return { ...prev, [id]: height }
+    })
+  }, [])
+
+  const getShiftAtY = useCallback(
+    (origY: number) => {
+      let shift = 0
+      for (const imp of sortedAccepted) {
+        const box = getImpactBoundingBox(imp.bboxes)
+        const startY = box.y0 * scale
+        const endY = box.y1 * scale
+        const origH = Math.max(0, endY - startY)
+        const measuredH = clauseHeights[imp.id] ?? origH
+        if (origY >= endY - 1) {
+          shift += measuredH - origH
+        }
+      }
+      return shift
+    },
+    [sortedAccepted, scale, clauseHeights],
+  )
+
+  const isSliced = sortedAccepted.length > 0 && scale > 0
+
+  const pageHeight =
+    measuredPageHeight > 0
+      ? measuredPageHeight
+      : sourceCanvas && pageWidth > 0 && sourceCanvas.width > 0
+        ? (sourceCanvas.height / sourceCanvas.width) * pageWidth
+        : pageWidth * 1.414
+
+  const pendingAndRejected = useMemo(
+    () => pageImpacts.filter((imp) => imp.status !== 'accepted'),
+    [pageImpacts],
+  )
+
+  const getPageExportData = useCallback((): PageCanvasData | null => {
+    const canvas = sourceCanvas || sourceContainerRef.current?.querySelector('canvas')
+    if (!canvas || canvas.width === 0 || canvas.height === 0) return null
+
+    const dpr = canvas.width > 0 && pageWidth > 0 ? canvas.width / pageWidth : 1.5
+    const ptW = 595.28
+
+    if (!isSliced) {
+      const ptH = canvas.width > 0 ? (canvas.height / canvas.width) * ptW : 841.89
+      return { canvas, ptWidth: ptW, ptHeight: ptH }
+    }
+
+    // When sliced, composite canvas slices + replaced clause blocks seamlessly
+    const totalCssHeight = pageHeight + getShiftAtY(pageHeight)
+    const exportCanvas = window.document.createElement('canvas')
+    exportCanvas.width = Math.round(pageWidth * dpr)
+    exportCanvas.height = Math.round(totalCssHeight * dpr)
+    const ctx = exportCanvas.getContext('2d')
+    if (!ctx) return null
+
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height)
+
+    let currentSourceY = 0
+    let currentOutY = 0
+
+    sortedAccepted.forEach((imp) => {
+      const bbox = getImpactBoundingBox(imp.bboxes)
+      const startY = bbox.y0 * scale
+      const endY = bbox.y1 * scale
+      const origH = Math.max(0, endY - startY)
+      const measuredH = clauseHeights[imp.id] ?? origH
+
+      // 1. Draw top canvas slice
+      const sliceH = Math.max(0, startY - currentSourceY)
+      if (sliceH > 0) {
+        const sy = Math.round(currentSourceY * dpr)
+        const sh = Math.min(Math.round(sliceH * dpr), Math.max(0, canvas.height - sy))
+        const outH = sh
+        if (canvas.width > 0 && sh > 0) {
+          ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, Math.round(currentOutY * dpr), exportCanvas.width, outH)
+        }
+        currentOutY += sliceH
+      }
+
+      // 2. Draw Replaced Clause Block
+      const blockOutY = currentOutY
+      const blockOutH = measuredH
+      const left = Math.max(0, (bbox.x0 - 2) * scale)
+      const targetRight = (docMaxX1 && docMaxX1 > bbox.x1 ? docMaxX1 : Math.max(bbox.x1, 516.0)) * scale
+      const blockW = Math.min(pageWidth - left - 12, Math.max(targetRight - left, (bbox.x1 - bbox.x0) * scale))
+
+      // Clean white background behind text
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(Math.round(left * dpr), Math.round(blockOutY * dpr), Math.round(blockW * dpr), Math.round(blockOutH * dpr))
+
+      // Text inside block - clean document text without badges or borders
+      const { fullText } = getReplacementParts(imp)
+      const padL = Math.max(4, 5 * scale) * dpr
+      const padR = Math.max(4, 5 * scale) * dpr
+      const padT = Math.max(2, 3 * scale) * dpr
+      const fontSize = Math.max(11, 11.2 * scale) * dpr
+      const lineHeight = fontSize * 1.38
+
+      const textX = Math.round(left * dpr + padL)
+      let textY = Math.round(blockOutY * dpr + padT) + fontSize * 0.85
+      const maxTextW = Math.round(blockW * dpr - padL - padR)
+
+      ctx.fillStyle = '#0f172a'
+      ctx.font = `${Math.round(fontSize)}px "Be Vietnam Pro", sans-serif`
+
+      const words = fullText.split(/\s+/)
+      let currentLine = ''
+
+      for (let n = 0; n < words.length; n++) {
+        const testLine = currentLine ? `${currentLine} ${words[n]}` : words[n]
+        const metrics = ctx.measureText(testLine)
+        if (metrics.width > maxTextW && currentLine) {
+          ctx.fillText(currentLine, textX, textY)
+          currentLine = words[n]
+          textY += lineHeight
+        } else {
+          currentLine = testLine
+        }
+      }
+      if (currentLine) {
+        ctx.fillText(currentLine, textX, textY)
+      }
+
+      currentOutY += measuredH
+      currentSourceY = endY
+    })
+
+    // 3. Draw last slice
+    const lastSliceH = Math.max(0, pageHeight - currentSourceY)
+    if (lastSliceH > 0) {
+      const sy = Math.round(currentSourceY * dpr)
+      const sh = Math.min(Math.round(lastSliceH * dpr), Math.max(0, canvas.height - sy))
+      const outH = sh
+      if (canvas.width > 0 && sh > 0) {
+        ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, Math.round(currentOutY * dpr), exportCanvas.width, outH)
+      }
+    }
+
+    const ptH = totalCssHeight > 0 && pageWidth > 0 ? (totalCssHeight / pageWidth) * ptW : 841.89
+    return { canvas: exportCanvas, ptWidth: ptW, ptHeight: ptH }
+  }, [sourceCanvas, pageWidth, isSliced, pageHeight, getShiftAtY, sortedAccepted, scale, clauseHeights, docMaxX1])
+
+  useEffect(() => {
+    onRegisterPageExport?.(pageNumber, getPageExportData)
+  }, [onRegisterPageExport, pageNumber, getPageExportData])
+
+  useEffect(() => {
+    return () => {
+      onRegisterPageExport?.(pageNumber, null)
+    }
+  }, [onRegisterPageExport, pageNumber])
+
+  return (
+    <div
+      key={pageNumber}
+      data-page-number={pageNumber}
+      className="relative bg-white shadow-[0_1px_2px_oklch(0.3_0.03_258/0.08),0_4px_12px_oklch(0.3_0.03_258/0.08)]"
+      style={{ width: pageWidth }}
+    >
+      {/* 1. Underlying react-pdf Page: always mounted so canvas bitmap stays in memory */}
+      <div
+        ref={sourceContainerRef}
+        className={cn(
+          'w-full',
+          isSliced && 'absolute top-0 left-0 opacity-0 pointer-events-none -z-10',
+        )}
+        style={{ width: pageWidth }}
+        aria-hidden={isSliced}
+      >
+        <Page
+          pageNumber={pageNumber}
+          width={pageWidth}
+          renderTextLayer={false}
+          renderAnnotationLayer={false}
+          loading={<PageSkeleton width={pageWidth} />}
+          onLoadSuccess={(page) => {
+            handlePageLoadSuccess(pageNumber, page.originalWidth)
+            updateSourceCanvas()
+          }}
+          onRenderSuccess={updateSourceCanvas}
+        />
+      </div>
+
+      {/* 2. Sliced Column Mode: Canvas slices with Replaced Clause Block in normal DOM flow */}
+      {isSliced && (
+        <div className="flex flex-col w-full bg-white">
+          {(() => {
+            const elements: React.ReactNode[] = []
+            let currentY = 0
+
+            sortedAccepted.forEach((imp, index) => {
+              const bbox = getImpactBoundingBox(imp.bboxes)
+              const startY = bbox.y0 * scale
+              const endY = bbox.y1 * scale
+
+              // Top slice before this accepted block
+              const sliceTop = currentY
+              const sliceBottom = Math.max(sliceTop, startY)
+              if (sliceBottom > sliceTop) {
+                elements.push(
+                  <CanvasSlice
+                    key={`slice-${pageNumber}-${index}`}
+                    sourceCanvas={sourceCanvas}
+                    startY={sliceTop}
+                    endY={sliceBottom}
+                    pageWidth={pageWidth}
+                    renderTrigger={renderTrigger}
+                  />,
+                )
+              }
+
+              // Replaced block
+              const isSelected = imp.id === selectedId
+              const blockTop = startY + getShiftAtY(startY)
+              const origH = Math.max(0, endY - startY)
+              const blockHeight = clauseHeights[imp.id] ?? origH
+
+              elements.push(
+                <ReplacedClauseBlock
+                  key={`block-${imp.id}`}
+                  impact={imp}
+                  scale={scale}
+                  pageWidth={pageWidth}
+                  docMaxX1={docMaxX1}
+                  isSelected={isSelected}
+                  selectedRef={selectedRef}
+                  onSelect={onSelect}
+                  onMouseEnter={() =>
+                    onMouseEnter(imp, pageNumber, scale, blockTop, blockHeight)
+                  }
+                  onMouseLeave={onMouseLeave}
+                  onHeightChange={onHeightChange}
+                />,
+              )
+
+              currentY = Math.max(currentY, endY)
+            })
+
+            // Final slice to bottom of page
+            if (pageHeight > currentY) {
+              elements.push(
+                <CanvasSlice
+                  key={`slice-${pageNumber}-last`}
+                  sourceCanvas={sourceCanvas}
+                  startY={currentY}
+                  endY={pageHeight}
+                  pageWidth={pageWidth}
+                  renderTrigger={renderTrigger}
+                />,
+              )
+            }
+
+            return elements
+          })()}
+        </div>
+      )}
+
+      {/* 3. Highlights overlay for pending/rejected impacts (with vertical shift in sliced mode) */}
+      {scale > 0 && isSliced && (
+        <div className="absolute inset-0 pointer-events-none">
+          {pendingAndRejected.map((impact) => {
+            const isSelected = impact.id === selectedId
+            return impact.bboxes.map(([x0, y0, x1, y1], boxIndex) => {
+              const origTop = y0 * scale
+              const shift = getShiftAtY(origTop)
+              const shiftedTop = origTop + shift
+              const boxHeight = (y1 - y0) * scale
+
+              return (
+                <div
+                  key={`${impact.id}-${boxIndex}`}
+                  ref={isSelected && boxIndex === 0 ? selectedRef : undefined}
+                  id={isSelected && boxIndex === 0 ? `impact-highlight-${impact.id}` : undefined}
+                  onClick={() => {
+                    onSelect(impact.id)
+                    const fullBox = getImpactBoundingBox(impact.bboxes)
+                    const fTop = fullBox.y0 * scale + getShiftAtY(fullBox.y0 * scale)
+                    const fH = (fullBox.y1 - fullBox.y0) * scale
+                    onMouseEnter(impact, pageNumber, scale, fTop, fH)
+                  }}
+                  onMouseEnter={() => {
+                    const fullBox = getImpactBoundingBox(impact.bboxes)
+                    const fTop = fullBox.y0 * scale + getShiftAtY(fullBox.y0 * scale)
+                    const fH = (fullBox.y1 - fullBox.y0) * scale
+                    onMouseEnter(impact, pageNumber, scale, fTop, fH)
+                  }}
+                  onMouseLeave={onMouseLeave}
+                  aria-hidden
+                  className={cn(
+                    'absolute cursor-pointer mix-blend-multiply transition-all duration-200 pointer-events-auto',
+                    highlightStyle[impact.status],
+                    isSelected &&
+                      (impact.status === 'rejected'
+                        ? 'bg-rose-500/50 ring-2 ring-rose-600 ring-offset-1 z-10'
+                        : 'bg-amber-400/65 ring-2 ring-amber-500 ring-offset-1 z-10'),
+                  )}
+                  style={{
+                    left: x0 * scale,
+                    top: shiftedTop,
+                    width: (x1 - x0) * scale,
+                    height: boxHeight,
+                  }}
+                />
+              )
+            })
+          })}
+        </div>
+      )}
+
+      {/* 4. Highlights overlay for normal mode (when no impacts are accepted yet) */}
+      {scale > 0 && !isSliced && (
+        <>
+          {pageImpacts.map((impact) => {
+            const isSelected = impact.id === selectedId
+            return impact.bboxes.map(([x0, y0, x1, y1], boxIndex) => (
+              <div
+                key={`${impact.id}-${boxIndex}`}
+                ref={isSelected && boxIndex === 0 ? selectedRef : undefined}
+                id={isSelected && boxIndex === 0 ? `impact-highlight-${impact.id}` : undefined}
+                onClick={() => {
+                  onSelect(impact.id)
+                  onMouseEnter(impact, pageNumber, scale)
+                }}
+                onMouseEnter={() => onMouseEnter(impact, pageNumber, scale)}
+                onMouseLeave={onMouseLeave}
+                aria-hidden
+                className={cn(
+                  'absolute cursor-pointer mix-blend-multiply transition-all duration-200',
+                  highlightStyle[impact.status],
+                  isSelected &&
+                    (impact.status === 'rejected'
+                      ? 'bg-rose-500/50 ring-2 ring-rose-600 ring-offset-1 z-10'
+                      : 'bg-amber-400/65 ring-2 ring-amber-500 ring-offset-1 z-10'),
+                )}
+                style={{
+                  left: x0 * scale,
+                  top: y0 * scale,
+                  width: (x1 - x0) * scale,
+                  height: (y1 - y0) * scale,
+                }}
+              />
+            ))
+          })}
+        </>
+      )}
+
+      {/* 5. Floating hover card showing the new legal regulation text */}
+      {hoveredInfo && hoveredInfo.pageNumber === pageNumber && (
+        <HoverLegalCard
+          key={hoveredInfo.impact.id}
+          impact={hoveredInfo.impact}
+          bbox={{
+            top: hoveredInfo.top,
+            left: hoveredInfo.left,
+            width: hoveredInfo.width,
+            height: hoveredInfo.height,
+          }}
+          pageWidth={pageWidth}
+          onMouseEnter={clearHoverTimeout}
+          onMouseLeave={onMouseLeave}
+          onEditingChange={(editing) => {
+            isEditingRef.current = editing
+          }}
+          onClose={() => {
+            isEditingRef.current = false
+            hoveredImpactIdRef.current = null
+            setHoveredInfo(null)
+          }}
+          onDecide={
+            onDecide
+              ? (request) => {
+                  isEditingRef.current = false
+                  const approvedText =
+                    request.action === 'edit'
+                      ? request.editedText
+                      : (hoveredInfo.impact.finalText ?? hoveredInfo.impact.suggestedText)
+                  const updatedImpact: Impact = {
+                    ...hoveredInfo.impact,
+                    status: request.action === 'reject' ? 'rejected' : 'accepted',
+                    finalText: request.action === 'reject' ? undefined : approvedText,
+                  }
+                  onDecide(hoveredInfo.impact, request)
+                  setHoveredInfo((prev) => (prev ? { ...prev, impact: updatedImpact } : null))
+                }
+              : undefined
+          }
+          onSelect={onSelect}
+          disabled={disabled}
+        />
+      )}
+
+      <span className="absolute right-2 bottom-1 text-[11px] text-slate-400 font-mono">
+        {pageNumber}/{numPages}
+      </span>
+    </div>
+  )
+}
 
 /** Mount with key={document.id}: page measurements are per document. */
-export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, disabled }: PdfViewerProps) {
+export function PdfViewer({
+  document,
+  impacts,
+  selectedId,
+  onSelect,
+  onDecide,
+  disabled,
+  onRegisterDownload,
+}: PdfViewerProps) {
   const { ref, width } = useContainerWidth()
   const [numPages, setNumPages] = useState(0)
   // Original page width in PDF points, per page, to convert bbox points to pixels.
@@ -103,6 +960,55 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isEditingRef = useRef(false)
+  const pageExportsRef = useRef<Record<number, () => PageCanvasData | null>>({})
+
+  const onRegisterPageExport = useCallback(
+    (pageNumber: number, getter: (() => PageCanvasData | null) | null) => {
+      if (getter) {
+        pageExportsRef.current[pageNumber] = getter
+      } else {
+        delete pageExportsRef.current[pageNumber]
+      }
+    },
+    [],
+  )
+
+  const downloadFullEditedPdf = useCallback(() => {
+    const pages: PageCanvasData[] = []
+    const container = ref.current
+    for (let p = 1; p <= numPages; p++) {
+      let pageData: PageCanvasData | null = null
+      const getter = pageExportsRef.current[p]
+      if (getter) {
+        pageData = getter()
+      }
+      if (!pageData && container) {
+        const pageEl = container.querySelector(`[data-page-number="${p}"]`)
+        const canvas = pageEl?.querySelector('canvas')
+        if (canvas && canvas.width > 0 && canvas.height > 0) {
+          const ptW = pointWidths[p] || DEFAULT_POINT_WIDTH
+          const ptH = (canvas.height / canvas.width) * ptW
+          pageData = { canvas, ptWidth: ptW, ptHeight: ptH }
+        }
+      }
+      if (pageData) {
+        pages.push(pageData)
+      }
+    }
+    if (pages.length > 0) {
+      toast.success('Đang tạo và tải xuống tệp PDF đã chỉnh sửa...')
+      downloadCanvasesAsPdf(pages, `${document.code}_DaChinhSua.pdf`)
+    } else {
+      toast.error('Chưa có dữ liệu trang để xuất PDF. Vui lòng thử lại sau giây lát.')
+    }
+  }, [numPages, document.code, pointWidths, ref])
+
+  useEffect(() => {
+    onRegisterDownload?.(downloadFullEditedPdf)
+    return () => {
+      onRegisterDownload?.(() => {})
+    }
+  }, [onRegisterDownload, downloadFullEditedPdf])
 
   const handlePageLoadSuccess = useCallback((pageNumber: number, originalWidth: number) => {
     setPointWidths((prev) => {
@@ -133,6 +1039,8 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
     impact: Impact,
     pageNumber: number,
     scale: number,
+    customTop?: number,
+    customHeight?: number,
   ) => {
     clearHoverTimeout()
     // If the card is already being shown for this exact impact, KEEP IT FIXED!
@@ -147,10 +1055,10 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
     setHoveredInfo({
       impact,
       pageNumber,
-      top: bbox.y0 * scale,
+      top: customTop !== undefined ? customTop : bbox.y0 * scale,
       left: bbox.x0 * scale,
       width: (bbox.x1 - bbox.x0) * scale,
-      height: (bbox.y1 - bbox.y0) * scale,
+      height: customHeight !== undefined ? customHeight : (bbox.y1 - bbox.y0) * scale,
     })
   }
 
@@ -227,108 +1135,28 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
             const pageNumber = index + 1
             const scale = getPageScale(pageNumber, pageWidth)
             return (
-              <div
+              <PdfPageView
                 key={pageNumber}
-                className="relative bg-white shadow-[0_1px_2px_oklch(0.3_0.03_258/0.08),0_4px_12px_oklch(0.3_0.03_258/0.08)]"
-                style={{ width: pageWidth }}
-              >
-                <Page
-                  pageNumber={pageNumber}
-                  width={pageWidth}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                  loading={<PageSkeleton width={pageWidth} />}
-                  onLoadSuccess={(page) => handlePageLoadSuccess(pageNumber, page.originalWidth)}
-                />
-                {scale > 0 &&
-                  impacts
-                    .filter((impact) => impact.page === pageNumber)
-                    .map((impact) =>
-                      impact.bboxes.map(([x0, y0, x1, y1], boxIndex) => {
-                        const isSelected = impact.id === selectedId
-                        return (
-                          <div
-                            key={`${impact.id}-${boxIndex}`}
-                            ref={isSelected && boxIndex === 0 ? selectedRef : undefined}
-                            id={isSelected && boxIndex === 0 ? `impact-highlight-${impact.id}` : undefined}
-                            onClick={() => {
-                              onSelect(impact.id)
-                              handleMouseEnter(impact, pageNumber, scale)
-                            }}
-                            onMouseEnter={() => handleMouseEnter(impact, pageNumber, scale)}
-                            onMouseLeave={handleMouseLeave}
-                            aria-hidden
-                            className={cn(
-                              'absolute cursor-pointer mix-blend-multiply transition-all duration-200',
-                              highlightStyle[impact.status],
-                              isSelected && (
-                                impact.status === 'accepted'
-                                  ? 'bg-emerald-500/65 ring-2 ring-emerald-600 ring-offset-1 z-10'
-                                  : impact.status === 'rejected'
-                                    ? 'bg-rose-500/50 ring-2 ring-rose-600 ring-offset-1 z-10'
-                                    : 'bg-amber-400/65 ring-2 ring-amber-500 ring-offset-1 z-10'
-                              ),
-                            )}
-                            style={{
-                              left: x0 * scale,
-                              top: y0 * scale,
-                              width: (x1 - x0) * scale,
-                              height: (y1 - y0) * scale,
-                            }}
-                          />
-                        )
-                      }),
-                    )}
-
-                {/* Floating hover card showing the new legal regulation text */}
-                {hoveredInfo && hoveredInfo.pageNumber === pageNumber && (
-                  <HoverLegalCard
-                    key={hoveredInfo.impact.id}
-                    impact={hoveredInfo.impact}
-                    bbox={{
-                      top: hoveredInfo.top,
-                      left: hoveredInfo.left,
-                      width: hoveredInfo.width,
-                      height: hoveredInfo.height,
-                    }}
-                    pageWidth={pageWidth}
-                    onMouseEnter={clearHoverTimeout}
-                    onMouseLeave={handleMouseLeave}
-                    onEditingChange={(editing) => {
-                      isEditingRef.current = editing
-                    }}
-                    onClose={() => {
-                      isEditingRef.current = false
-                      hoveredImpactIdRef.current = null
-                      setHoveredInfo(null)
-                    }}
-                    onDecide={
-                      onDecide
-                        ? (request) => {
-                            isEditingRef.current = false
-                            const approvedText =
-                              request.action === 'edit'
-                                ? request.editedText
-                                : (hoveredInfo.impact.finalText ?? hoveredInfo.impact.suggestedText)
-                            const updatedImpact: Impact = {
-                              ...hoveredInfo.impact,
-                              status: request.action === 'reject' ? 'rejected' : 'accepted',
-                              finalText: request.action === 'reject' ? undefined : approvedText,
-                            }
-                            onDecide(hoveredInfo.impact, request)
-                            setHoveredInfo((prev) => (prev ? { ...prev, impact: updatedImpact } : null))
-                          }
-                        : undefined
-                    }
-                    onSelect={onSelect}
-                    disabled={disabled}
-                  />
-                )}
-
-                <span className="absolute right-2 bottom-1 text-[11px] text-slate-400">
-                  {pageNumber}/{numPages}
-                </span>
-              </div>
+                pageNumber={pageNumber}
+                pageWidth={pageWidth}
+                numPages={numPages}
+                scale={scale}
+                impacts={impacts}
+                selectedId={selectedId}
+                selectedRef={selectedRef}
+                hoveredInfo={hoveredInfo}
+                onSelect={onSelect}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                clearHoverTimeout={clearHoverTimeout}
+                handlePageLoadSuccess={handlePageLoadSuccess}
+                onDecide={onDecide}
+                isEditingRef={isEditingRef}
+                hoveredImpactIdRef={hoveredImpactIdRef}
+                setHoveredInfo={setHoveredInfo}
+                disabled={disabled}
+                onRegisterPageExport={onRegisterPageExport}
+              />
             )
           })}
         </Document>
@@ -557,7 +1385,7 @@ function HoverLegalCard({
                 Nội dung đã được chấp nhận:
               </p>
               <p className="line-clamp-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-950 dark:text-emerald-200">
-                {impact.finalText ?? impact.suggestedText}
+                {getReplacementParts(impact).fullText}
               </p>
             </div>
           )}
