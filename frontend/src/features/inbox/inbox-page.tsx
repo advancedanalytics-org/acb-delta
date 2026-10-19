@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Search } from 'lucide-react'
+import { ArrowRight, Check, Search } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 
 import { api } from '@/api/client'
@@ -154,11 +154,38 @@ export function InboxPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {vbpl.status === 'processing' ? (
-                        <span className="text-muted-foreground">Chưa có</span>
+                        <span className="text-xs text-muted-foreground">Chưa có</span>
+                      ) : canOpen ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            open()
+                          }}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all cursor-pointer shadow-xs',
+                            vbpl.pendingCount > 0
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 border border-amber-500/30'
+                              : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/25',
+                          )}
+                          title={`Nhấn để duyệt ${vbpl.number}`}
+                        >
+                          {vbpl.pendingCount > 0 ? (
+                            <>
+                              <span className="font-semibold">{vbpl.pendingCount}</span>
+                              <span className="opacity-75">/{vbpl.impactCount} chờ duyệt</span>
+                              <ArrowRight className="size-3 opacity-75 group-hover:translate-x-0.5 transition-transform" />
+                            </>
+                          ) : (
+                            <>
+                              <Check className="size-3 text-emerald-600" />
+                              <span>{vbpl.impactCount}/{vbpl.impactCount} đã duyệt</span>
+                            </>
+                          )}
+                        </button>
                       ) : (
-                        <span>
-                          <span className="font-semibold">{vbpl.pendingCount}</span>
-                          <span className="text-muted-foreground">/{vbpl.impactCount}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {vbpl.pendingCount}/{vbpl.impactCount}
                         </span>
                       )}
                     </TableCell>
