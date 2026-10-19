@@ -19,6 +19,7 @@ from app.db import get_engine
 from app.ria import embeddings, graph, jobs, llm, rerank
 from app.ria.applicability import classify_obligations
 from app.ria.compare import PRIORITY, judge_group
+from app.ria.indexing import ensure_article_views
 from app.ria.retrieval import (
     RetrievalParams,
     aggregate_documents,
@@ -313,6 +314,12 @@ def run_analysis(job_id: str) -> dict:
             if not n_dense:
                 warnings.append(f"no internal vectors for {model}; dense retrieval skipped")
                 model = None
+            elif params.article_candidates > 0:
+                # Corpora indexed before article views existed get them from stored vectors.
+                with get_engine().begin() as wconn:
+                    ensure_article_views(
+                        wconn, {c["version_id"] for c in corpus.clauses.values()}, model
+                    )
         else:
             warnings.append("EMBEDDING_BASE_URL not set; sparse retrieval only")
         if not reranker:
@@ -474,6 +481,7 @@ def run_analysis(job_id: str) -> dict:
                                 "rrf": ev["candidate"]["rrf"],
                                 "dense": ev["candidate"]["dense"],
                                 "rerank": ev["candidate"]["rerank"],
+                                "article": ev["candidate"].get("article"),
                                 "shared_terms": ev["candidate"]["shared_terms"],
                                 "idf_score": ev["candidate"]["idf_score"],
                                 "queries": traces[ev["obligation"]["obligation_id"]]["queries"],

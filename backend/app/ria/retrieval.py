@@ -3,6 +3,9 @@
 For each obligation: several controlled query views → sparse (Postgres full-text over syllable
 bigrams) and, when configured, dense (pgvector) search → Reciprocal Rank Fusion → lexical
 relevance gate → document-level aggregation → parent-context expansion.
+
+Dense search also matches whole articles (Điều) on the mean of their clause vectors (DICE, see
+indexing.build_article_views); the clauses of the best articles join the fusion as their own lists.
 """
 
 import math
@@ -12,7 +15,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import text
 
 from app.ria import embeddings, rerank
-from app.ria.indexing import context_text
+from app.ria.indexing import ARTICLE_VIEW, INDEXED_LEVELS, context_text
 from app.ria.textutil import content_bigrams, normalize, tsquery_from_bigrams
 
 _EXCEPTION_HINT = re.compile(r"\b(trừ|ngoại trừ|không áp dụng|miễn)\b", re.IGNORECASE)
@@ -42,6 +45,9 @@ class RetrievalParams:
     # the usual threshold; evidence clauses pull in up to graph_neighbors dependent clauses.
     graph_relax: float = 0.6
     graph_neighbors: int = 3
+    # DICE: articles matched per dense query view on their aggregated vector; their clauses
+    # join the fusion. 0 turns article matching off.
+    article_candidates: int = 3
 
 
 @dataclass
@@ -146,21 +152,62 @@ def _sparse(conn, query: str, corpus: InternalCorpus, limit: int) -> list[tuple[
     return [(cid, float(score)) for cid, score in rows]
 
 
-def _dense(conn, vector: list[float], model: str, corpus: InternalCorpus, limit: int):
+def _dense(
+    conn,
+    vector: list[float],
+    model: str,
+    corpus: InternalCorpus,
+    limit: int,
+    view: str = "context",
+    ids: list[str] | None = None,
+):
     rows = conn.execute(
         text(
             "SELECT iv.clause_id, 1 - (iv.embedding <=> CAST(:qv AS vector)) AS score "
-            "FROM index_view iv WHERE iv.embedding_version = :model AND iv.clause_id = ANY(:ids) "
+            "FROM index_view iv WHERE iv.embedding_version = :model AND iv.view_type = :view "
+            "AND iv.clause_id = ANY(:ids) "
             "ORDER BY iv.embedding <=> CAST(:qv AS vector) LIMIT :n"
         ),
         {
             "qv": embeddings.to_pgvector(vector),
             "model": model,
-            "ids": list(corpus.clauses),
+            "view": view,
+            "ids": list(ids if ids is not None else corpus.clauses),
             "n": limit,
         },
     )
     return [(cid, float(score)) for cid, score in rows]
+
+
+def article_members(article_id: str, corpus: InternalCorpus) -> list[str]:
+    """The article and its descendant clauses, in document order."""
+    out, stack = [], [article_id]
+    while stack:
+        cid = stack.pop()
+        if corpus.clauses[cid]["level"] in INDEXED_LEVELS:
+            out.append(cid)
+        stack.extend(reversed(corpus.children.get(cid, [])))
+    return out
+
+
+def _dense_articles(
+    conn, vector: list[float], model: str, corpus: InternalCorpus, params: RetrievalParams
+) -> tuple[list[tuple[str, float]], dict[str, float]]:
+    """Clauses of the best-matching articles: article rank first, then each clause's own
+    similarity. Returns the ranked clauses and the article score each one came from."""
+    articles = _dense(conn, vector, model, corpus, params.article_candidates, view=ARTICLE_VIEW)
+    members = {aid: article_members(aid, corpus) for aid, _ in articles}
+    ids = [cid for cids in members.values() for cid in cids]
+    if not ids:
+        return [], {}
+    own = dict(_dense(conn, vector, model, corpus, len(ids), ids=ids))
+    ranked, origin = [], {}
+    for aid, a_score in articles:
+        for cid in sorted(members[aid], key=lambda c: -own.get(c, 0.0)):
+            if cid not in origin and cid in own:
+                ranked.append((cid, own[cid]))
+                origin[cid] = a_score
+    return ranked[: params.candidates_per_query], origin
 
 
 def rrf(ranked_lists: dict[str, list[tuple[str, float]]], k: int) -> dict[str, dict]:
@@ -171,7 +218,8 @@ def rrf(ranked_lists: dict[str, list[tuple[str, float]]], k: int) -> dict[str, d
             entry = fused.setdefault(cid, {"rrf": 0.0, "ranks": {}, "dense": None})
             entry["rrf"] += 1.0 / (k + rank)
             entry["ranks"][name] = rank
-            if name.startswith("dense:"):
+            # Article lists carry each clause's own similarity, so it counts as dense evidence.
+            if name.startswith(("dense:", "article:")):
                 entry["dense"] = max(entry["dense"] or 0.0, score)
     return fused
 
@@ -230,13 +278,22 @@ def fuse_for_obligation(
         hits = _sparse(conn, q, corpus, params.candidates_per_query)
         if hits:
             ranked[f"sparse:{name}"] = hits
+    article_scores: dict[str, float] = {}
     if model and query_vectors:
         for name, vector in query_vectors.items():
             ranked[f"dense:{name}"] = _dense(
                 conn, vector, model, corpus, params.candidates_per_query
             )
+            if params.article_candidates > 0:
+                hits, origin = _dense_articles(conn, vector, model, corpus, params)
+                if hits:
+                    ranked[f"article:{name}"] = hits
+                for cid, score in origin.items():
+                    article_scores[cid] = max(article_scores.get(cid, 0.0), score)
 
     fused = rrf(ranked, params.rrf_k)
+    for cid, score in article_scores.items():
+        fused[cid]["article"] = score
     max_rrf = max(1, len(ranked)) / (params.rrf_k + 1)
     gate_text = gate_query(obligation)
     entries = []
@@ -326,6 +383,7 @@ def select_candidates(
                 "ranks": entry["ranks"],
                 "dense": dense,
                 "rerank": None if rr is None else round(rr, 4),
+                "article": None if entry.get("article") is None else round(entry["article"], 4),
                 "shared_terms": lex["shared"][:10],
                 "idf_score": round(lex["idf_score"], 3),
                 "graph_relaxed": bool(relax < 1 and relaxed_only),

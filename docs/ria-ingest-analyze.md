@@ -62,6 +62,7 @@ Job parse (`ingest.run_parse`) chạy trong một transaction, lỗi ở bước
 | `dense_min_score`, `dense_strong_score` | `0.55`, `0.7` | gate dense (khi không có reranker): dưới mức strong phải có thêm ≥ 1 thuật ngữ đặc trưng chung |
 | `relative_cutoff` | `0.6` | bỏ đuôi candidate yếu |
 | `evidence_per_obligation`, `max_documents`, `alpha` | `5`, `20`, `0.7` | evidence và aggregation |
+| `article_candidates` | `3` | số Điều khớp theo vector gộp (DICE) cho mỗi truy vấn dense; `0` = tắt |
 
 Phần đồng bộ (`analysis.start_analysis`):
 
@@ -83,6 +84,7 @@ Job phân tích (`analysis.run_analysis`):
 2. **Engine 1, mục 07–09** (`retrieval.py`):
    - Mỗi nghĩa vụ sinh 3–4 query view: nguyên văn, mệnh đề chuẩn hóa, chủ đề (tên Điều), giá trị/điều kiện.
    - Chạy sparse search (Postgres FTS trên bigram âm tiết) và dense search (pgvector, nếu có `EMBEDDING_*`).
+   - **Khớp cấp Điều (DICE, Document Inference via Chunk Evidence):** text của một Điều không gồm các khoản con, nên trước đây không có vector nào đại diện cho cả Điều. Lúc index, mỗi Điều có từ 2 khoản/điểm đã index trở lên được thêm view `article` = trung bình các vector `context` của chúng (chuẩn hóa lại để dùng cosine; không gọi thêm embedding). Dense search lấy `article_candidates` Điều gần nhất, rồi đưa các khoản của chúng vào RRF thành list `article:<view>`: xếp theo hạng Điều, trong cùng Điều theo độ tương đồng riêng của từng khoản. Điểm này được tính là bằng chứng dense. Corpus index trước khi có view này được bổ sung ở đầu lần phân tích, từ vector đã lưu. Evidence ghi `article` (điểm của Điều) trong `details`, và `retrieval_method` có `article`.
    - Gộp bằng RRF `Σ 1/(k + rank)`.
    - **Reranker** (mục 05.6, nếu có `RERANK_*`): chấm 20 ứng viên đầu theo cặp (nghĩa vụ, điều khoản kèm ngữ cảnh), song song theo `RERANK_CONCURRENCY`. Điểm rerank thay cho gate và là điểm của ứng viên. Reranker lỗi với một nghĩa vụ thì nghĩa vụ đó quay về gate.
    - **Đồ thị tri thức** (FalkorDB, nếu có `FALKORDB_URL`), xem mục "Đồ thị tri thức" bên dưới:
@@ -103,6 +105,10 @@ Job phân tích (`analysis.run_analysis`):
      - Tắt bằng `SPAN_DETECTION_ENABLED=false`. Model không tải được thì tách theo âm tiết.
    - Còn lại → `INDIRECT_IMPACT`.
    - LLM judge (tùy chọn) trả nhãn kèm trích dẫn. Trích dẫn phải có nguyên văn trong nguồn (source grounding). Không khớp thì hỏi lại một lần; vẫn không khớp thì giữ kết quả rule và gắn `BLOCKED`, chi tiết check lưu câu trả lời của LLM.
+   - **Căn span (SLeDoC / LegDiff, Rykov et al., ACL SRW và SIGIR 2026):** với mỗi điều khoản, LLM còn trả `alignments`: các cặp đoạn nguyên văn (nghĩa vụ ↔ nội bộ) gán `equivalent` / `contradiction` / `addition`. Đoạn mâu thuẫn được trích ở mức tối thiểu ("12 tháng" ↔ "24 tháng"). Đoạn `addition` chỉ có ở nguồn kèm `anchor`, là cụm trong điều khoản nội bộ mà yêu cầu mới gắn vào. Kết quả nằm trong check `span_alignment`:
+     - Mỗi đoạn phải tìm thấy nguyên văn như trích dẫn; đoạn không khớp bị bỏ (`dropped`, status `warn`).
+     - **Kiểm tra độ phủ trước khi nhận `EQUIVALENT`:** `EQUIVALENT` chỉ được giữ khi các đoạn `equivalent` phủ ≥ 50% từng phần hành động / đối tượng / thời hạn / điều kiện / ngoại lệ của nghĩa vụ (chủ thể không xét, vì nội bộ hay viết "Đơn vị …"). Có cặp mâu thuẫn → `CONTRADICTION` (hoặc `VALUE_CHANGE` nếu hai bên đều có số liệu); có đoạn chỉ ở nguồn → `ADDITION`; còn phần chưa được phủ (kể cả khi LLM không trả `alignments`) → `INDIRECT_IMPACT`. Status `fail`, confidence ≤ 0,5.
+     - `target_span`: với `CONTRADICTION` / `VALUE_CHANGE` / `SCOPE_CHANGE` là đoạn mâu thuẫn tối thiểu; với `ADDITION` là `anchor`, đúng chỗ agent `INSERT` (sau `target_span`, `docs/amendment-review-contract.md`). Khi LLM đồng ý với xung đột rule tìm ra, vẫn giữ span của rule.
    - LLM không được hạ một xung đột mà rule đã phát hiện xuống `EQUIVALENT`/`INDIRECT_IMPACT` (fail closed, chống false-safe). Khi LLM đồng ý với rule thì giữ span chính xác của rule ("24 tháng") để làm patch tối thiểu.
    - Các nghĩa vụ được gọi LLM song song (`LLM_CONCURRENCY`). Ngân sách `max_llm_calls` dành cho các nghĩa vụ có điểm retrieval cao nhất.
    - **Cache** (`llm_cache`): khóa là sha256 của (loại lời gọi, model, `LLM_EXTRA_BODY`, system prompt, payload). Đổi prompt, model hay nội dung điều khoản thì khóa đổi theo. Lần hỏi lại vì trích dẫn sai sẽ bỏ qua cache và ghi đè. `refresh_llm_cache: true` buộc hỏi lại; `LLM_CACHE_ENABLED=false` tắt cache.

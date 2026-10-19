@@ -289,4 +289,132 @@ def test_group_judge_retries_only_ungrounded(monkeypatch):
     results, stats = compare.judge_group(_obligation(), REG_CLAUSE, items, use_llm=True)
     assert refreshes == [False, True] and stats["llm_calls"] == 2
     assert results[0]["category"] == "VALUE_CHANGE"
-    assert results[1]["category"] == "EQUIVALENT"  # first grounded answer for B is kept
+    # The first grounded answer for B is kept (not the retry's ADDITION); its EQUIVALENT has no
+    # equivalent spans covering the obligation, so it is not accepted as safe.
+    assert results[1]["category"] == "INDIRECT_IMPACT"
+    alignment = next(c for c in results[1]["checks"] if c["check"] == "span_alignment")
+    assert alignment["status"] == "fail"
+
+
+STORAGE_OBLIGATION = "Tổ chức tín dụng phải lưu trữ hồ sơ khách hàng bằng văn bản giấy."
+STORAGE_INTERNAL = "Đơn vị lưu trữ hồ sơ khách hàng bằng bản điện tử trên hệ thống."
+
+
+def _storage_obligation():
+    o = _obligation(STORAGE_OBLIGATION)
+    o.update(action="lưu trữ", object="hồ sơ khách hàng bằng văn bản giấy", deadline=None)
+    return o
+
+
+def _judge(monkeypatch, answer, obligation, internal_text):
+    monkeypatch.setattr(compare.llm, "chat_json", lambda *a, **k: answer)
+    internal = {"clause_id": "DOC-102@v4#9.1", "text": internal_text}
+    return compare.classify(
+        obligation, obligation["text"], internal, _evidence(internal_text), [], use_llm=True
+    )
+
+
+def test_equivalent_backed_by_alignments_is_kept(monkeypatch):
+    internal_text = "Đơn vị lưu trữ hồ sơ khách hàng bằng văn bản giấy tại trụ sở."
+    result = _judge(
+        monkeypatch,
+        {
+            "classification": "EQUIVALENT",
+            "source_quote": "lưu trữ hồ sơ khách hàng",
+            "target_quote": "lưu trữ hồ sơ khách hàng",
+            "alignments": [
+                {"source": "Tổ chức tín dụng phải", "target": "Đơn vị", "label": "equivalent"},
+                {
+                    "source": "lưu trữ hồ sơ khách hàng bằng văn bản giấy",
+                    "target": "lưu trữ hồ sơ khách hàng bằng văn bản giấy",
+                    "label": "equivalent",
+                },
+            ],
+        },
+        _storage_obligation(),
+        internal_text,
+    )
+    assert result["category"] == "EQUIVALENT"
+    alignment = next(c for c in result["checks"] if c["check"] == "span_alignment")
+    assert alignment["status"] == "pass" and alignment["detail"]["uncovered_slots"] == []
+
+
+def test_contradicting_span_overrides_equivalent(monkeypatch):
+    result = _judge(
+        monkeypatch,
+        {
+            "classification": "EQUIVALENT",
+            "confidence": 0.9,
+            "source_quote": "lưu trữ hồ sơ khách hàng",
+            "target_quote": "lưu trữ hồ sơ khách hàng",
+            "alignments": [
+                {
+                    "source": "lưu trữ hồ sơ khách hàng bằng",
+                    "target": "lưu trữ hồ sơ khách hàng bằng",
+                    "label": "equivalent",
+                },
+                {"source": "văn bản giấy", "target": "bản điện tử", "label": "contradiction"},
+            ],
+        },
+        _storage_obligation(),
+        STORAGE_INTERNAL,
+    )
+    assert result["category"] == "CONTRADICTION" and result["confidence"] <= 0.5
+    assert result["target_span"] == {"text": "bản điện tử", "start": 37, "end": 48}
+    assert result["source_span"]["text"] == "văn bản giấy"
+    alignment = next(c for c in result["checks"] if c["check"] == "span_alignment")
+    assert alignment["status"] == "fail" and "bản điện tử" in alignment["detail"]["override"]
+
+
+def test_equivalent_without_alignments_fails_closed(monkeypatch):
+    result = _judge(
+        monkeypatch,
+        {
+            "classification": "EQUIVALENT",
+            "source_quote": "lưu trữ hồ sơ khách hàng",
+            "target_quote": "lưu trữ hồ sơ khách hàng",
+        },
+        _storage_obligation(),
+        STORAGE_INTERNAL,
+    )
+    assert result["category"] == "INDIRECT_IMPACT"
+    alignment = next(c for c in result["checks"] if c["check"] == "span_alignment")
+    assert set(alignment["detail"]["uncovered_slots"]) == {"action", "object"}
+
+
+def test_addition_points_at_anchor_for_insert(monkeypatch):
+    obligation = _obligation(
+        "Tổ chức tín dụng phải lưu trữ hồ sơ khách hàng và thông báo cho khách hàng."
+    )
+    obligation.update(action="lưu trữ", object="hồ sơ khách hàng", deadline=None)
+    internal_text = "Đơn vị lưu trữ hồ sơ khách hàng trên hệ thống."
+    result = _judge(
+        monkeypatch,
+        {
+            "classification": "ADDITION",
+            "source_quote": "thông báo cho khách hàng",
+            "target_quote": internal_text,
+            "alignments": [
+                {
+                    "source": "lưu trữ hồ sơ khách hàng",
+                    "target": "lưu trữ hồ sơ khách hàng",
+                    "label": "equivalent",
+                },
+                {
+                    "source": "và thông báo cho khách hàng",
+                    "target": "",
+                    "label": "addition",
+                    "anchor": "trên hệ thống",
+                },
+                {"source": "bịa", "target": "", "label": "addition"},
+            ],
+        },
+        obligation,
+        internal_text,
+    )
+    assert result["category"] == "ADDITION"
+    # Amendment contract: INSERT goes right after target_span.
+    assert result["target_span"]["text"] == "trên hệ thống"
+    assert result["source_span"]["text"] == "và thông báo cho khách hàng"
+    alignment = next(c for c in result["checks"] if c["check"] == "span_alignment")
+    assert alignment["status"] == "warn" and alignment["detail"]["dropped"] == 1

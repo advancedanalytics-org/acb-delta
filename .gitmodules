@@ -1,0 +1,3 @@
+[submodule "research/SLeDoC"]
+	path = research/SLeDoC
+	url = https://github.com/s-nlp/SLeDoC

@@ -204,6 +204,7 @@ def test_dense_retrieval_path(client, monkeypatch):
     with get_engine().begin() as conn:
         stats = build_index_views(conn, "DOC-102@v4", with_embeddings=True)
     assert stats["embedding_version"] == "fake-bow@test"
+    assert stats["article_views"] > 0  # DICE: one mean vector per multi-clause article
 
     body = _upload(client, ria_001_pdf()).json()
     assert _wait(client, body["job_id"])["status"] == "succeeded"
@@ -220,6 +221,16 @@ def test_dense_retrieval_path(client, monkeypatch):
             ).scalars()
         )
     assert any("dense" in m for m in methods)
+    assert any("article" in m for m in methods)
+    with get_engine().connect() as conn:
+        article_ranks = conn.execute(
+            text(
+                "SELECT count(*) FROM evidence WHERE job_id = :j "
+                "AND details->'ranks' ? 'article:legal_text'"
+            ),
+            {"j": job["job_id"]},
+        ).scalar()
+    assert article_ranks > 0
 
 
 def _fake_llm(system, user, timeout=120):
