@@ -240,11 +240,17 @@ def _request(state: DraftState) -> DraftRequest:
     return DraftRequest.model_validate(state["request"])
 
 
+def _obligation_blocks(request: DraftRequest) -> list[str]:
+    """The finding's obligation, then those of the other findings on the same clause."""
+    obligations = [request.obligation, *(r.obligation for r in request.related_findings)]
+    return [prompts.obligation_block(o.clause_id, o.text) for o in obligations]
+
+
 def draft(state: DraftState) -> DraftState:
     request = _request(state)
     parts = [
         f"Loại tác động (RIA): {request.category}",
-        prompts.obligation_block(request.obligation.clause_id, request.obligation.text),
+        *_obligation_blocks(request),
         prompts.clause_block("Điều khoản nội bộ", request.clause.clause_id, request.clause.text),
     ]
     if request.target_span:
@@ -256,6 +262,7 @@ def draft(state: DraftState) -> DraftState:
     else:
         parts.append("Nếu INSERT, nội dung mới được chèn vào cuối điều khoản.")
     parts.append(f"Lý do phải sửa: {request.rationale}")
+    parts.extend(f"Lý do phải sửa ({r.category}): {r.rationale}" for r in request.related_findings)
     if state.get("failure"):
         parts.append(f"Bản nháp trước bị từ chối ({state['failure']}). Sửa lại cho đúng.")
     attempts = state.get("attempts", 0) + 1
@@ -299,7 +306,7 @@ def verify(state: DraftState) -> DraftState:
     after = apply_patch(request.clause.text, state["start"], state["end"], state["new_text"])
     user = "\n\n".join(
         [
-            prompts.obligation_block(request.obligation.clause_id, request.obligation.text),
+            *_obligation_blocks(request),
             prompts.clause_block("Trước khi sửa", request.clause.clause_id, request.clause.text),
             prompts.clause_block("Sau khi sửa", request.clause.clause_id, after),
         ]
@@ -343,7 +350,11 @@ def to_proposal(request: DraftRequest, state: DraftState) -> AmendmentProposal:
     common = {
         "finding_id": request.finding_id,
         "clause_id": request.clause.clause_id,
-        "legal_evidence_ids": evidence or [request.obligation.clause_id],
+        "legal_evidence_ids": evidence
+        or [
+            request.obligation.clause_id,
+            *(r.obligation.clause_id for r in request.related_findings),
+        ],
         "model": get_settings().llm_model,
         "prompt_version": PROMPT_VERSION,
     }

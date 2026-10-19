@@ -1366,7 +1366,7 @@ function HoverLegalCard({
           <Scale className="size-3.5" />
           <span>Điều khoản VBPL mới</span>
         </div>
-        <div className="rounded-lg border border-primary/25 bg-primary/10 p-2.5 text-xs font-medium leading-relaxed text-foreground shadow-inner">
+        <div className="rounded-lg border border-primary/25 bg-primary/10 p-2.5 text-xs font-medium leading-relaxed text-foreground shadow-inner whitespace-pre-line">
           {impact.changeClause}
         </div>
         {impact.citation && (

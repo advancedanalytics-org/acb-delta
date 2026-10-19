@@ -81,7 +81,7 @@ export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDet
         </header>
 
         <Section title="Điều khoản VBPL mới">
-          <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">{impact.changeClause}</p>
+          <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground whitespace-pre-line">{impact.changeClause}</p>
           <p className="mt-2 text-xs text-muted-foreground">Trích dẫn: {impact.citation}</p>
         </Section>
 
@@ -90,7 +90,7 @@ export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDet
         </Section>
 
         <Section title="Lý do">
-          <p className="text-sm leading-relaxed">{impact.reasoning}</p>
+          <p className="text-sm leading-relaxed whitespace-pre-line">{impact.reasoning}</p>
         </Section>
 
         <Section title={impact.decision?.action === 'edit' ? 'Nội dung đã sửa' : 'Đề xuất chỉnh sửa'}>

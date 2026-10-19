@@ -160,8 +160,9 @@ _INBOX_SQL = (
     "  WHERE dec.impact_id = i.id AND dec.undone_at IS NULL)) "
     "AS pending_count, "
     # Analysed before review packages existed: reviewable findings of the
-    # latest finished run; opening it builds the package.
-    "(SELECT count(*) FROM impact_finding f WHERE f.status = 'AI_PROPOSED' "
+    # latest finished run, one per internal clause as the package will hold them.
+    "(SELECT count(DISTINCT coalesce(f.internal_clause_id, f.finding_id)) "
+    "  FROM impact_finding f WHERE f.status = 'AI_PROPOSED' "
     "  AND f.job_id = (SELECT j.job_id FROM job j WHERE j.job_type = 'analyze' "
     "  AND j.version_id = v.version_id AND j.status = 'succeeded' "
     "  ORDER BY j.created_at DESC LIMIT 1)) AS finding_count, "
