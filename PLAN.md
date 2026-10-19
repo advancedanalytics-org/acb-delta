@@ -126,6 +126,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
     - [x] Phải: điều khoản VBPL mới vs đoạn bị ảnh hưởng, lý do, diff đề xuất, nút Accept / Edit / Reject + reason chip
     - [x] Phím tắt `A` / `E` / `R`, `J` / `K`
   - [x] Màn hình **Inbox**: danh sách VBPL mới, trạng thái xử lý, số impact chờ duyệt
+    - [x] Xóa VBPL bị lỗi (đọc PDF / phân tích / soạn gói review lỗi) để tải lại: `DELETE /api/regulations/{version_id}`
   - [x] Màn hình **Evaluation dashboard**: metric theo bước, so sánh trước / sau feedback
   - [x] Màn hình **Audit trail**
   - [x] Chất lượng production: skeleton, empty state, toast có Undo, optimistic update, user switcher

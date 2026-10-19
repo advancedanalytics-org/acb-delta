@@ -24,6 +24,8 @@ export interface Vbpl {
   pendingCount: number
   /** Why the analysis failed; set only when status is 'failed'. */
   error?: string
+  /** RIA document version (REG-…@v1) behind this row; the id used to delete it. */
+  versionId?: string
 }
 
 export interface InternalDocument {

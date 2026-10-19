@@ -14,6 +14,7 @@ import { queryKeys, useVbpls } from '@/hooks/queries'
 import { formatDate } from '@/lib/format'
 import { vbplStatusLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
+import { DeleteVbplDialog } from './delete-vbpl-dialog'
 import { UploadVbplDialog } from './upload-vbpl-dialog'
 
 type Filter = 'all' | VbplStatus
@@ -102,7 +103,7 @@ export function InboxPage() {
                 <TableHead className="w-32">Trạng thái</TableHead>
                 <TableHead className="w-28 text-right">Chờ duyệt</TableHead>
                 <TableHead className="w-10">
-                  <span className="sr-only">Mở</span>
+                  <span className="sr-only">Thao tác</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -197,6 +198,7 @@ export function InboxPage() {
                       )}
                     </TableCell>
                     <TableCell>
+                      {vbpl.status === 'failed' && <DeleteVbplDialog vbpl={vbpl} />}
                       {canOpen && (
                         <ArrowRight
                           className="size-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5"

@@ -10,6 +10,8 @@ upload ──► DRAFT ──parse job──► PARSED ──analyze job──�
              └─ parse lỗi: version giữ DRAFT, job failed, upload lại đúng file = chạy lại parse
 ```
 
+Version lỗi (Hộp thư hiện `failed`) có thể xóa bằng `DELETE /api/regulations/{version_id}`, xem mục 4.
+
 `document_version.status` là hiệu lực pháp lý: `effective`, `pending` (chưa tới `valid_from`), `superseded` hoặc `unknown`. `processing_status` là bước workflow. Job lưu ở bảng `job` và chạy trên thread pool trong process API, vì Phase 1 không có queue. Theo dõi job qua `GET /api/jobs/{job_id}`: `status`, `stage`, `progress`, `result`, `error`.
 
 ## 1. `POST /api/regulations`: tạo văn bản pháp quy và job parse
@@ -141,6 +143,16 @@ Finding cấp văn bản từ đồ thị (`method = "graph"`, `obligation_id = 
 | `/api/findings` | GET | Danh sách finding, nghiêm trọng trước; lọc theo `job_id`, `regulation_id`, `regulation_version_id`, `impacted_document_id`, `category`, `status`, `priority`, `method`; phân trang `limit`/`offset` |
 | `/api/findings/{id}` | GET | Một finding |
 | `/api/findings/{id}/evidence` | GET | Evidence pack: nghĩa vụ nguồn, điều khoản nội bộ, mọi evidence kèm trace truy hồi (rank, truy vấn, ngữ cảnh cha) |
+
+## 4. `DELETE /api/regulations/{version_id}`: xóa văn bản bị lỗi
+
+`{version_id}` là id version đầy đủ (`REG-…@v1`). Chỉ xóa được version mà Hộp thư (`GET /api/regulations`) đang hiện `failed`: parse lỗi (`Đọc văn bản thất bại`), phân tích lỗi, hoặc soạn gói review lỗi. Mã trả về:
+
+- **200** `{regulation_id, version_id, document_removed, warnings}`.
+- **409** khi version chưa ở trạng thái lỗi, còn job `queued`/`running`, hoặc đã có quyết định duyệt (audit trail không bị xóa).
+- **404** khi không tìm thấy version.
+
+Code ở `backend/app/ria/removal.py`. Một transaction xóa gói review HITL (cùng `impacts`), `amendment`, `impact_finding`, `evidence`, nghĩa vụ, `index_view`, dẫn chiếu, `clause`, `job` và `document_version`. Khi document không còn version nào, transaction xóa luôn `document`. Dẫn chiếu từ văn bản khác tới điều khoản bị xóa vẫn được giữ, nhưng `target_clause_id` đặt về `null`. Sau khi commit, API xóa thêm file gốc trong storage và các node trong đồ thị tri thức. Hai bước này không chặn việc xóa: nếu lỗi, chúng được ghi vào `warnings`. Xóa xong thì checksum được giải phóng, nên upload lại đúng file sẽ tạo version mới thay vì trả `duplicate`.
 
 Soạn patch và duyệt (M04/M05) không thuộc RIA: agent `POST /draft` (TAI-01) và gói review HITL (TAI-02), theo `docs/amendment-review-contract.md`.
 

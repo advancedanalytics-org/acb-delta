@@ -17,6 +17,8 @@ import type {
 export interface ApiClient {
   listVbpls(): Promise<Vbpl[]>
   uploadVbpl(input: UploadVbplInput): Promise<IngestDocumentResult>
+  /** Delete a VBPL whose processing failed, so its file can be uploaded again. */
+  deleteVbpl(vbpl: Vbpl): Promise<void>
   listImpacts(vbplId: string): Promise<Impact[]>
   listDocuments(): Promise<InternalDocument[]>
   /** Newest first. */
