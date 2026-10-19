@@ -142,7 +142,14 @@ export function InboxPage() {
                         : 'cursor-default hover:bg-transparent'
                     )}
                   >
-                    <TableCell className="font-medium">{vbpl.number}</TableCell>
+                    <TableCell className="font-medium">
+                      <div>
+                        <span>{vbpl.number}</span>
+                        <p className="text-[11px] font-mono font-normal text-muted-foreground/80 truncate max-w-[150px]" title={`ID: ${vbpl.id}`}>
+                          ID: {vbpl.id}
+                        </p>
+                      </div>
+                    </TableCell>
                     <TableCell className="whitespace-normal">
                       <p className="line-clamp-1 font-medium">{vbpl.title}</p>
                       <p className="line-clamp-1 text-xs text-muted-foreground">{vbpl.summary}</p>

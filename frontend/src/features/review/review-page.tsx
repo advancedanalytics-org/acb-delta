@@ -268,6 +268,10 @@ export function ReviewPage() {
             )}
             <span aria-hidden>·</span>
             <span>Hiệu lực {formatDate(vbpl.effectiveDate)}</span>
+            <span aria-hidden>·</span>
+            <span className="font-mono text-[11px] text-muted-foreground/80" title={`Mã ID của file: ${vbpl.id}`}>
+              ID: {vbpl.id}
+            </span>
           </div>
           <h1 className="truncate text-base font-semibold" title={vbpl.title}>
             {vbpl.title}
