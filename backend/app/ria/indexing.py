@@ -6,7 +6,14 @@ Each substantive clause gets three views that all point back to its clause_id:
 - keywords: distinctive syllable bigrams
 Sparse rows use embedding_version='none'. When embeddings are configured the context view is
 also stored with a vector under the model id; changing model adds rows, never overwrites.
+
+An article (Điều) also gets an "article" view: the mean of its clauses' context vectors (DICE,
+Document Inference via Chunk Evidence). An article's own text excludes its clauses, so without
+it no vector stands for an obligation that spans several points of one article.
 """
+
+import json
+import math
 
 from sqlalchemy import text
 
@@ -15,6 +22,7 @@ from app.ria.textutil import content_bigrams, normalize, syllables
 
 INDEXED_LEVELS = ("article", "clause", "point", "chunk")
 MAX_CONTEXT_CHARS = 1500
+ARTICLE_VIEW = "article"
 
 
 def _load_clauses(conn, version_id: str) -> list[dict]:
@@ -103,8 +111,98 @@ def build_index_views(conn, version_id: str, with_embeddings: bool = True) -> di
             ),
             rows,
         )
+    articles = build_article_views(conn, [version_id], model) if model and contexts else 0
     return {
         "indexed_clauses": len(contexts),
-        "views": len(rows),
+        "views": len(rows) + articles,
+        "article_views": articles,
         "embedding_version": model or "none",
     }
+
+
+def article_of(clause: dict, by_id: dict[str, dict]) -> str | None:
+    """The article (Điều) a clause belongs to, itself included."""
+    node = clause
+    while node:
+        if node["level"] == "article":
+            return node["clause_id"]
+        node = by_id.get(node["parent_id"]) if node["parent_id"] else None
+    return None
+
+
+def mean_vector(vectors: list[list[float]]) -> list[float]:
+    """DICE agg_mode="mean" on unit vectors, renormalised for cosine search. DICE's norm-weighted
+    modes need raw hidden states; OpenAI-style /embeddings return unit vectors."""
+    total = [sum(xs) for xs in zip(*vectors, strict=True)]
+    norm = math.sqrt(sum(x * x for x in total)) or 1.0
+    return [x / norm for x in total]
+
+
+def build_article_views(conn, version_ids: list[str], model: str) -> int:
+    """Article vectors from the context vectors already stored for its clauses (no embedding
+    call). Articles with a single indexed clause are skipped: the vector would be a duplicate."""
+    rows = conn.execute(
+        text(
+            "SELECT c.clause_id, CAST(iv.embedding AS text) AS emb FROM clause c "
+            "JOIN index_view iv ON iv.clause_id = c.clause_id "
+            "WHERE c.version_id = ANY(:v) AND iv.view_type = 'context' "
+            "AND iv.embedding_version = :m"
+        ),
+        {"v": list(version_ids), "m": model},
+    ).all()
+    vectors = {cid: json.loads(emb) for cid, emb in rows}
+    out = []
+    for version_id in version_ids:
+        clauses = _load_clauses(conn, version_id)
+        by_id = {c["clause_id"]: c for c in clauses}
+        members: dict[str, list[str]] = {}
+        for c in clauses:
+            aid = article_of(c, by_id) if c["clause_id"] in vectors else None
+            if aid:
+                members.setdefault(aid, []).append(c["clause_id"])
+        for aid, cids in members.items():
+            if len(cids) < 2:
+                continue
+            article = by_id[aid]
+            out.append(
+                {
+                    "id": f"{aid}|{ARTICLE_VIEW}|{model}",
+                    "cid": aid,
+                    "type": ARTICLE_VIEW,
+                    "content": normalize(
+                        " › ".join(p for p in (article["heading"], article["text"]) if p)
+                    )[:MAX_CONTEXT_CHARS]
+                    or aid,
+                    "emb": embeddings.to_pgvector(mean_vector([vectors[c] for c in cids])),
+                    "ver": model,
+                }
+            )
+    if out:
+        conn.execute(
+            text(
+                "INSERT INTO index_view (view_id, clause_id, view_type, content, embedding, "
+                "embedding_version) "
+                "VALUES (:id, :cid, :type, :content, CAST(:emb AS vector), :ver) "
+                "ON CONFLICT (clause_id, view_type, embedding_version) DO UPDATE SET "
+                "content = EXCLUDED.content, embedding = EXCLUDED.embedding"
+            ),
+            out,
+        )
+    return len(out)
+
+
+def ensure_article_views(conn, version_ids: set[str], model: str) -> int:
+    """Backfill article views for versions indexed before they existed."""
+    have = set(
+        conn.execute(
+            text(
+                "SELECT DISTINCT c.version_id FROM index_view iv "
+                "JOIN clause c ON c.clause_id = iv.clause_id "
+                "WHERE iv.view_type = :t AND iv.embedding_version = :m "
+                "AND c.version_id = ANY(:v)"
+            ),
+            {"t": ARTICLE_VIEW, "m": model, "v": list(version_ids)},
+        ).scalars()
+    )
+    missing = sorted(version_ids - have)
+    return build_article_views(conn, missing, model) if missing else 0
