@@ -64,6 +64,7 @@ The script wraps these; they always work too.
 | Backend test + lint | `cd backend && uv run pytest && uv run ruff check . && uv run ruff format --check .` |
 | Backend DB integration tests (RIA ingest/analyze) | start a throwaway `pgvector/pgvector:pg16`, then `cd backend && RIA_TEST_DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:<port>/<db> uv run pytest` (skipped when unset). Add `RIA_TEST_FALKORDB_URL=redis://127.0.0.1:<FALKORDB_PORT>` to also run the knowledge-graph tests (they use the graph `ria_test`) |
 | Seed internal documents into the RIA tables | `cd backend && DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:5432/acb_delta uv run python -m app.ria.seed ../db/DOC-102.parsed.json` |
+| Seed a baseline evaluation run so the dashboard is never empty (idempotent; skips a non-empty table) | `cd backend && DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1:5432/acb_delta uv run python -m app.evaluation.seed app/evaluation/baseline_run.json`. Produce the baseline with `ria_runner ... --save app/evaluation/baseline_run.json` and commit it |
 | Agent test + lint | `cd agent && uv run pytest && uv run ruff check . && uv run ruff format --check .` |
 | Frontend lint + build | `cd frontend && npm ci && npm run lint && npm run build` |
 | Frontend dev server | `cd frontend && npm run dev` (port 5173, proxies `/api` to `localhost:8000`) |
