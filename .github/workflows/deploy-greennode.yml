@@ -28,7 +28,6 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.GREENNODE_SSH_KEY }}
-        if: ${{ secrets.GREENNODE_SSH_KEY != '' }}
 
       - name: Deploy to GreenNode
         env:
