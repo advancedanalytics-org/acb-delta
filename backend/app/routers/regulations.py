@@ -3,6 +3,7 @@
 POST /api/regulations               upload a VBPL PDF → document version + parse job (202)
 POST /api/regulations/{id}/analyze  start impact analysis on a PARSED version → job (202)
 GET  /api/regulations/{id}          document, versions and processing state
+DELETE /api/regulations/{version_id} delete a version whose processing failed
 """
 
 from datetime import date
@@ -16,6 +17,7 @@ from sqlalchemy.exc import OperationalError
 from app.db import get_engine
 from app.ria.analysis import AnalyzeError, start_analysis
 from app.ria.ingest import IngestError, create_regulation
+from app.ria.removal import RemovalError, delete_regulation_version
 from app.ria.schema import ensure_schema
 
 router = APIRouter(prefix="/regulations", tags=["regulations"])
@@ -144,49 +146,77 @@ def analyze(
     return AnalysisStarted(**result)
 
 
+# Inbox rows: one per regulation version. Counts and status come from the HITL review package of
+# the latest analysis (`app.review_bridge`); before it exists, from RIA's processing state.
+_INBOX_SQL = (
+    "SELECT d.document_id, d.title, d.doc_number, d.issuer, d.owner, "
+    "v.version_id, v.processing_status, v.page_count, v.created_at, "
+    "pkg.id AS vbpl_id, pkg.status AS review_status, "
+    "pkg.error AS review_error, "
+    "(SELECT count(*) FROM impacts i WHERE i.vbpl_id = pkg.id) "
+    "AS impact_count, "
+    "(SELECT count(*) FROM impacts i WHERE i.vbpl_id = pkg.id AND NOT EXISTS ("
+    "  SELECT 1 FROM decisions dec "
+    "  WHERE dec.impact_id = i.id AND dec.undone_at IS NULL)) "
+    "AS pending_count, "
+    # Analysed before review packages existed: reviewable findings of the
+    # latest finished run; opening it builds the package.
+    "(SELECT count(*) FROM impact_finding f WHERE f.status = 'AI_PROPOSED' "
+    "  AND f.job_id = (SELECT j.job_id FROM job j WHERE j.job_type = 'analyze' "
+    "  AND j.version_id = v.version_id AND j.status = 'succeeded' "
+    "  ORDER BY j.created_at DESC LIMIT 1)) AS finding_count, "
+    "(SELECT j.status FROM job j WHERE j.job_type = 'analyze' "
+    "  AND j.version_id = v.version_id "
+    "  ORDER BY j.created_at DESC LIMIT 1) AS analyze_status, "
+    "(SELECT j.status FROM job j WHERE j.job_type = 'parse' "
+    "  AND j.version_id = v.version_id "
+    "  ORDER BY j.created_at DESC LIMIT 1) AS parse_status "
+    "FROM document d "
+    "JOIN document_version v ON v.document_id = d.document_id "
+    "LEFT JOIN LATERAL (SELECT vb.id, vb.status, vb.error FROM vbpls vb "
+    "  JOIN job j ON j.job_id = vb.ria_job_id "
+    "  WHERE j.version_id = v.version_id "
+    "  ORDER BY vb.received_at DESC LIMIT 1) pkg ON true "
+    "WHERE d.doc_type = 'regulation' AND (CAST(:v AS text) IS NULL OR v.version_id = :v) "
+    "ORDER BY v.created_at DESC"
+)
+
+
+def _inbox_rows(conn, version_id: str | None = None) -> list[dict]:
+    rows = conn.execute(text(_INBOX_SQL), {"v": version_id}).mappings().all()
+    return [_inbox_row(dict(r)) for r in rows]
+
+
 @router.get("")
 def list_regulations() -> list[dict]:
-    """Regulations for the inbox. Counts and status come from the HITL review package of the
-    latest analysis (`app.review_bridge`); before it exists, from RIA's processing state."""
+    """Regulations for the inbox, newest version first."""
     try:
         ensure_schema()
         with get_engine().connect() as conn:
-            docs = (
-                conn.execute(
-                    text(
-                        "SELECT d.document_id, d.title, d.doc_number, d.issuer, d.owner, "
-                        "v.version_id, v.processing_status, v.page_count, v.created_at, "
-                        "pkg.id AS vbpl_id, pkg.status AS review_status, "
-                        "pkg.error AS review_error, "
-                        "(SELECT count(*) FROM impacts i WHERE i.vbpl_id = pkg.id) "
-                        "AS impact_count, "
-                        "(SELECT count(*) FROM impacts i WHERE i.vbpl_id = pkg.id AND NOT EXISTS ("
-                        "  SELECT 1 FROM decisions dec "
-                        "  WHERE dec.impact_id = i.id AND dec.undone_at IS NULL)) "
-                        "AS pending_count, "
-                        # Analysed before review packages existed: reviewable findings of the
-                        # latest finished run; opening it builds the package.
-                        "(SELECT count(*) FROM impact_finding f WHERE f.status = 'AI_PROPOSED' "
-                        "  AND f.job_id = (SELECT j.job_id FROM job j WHERE j.job_type = 'analyze' "
-                        "  AND j.version_id = v.version_id AND j.status = 'succeeded' "
-                        "  ORDER BY j.created_at DESC LIMIT 1)) AS finding_count, "
-                        "(SELECT j.status FROM job j WHERE j.job_type = 'analyze' "
-                        "  AND j.version_id = v.version_id "
-                        "  ORDER BY j.created_at DESC LIMIT 1) AS analyze_status "
-                        "FROM document d "
-                        "JOIN document_version v ON v.document_id = d.document_id "
-                        "LEFT JOIN LATERAL (SELECT vb.id, vb.status, vb.error FROM vbpls vb "
-                        "  JOIN job j ON j.job_id = vb.ria_job_id "
-                        "  WHERE j.version_id = v.version_id "
-                        "  ORDER BY vb.received_at DESC LIMIT 1) pkg ON true "
-                        "WHERE d.doc_type = 'regulation' "
-                        "ORDER BY v.created_at DESC"
-                    )
-                )
-                .mappings()
-                .all()
+            return _inbox_rows(conn)
+    except OperationalError as exc:
+        raise _db_unavailable(exc) from exc
+
+
+@router.delete("/{version_id}", status_code=status.HTTP_200_OK)
+def delete_failed_version(version_id: str) -> dict:
+    """Delete a regulation version whose processing failed (inbox status `failed`), with its
+    analysis results and stored original, so the file can be uploaded again. `{version_id}` is
+    the explicit version id (REG-…@v1)."""
+    try:
+        ensure_schema()
+        with get_engine().connect() as conn:
+            rows = _inbox_rows(conn, version_id)
+        if not rows:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"regulation {version_id} not found")
+        if rows[0]["status"] != "failed":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"{version_id} is {rows[0]['status']}; only failed documents can be deleted",
             )
-            return [_inbox_row(dict(d)) for d in docs]
+        return delete_regulation_version(version_id)
+    except RemovalError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
     except OperationalError as exc:
         raise _db_unavailable(exc) from exc
 
@@ -194,8 +224,12 @@ def list_regulations() -> list[dict]:
 def _inbox_row(row: dict) -> dict:
     review, ps = row.pop("review_status"), row.get("processing_status")
     finding_count, analyze = row.pop("finding_count"), row.pop("analyze_status")
-    error = row.pop("review_error")
-    if review == "failed" or (review is None and (ps == "FAILED" or analyze == "failed")):
+    error, parse = row.pop("review_error"), row.pop("parse_status")
+    if ps == "DRAFT" and parse == "failed":
+        # The PDF could not be read; nothing after parsing ever ran.
+        row["status"] = "failed"
+        row["error"] = "Đọc văn bản thất bại"
+    elif review == "failed" or (review is None and (ps == "FAILED" or analyze == "failed")):
         row["status"] = "failed"
         # Job errors can hold internals; GET /api/jobs/{id} has the detail.
         row["error"] = error or "Phân tích tác động thất bại"

@@ -83,6 +83,10 @@ export const store = {
     vbpls = [vbpl, ...vbpls.filter((v) => v.id !== vbpl.id)]
     save()
   },
+  removeVbpl(id: string) {
+    vbpls = vbpls.filter((v) => v.id !== id)
+    save()
+  },
   updateVbpl(id: string, updates: Partial<Vbpl>) {
     vbpls = vbpls.map((v) => (v.id === id ? { ...v, ...updates } : v))
     save()
