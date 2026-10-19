@@ -1,6 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Search } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 
+import { api } from '@/api/client'
 import type { VbplStatus } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/query-states'
 import { VbplStatusBadge } from '@/components/status-badges'
@@ -8,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { useVbpls } from '@/hooks/queries'
+import { queryKeys, useVbpls } from '@/hooks/queries'
 import { formatDate } from '@/lib/format'
 import { vbplStatusLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
@@ -20,6 +22,7 @@ const normalize = (text: string) => text.normalize('NFD').replace(/\p{Diacritic}
 
 export function InboxPage() {
   const { data, error, isPending, refetch } = useVbpls()
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
@@ -122,6 +125,14 @@ export function InboxPage() {
                     key={vbpl.id}
                     onClick={open}
                     onKeyDown={(event) => event.key === 'Enter' && open()}
+                    onMouseEnter={() => {
+                      if (canOpen) {
+                        queryClient.prefetchQuery({
+                          queryKey: queryKeys.impacts(vbpl.id),
+                          queryFn: () => api.listImpacts(vbpl.id),
+                        })
+                      }
+                    }}
                     tabIndex={canOpen ? 0 : -1}
                     aria-label={canOpen ? `Mở ${vbpl.number}` : vbpl.number}
                     className={cn(

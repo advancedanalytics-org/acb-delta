@@ -5,8 +5,9 @@ Disabled when LLM credentials/model are empty; comparison then stays rule-based.
 
 import hashlib
 import json
-import os
 import logging
+import os
+
 from sqlalchemy import text
 
 from app.config import get_settings

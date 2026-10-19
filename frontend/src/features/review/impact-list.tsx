@@ -64,9 +64,29 @@ export function ImpactList({ impacts, documents, selectedId, onSelect, filter, o
     })
   }
 
-  const groups = documents
-    .map((doc) => ({ doc, items: impacts.filter((impact) => impact.documentId === doc.id) }))
-    .filter((group) => group.items.length > 0)
+  const knownDocs = new Map(documents.map((doc) => [doc.id, doc]))
+  const groupMap = new Map<string, { doc: InternalDocument; items: Impact[] }>()
+
+  for (const impact of impacts) {
+    let group = groupMap.get(impact.documentId)
+    if (!group) {
+      const doc = knownDocs.get(impact.documentId) ?? {
+        id: impact.documentId,
+        code: impact.documentId,
+        title: impact.documentId,
+        department: 'Ban Pháp chế',
+        version: 'v1.0',
+        effectiveDate: new Date().toISOString().slice(0, 10),
+        pageCount: 1,
+        pdfUrl: `/api/documents/${encodeURIComponent(impact.documentId)}/pdf`,
+      }
+      group = { doc, items: [] }
+      groupMap.set(impact.documentId, group)
+    }
+    group.items.push(impact)
+  }
+
+  const groups = Array.from(groupMap.values())
 
   return (
     <div className="flex h-full flex-col">

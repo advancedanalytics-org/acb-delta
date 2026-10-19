@@ -36,28 +36,49 @@ export function ReviewPage() {
   const vbpl = vbpls.data?.find((v) => v.id === vbplId)
   const all = impacts.data ?? []
   const docs = documents.data ?? []
+
+  // Ensure any doc referenced in `all` is available in docs list
+  const knownDocIds = new Set(docs.map((d) => d.id))
+  const synthesizedDocs: InternalDocument[] = Array.from(
+    new Set(all.map((imp) => imp.documentId)),
+  )
+    .filter((docId) => !knownDocIds.has(docId))
+    .map((docId) => ({
+      id: docId,
+      code: docId,
+      title: docId,
+      department: 'Ban Pháp chế',
+      version: 'v1.0',
+      effectiveDate: new Date().toISOString().slice(0, 10),
+      pageCount: 1,
+      pdfUrl: `/api/documents/${encodeURIComponent(docId)}/pdf`,
+    }))
+  const allDocs = [...docs, ...synthesizedDocs]
+
   // Keep list order stable and grouped by document, keeping any remaining impacts at the end.
-  const matchedFromDocs = docs.flatMap((doc) => all.filter((impact) => impact.documentId === doc.id))
-  const remainingImpacts = all.filter((impact) => !docs.some((doc) => doc.id === impact.documentId))
+  const matchedFromDocs = allDocs.flatMap((doc) => all.filter((impact) => impact.documentId === doc.id))
+  const remainingImpacts = all.filter((impact) => !allDocs.some((doc) => doc.id === impact.documentId))
   const ordered = [...matchedFromDocs, ...remainingImpacts]
   const visible = filter === 'all' ? ordered : ordered.filter((impact) => impact.status === filter)
 
   const requestedId = params.get('impact')
-  const selected = ordered.find((impact) => impact.id === requestedId) ?? visible[0] ?? ordered[0]
-  const fallbackDoc: InternalDocument | undefined = selected
-    ? {
-        id: selected.documentId,
-        code: selected.documentId,
-        title: selected.documentId,
-        department: 'Ban Pháp chế',
-        version: 'v1.0',
-        effectiveDate: new Date().toISOString().slice(0, 10),
-        pageCount: 1,
-        pdfUrl: `/api/documents/${encodeURIComponent(selected.documentId)}/pdf`,
-      }
-    : undefined
+  const selected = requestedId ? ordered.find((impact) => impact.id === requestedId) : undefined
+  const defaultDoc: InternalDocument | undefined =
+    allDocs[0] ??
+    (all[0]
+      ? {
+          id: all[0].documentId,
+          code: all[0].documentId,
+          title: all[0].documentId,
+          department: 'Ban Pháp chế',
+          version: 'v1.0',
+          effectiveDate: new Date().toISOString().slice(0, 10),
+          pageCount: 1,
+          pdfUrl: `/api/documents/${encodeURIComponent(all[0].documentId)}/pdf`,
+        }
+      : undefined)
   const selectedDoc: InternalDocument | undefined =
-    docs.find((doc) => doc.id === selected?.documentId) ?? fallbackDoc
+    (selected ? allDocs.find((doc) => doc.id === selected.documentId) : undefined) ?? defaultDoc
   const reviewed = all.filter((impact) => impact.status !== 'pending').length
 
   const select = (impactId: string) =>
@@ -71,15 +92,13 @@ export function ReviewPage() {
 
   const step = (offset: number) => {
     if (visible.length === 0) return
-    const currentId = requestedId
-    const index = currentId ? visible.findIndex((impact) => impact.id === currentId) : -1
-    let nextIndex: number
+    const index = selected ? visible.findIndex((impact) => impact.id === selected.id) : -1
     if (index === -1) {
-      nextIndex = offset > 0 ? 0 : visible.length - 1
-    } else {
-      nextIndex = Math.min(Math.max(index + offset, 0), visible.length - 1)
+      const next = offset > 0 ? visible[0] : visible[visible.length - 1]
+      if (next) select(next.id)
+      return
     }
-    const next = visible[nextIndex]
+    const next = visible[Math.min(Math.max(index + offset, 0), visible.length - 1)]
     if (next) select(next.id)
   }
 
@@ -238,8 +257,8 @@ export function ReviewPage() {
           <aside aria-label="Danh sách tác động" className="min-h-0 border-r bg-card">
             <ImpactList
               impacts={visible}
-              documents={docs}
-              selectedId={requestedId ?? undefined}
+              documents={allDocs}
+              selectedId={selected?.id}
               onSelect={select}
               filter={filter}
               onFilterChange={setFilter}
@@ -269,23 +288,21 @@ export function ReviewPage() {
 function ReviewSkeleton() {
   return (
     <div className="flex h-full flex-col" aria-busy="true" aria-label="Đang tải">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-card px-4 py-3">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <Skeleton className="h-3 w-48" />
-          <Skeleton className="h-5 w-80" />
+      <div className="flex items-center gap-4 border-b bg-card px-4 py-3">
+        <Skeleton className="h-6 w-72" />
+        <Skeleton className="h-6 w-24" />
+        <div className="ml-auto w-48">
+          <Skeleton className="h-4 w-full" />
         </div>
-        <Skeleton className="h-6 w-24 rounded-full" />
-        <Skeleton className="h-8 w-44" />
       </div>
       <div className="grid min-h-0 flex-1 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)]">
-        <div className="min-h-0 border-r bg-card p-3 space-y-3">
+        <div className="space-y-3 border-r bg-card p-3">
           <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
         </div>
-        <div className="min-h-0 bg-muted/60 flex items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-muted-foreground/40" />
+        <div className="flex flex-col items-center justify-start bg-muted/60 p-4">
+          <div className="aspect-[1/1.414] w-full max-w-[960px] bg-white shadow-sm" />
         </div>
       </div>
     </div>

@@ -120,6 +120,7 @@ def impact_rows(session: Session, vbpl_id: str) -> list[schemas.ImpactOut]:
         )
     }
     out = []
+    updated_any = False
     for impact in impacts:
         decision = latest.get(impact.id)
         final_text = None
@@ -127,6 +128,26 @@ def impact_rows(session: Session, vbpl_id: str) -> list[schemas.ImpactOut]:
             final_text = {"accept": impact.suggested_text, "edit": decision.edited_text}.get(
                 decision.action
             )
+        page = impact.page
+        bboxes = impact.bboxes or []
+        is_invalid = (
+            not bboxes
+            or not page
+            or page > 50
+            or any(not isinstance(b, list) or len(b) != 4 for b in bboxes)
+        )
+        if is_invalid and impact.document_id and impact.affected_text:
+            try:
+                from app.review_bridge import _locate_in_document
+
+                loc = _locate_in_document(impact.document_id, impact.affected_text)
+                if loc:
+                    page, bboxes = loc
+                    impact.page = page
+                    impact.bboxes = bboxes
+                    updated_any = True
+            except Exception:
+                pass
         out.append(
             schemas.ImpactOut(
                 id=impact.id,
@@ -136,8 +157,8 @@ def impact_rows(session: Session, vbpl_id: str) -> list[schemas.ImpactOut]:
                 change_clause=impact.change_clause,
                 citation=impact.citation,
                 affected_text=impact.affected_text,
-                page=impact.page,
-                bboxes=impact.bboxes,
+                page=page,
+                bboxes=bboxes,
                 type=impact.type,
                 severity=impact.severity,
                 reasoning=impact.reasoning,
@@ -152,4 +173,9 @@ def impact_rows(session: Session, vbpl_id: str) -> list[schemas.ImpactOut]:
                 decision=decision_out(decision) if decision else None,
             )
         )
+    if updated_any:
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
     return out

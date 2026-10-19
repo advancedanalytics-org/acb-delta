@@ -7,8 +7,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { InboxPage } from '@/features/inbox/inbox-page'
 import { ReviewIndexRedirect } from '@/features/review/review-index-redirect'
 
+import { ReviewPage } from '@/features/review/review-page'
+
 // Heavy screens (PDF viewer, charts, tables) load on demand to keep the first load small.
-const ReviewPage = lazy(() => import('@/features/review/review-page').then((m) => ({ default: m.ReviewPage })))
 const EvaluationPage = lazy(() =>
   import('@/features/evaluation/evaluation-page').then((m) => ({ default: m.EvaluationPage })),
 )
@@ -23,7 +24,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <InboxPage /> },
       { path: 'review', element: <ReviewIndexRedirect /> },
-      { path: 'review/:vbplId', element: page(<ReviewPage />) },
+      { path: 'review/:vbplId', element: <ReviewPage /> },
       { path: 'evaluation', element: page(<EvaluationPage />) },
       { path: 'audit', element: page(<AuditPage />) },
       { path: 'system', element: page(<SystemPage />) },

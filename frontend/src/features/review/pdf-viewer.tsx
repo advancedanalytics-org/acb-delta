@@ -1,11 +1,10 @@
 import { Check, FileText, Loader2, PencilLine, Scale, X } from 'lucide-react'
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 
 import type { Impact, InternalDocument } from '@/api/types'
 import { ImpactStatusBadge, ImpactTypeLabel, SeverityBadge } from '@/components/status-badges'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { reasonTags } from '@/lib/labels'
 import { cn } from '@/lib/utils'
@@ -23,16 +22,19 @@ const highlightStyle: Record<Impact['status'], string> = {
 // Horizontal breathing room around pages; vertical gap is the gap-4 on the page column.
 const PAGE_GAP = 16
 const MAX_PAGE_WIDTH = 960
+const DEFAULT_POINT_WIDTH = 595.0
 
 function useContainerWidth() {
   const ref = useRef<HTMLDivElement>(null)
-  const [width, setWidth] = useState(0)
+  const [width, setWidth] = useState(() => {
+    return typeof window !== 'undefined' ? Math.max(window.innerWidth - 380, 600) : 0
+  })
 
   useLayoutEffect(() => {
     if (ref.current) {
-      const initialWidth = Math.floor(ref.current.clientWidth)
-      if (initialWidth > 0) {
-        setWidth(initialWidth)
+      const initial = Math.floor(ref.current.clientWidth)
+      if (initial > 0 && Math.abs(initial - width) > 4) {
+        setWidth(initial)
       }
     }
   }, [])
@@ -41,8 +43,9 @@ function useContainerWidth() {
     const element = ref.current
     if (!element) return
     const observer = new ResizeObserver(([entry]) => {
-      const nextWidth = Math.floor(entry.contentRect.width)
-      setWidth((prev) => (Math.abs(prev - nextWidth) > 1 ? nextWidth : prev))
+      if (!entry) return
+      const newWidth = Math.floor(entry.contentRect.width)
+      setWidth((prev) => (Math.abs(prev - newWidth) > 4 ? newWidth : prev))
     })
     observer.observe(element)
     return () => observer.disconnect()
@@ -86,159 +89,6 @@ function getImpactBoundingBox(bboxes: [number, number, number, number][]) {
   return { x0, y0, x1, y1 }
 }
 
-interface PdfPageItemProps {
-  pageNumber: number
-  pageWidth: number
-  totalNumPages: number
-  impacts: Impact[]
-  selectedId: string | undefined
-  hoveredInfo: HoveredInfo | null
-  onSelect: (impactId: string) => void
-  onMouseEnter: (impact: Impact, pageNumber: number, scale: number) => void
-  onMouseLeave: () => void
-  clearHoverTimeout: () => void
-  isEditingRef: React.MutableRefObject<boolean>
-  hoveredImpactIdRef: React.MutableRefObject<string | null>
-  setHoveredInfo: React.Dispatch<React.SetStateAction<HoveredInfo | null>>
-  onDecide?: (impact: Impact, request: DecisionRequest) => void
-  disabled?: boolean
-  onPageLoadSuccess: (pageNumber: number, originalWidth: number) => void
-}
-
-const PdfPageItem = React.memo(function PdfPageItem({
-  pageNumber,
-  pageWidth,
-  totalNumPages,
-  impacts,
-  selectedId,
-  hoveredInfo,
-  onSelect,
-  onMouseEnter,
-  onMouseLeave,
-  clearHoverTimeout,
-  isEditingRef,
-  hoveredImpactIdRef,
-  setHoveredInfo,
-  onDecide,
-  disabled,
-  onPageLoadSuccess,
-}: PdfPageItemProps) {
-  const [pointWidth, setPointWidth] = useState<number>(595.28)
-  const scale = pageWidth / pointWidth
-
-  const handlePageSuccess = useCallback(
-    (page: { originalWidth: number }) => {
-      setPointWidth(page.originalWidth)
-      onPageLoadSuccess(pageNumber, page.originalWidth)
-    },
-    [pageNumber, onPageLoadSuccess],
-  )
-
-  const pageImpacts = useMemo(
-    () => impacts.filter((impact) => impact.page === pageNumber),
-    [impacts, pageNumber],
-  )
-
-  return (
-    <div
-      className="relative bg-white shadow-[0_1px_2px_oklch(0.3_0.03_258/0.08),0_4px_12px_oklch(0.3_0.03_258/0.08)]"
-      style={{ width: pageWidth, minHeight: pageWidth * 1.414 }}
-    >
-      <Page
-        pageNumber={pageNumber}
-        width={pageWidth}
-        renderTextLayer={false}
-        renderAnnotationLayer={false}
-        loading={<PageSkeleton width={pageWidth} />}
-        onLoadSuccess={handlePageSuccess}
-      />
-      {pageImpacts.map((impact) =>
-        impact.bboxes.map(([x0, y0, x1, y1], boxIndex) => {
-          const isSelected = impact.id === selectedId
-          return (
-            <div
-              key={`${impact.id}-${boxIndex}`}
-              id={boxIndex === 0 ? `impact-highlight-${impact.id}` : undefined}
-              onClick={() => {
-                onSelect(impact.id)
-                onMouseEnter(impact, pageNumber, scale)
-              }}
-              onMouseEnter={() => onMouseEnter(impact, pageNumber, scale)}
-              onMouseLeave={onMouseLeave}
-              aria-hidden
-              className={cn(
-                'absolute cursor-pointer mix-blend-multiply transition-colors duration-200',
-                highlightStyle[impact.status],
-                isSelected && (
-                  impact.status === 'accepted'
-                    ? 'bg-emerald-500/65 z-10 ring-2 ring-emerald-500/80 ring-offset-1'
-                    : impact.status === 'rejected'
-                      ? 'bg-rose-500/50 z-10 ring-2 ring-rose-500/80 ring-offset-1'
-                      : 'bg-amber-400/65 z-10 ring-2 ring-amber-500/80 ring-offset-1'
-                ),
-              )}
-              style={{
-                left: x0 * scale,
-                top: y0 * scale,
-                width: (x1 - x0) * scale,
-                height: (y1 - y0) * scale,
-              }}
-            />
-          )
-        }),
-      )}
-
-      {/* Floating hover card showing the new legal regulation text */}
-      {hoveredInfo && hoveredInfo.pageNumber === pageNumber && (
-        <HoverLegalCard
-          key={hoveredInfo.impact.id}
-          impact={hoveredInfo.impact}
-          bbox={{
-            top: hoveredInfo.top,
-            left: hoveredInfo.left,
-            width: hoveredInfo.width,
-            height: hoveredInfo.height,
-          }}
-          pageWidth={pageWidth}
-          onMouseEnter={clearHoverTimeout}
-          onMouseLeave={onMouseLeave}
-          onEditingChange={(editing) => {
-            isEditingRef.current = editing
-          }}
-          onClose={() => {
-            isEditingRef.current = false
-            hoveredImpactIdRef.current = null
-            setHoveredInfo(null)
-          }}
-          onDecide={
-            onDecide
-              ? (request) => {
-                  isEditingRef.current = false
-                  const approvedText =
-                    request.action === 'edit'
-                      ? request.editedText
-                      : (hoveredInfo.impact.finalText ?? hoveredInfo.impact.suggestedText)
-                  const updatedImpact: Impact = {
-                    ...hoveredInfo.impact,
-                    status: request.action === 'reject' ? 'rejected' : 'accepted',
-                    finalText: request.action === 'reject' ? undefined : approvedText,
-                  }
-                  onDecide(hoveredInfo.impact, request)
-                  setHoveredInfo((prev) => (prev ? { ...prev, impact: updatedImpact } : null))
-                }
-              : undefined
-          }
-          onSelect={onSelect}
-          disabled={disabled}
-        />
-      )}
-
-      <span className="absolute right-2 bottom-1 text-[11px] text-slate-400">
-        {pageNumber}/{totalNumPages}
-      </span>
-    </div>
-  )
-})
 
 /** Mount with key={document.id}: page measurements are per document. */
 export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, disabled }: PdfViewerProps) {
@@ -246,165 +96,125 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
   const [numPages, setNumPages] = useState(0)
   // Original page width in PDF points, per page, to convert bbox points to pixels.
   const [pointWidths, setPointWidths] = useState<Record<number, number>>({})
+  const selectedRef = useRef<HTMLDivElement>(null)
+  const lastScrolledIdRef = useRef<string | null>(null)
   const [hoveredInfo, setHoveredInfo] = useState<HoveredInfo | null>(null)
   const hoveredImpactIdRef = useRef<string | null>(null)
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const dismissedImpactIdRef = useRef<string | null>(null)
-  const lastScrolledIdRef = useRef<string | null>(null)
 
   const isEditingRef = useRef(false)
 
-  // Reset scroll to top on mount or when document changes
-  useLayoutEffect(() => {
-    if (ref.current) {
-      ref.current.scrollTop = 0
-    }
-    lastScrolledIdRef.current = null
-    dismissedImpactIdRef.current = null
-    hoveredImpactIdRef.current = null
-    setHoveredInfo(null)
-  }, [document.id, ref])
+  const handlePageLoadSuccess = useCallback((pageNumber: number, originalWidth: number) => {
+    setPointWidths((prev) => {
+      const current = prev[pageNumber] || DEFAULT_POINT_WIDTH
+      if (Math.abs(current - originalWidth) > 2) {
+        return { ...prev, [pageNumber]: originalWidth }
+      }
+      return prev
+    })
+  }, [])
 
-  // Reset dismissed impact when selectedId changes
-  useEffect(() => {
-    dismissedImpactIdRef.current = null
-  }, [selectedId])
+  const getPageScale = useCallback(
+    (pageNumber: number, pWidth: number) => {
+      const ptWidth = pointWidths[pageNumber] || DEFAULT_POINT_WIDTH
+      return pWidth > 0 && ptWidth > 0 ? pWidth / ptWidth : 0
+    },
+    [pointWidths],
+  )
 
-  const clearHoverTimeout = useCallback(() => {
+  const clearHoverTimeout = () => {
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
       hoverTimeoutRef.current = null
     }
-  }, [])
+  }
 
-  const handleMouseEnter = useCallback(
-    (impact: Impact, pageNumber: number, scale: number) => {
-      clearHoverTimeout()
-      // If the card is already being shown for this exact impact, KEEP IT FIXED!
-      if (hoveredImpactIdRef.current === impact.id) {
-        return
-      }
-      if (isEditingRef.current) {
-        return
-      }
-      hoveredImpactIdRef.current = impact.id
-      const bbox = getImpactBoundingBox(impact.bboxes)
-      setHoveredInfo({
-        impact,
-        pageNumber,
-        top: bbox.y0 * scale,
-        left: bbox.x0 * scale,
-        width: (bbox.x1 - bbox.x0) * scale,
-        height: (bbox.y1 - bbox.y0) * scale,
-      })
-    },
-    [clearHoverTimeout],
-  )
-
-  const handleMouseLeave = useCallback(() => {
+  const handleMouseEnter = (
+    impact: Impact,
+    pageNumber: number,
+    scale: number,
+  ) => {
     clearHoverTimeout()
-    if (isEditingRef.current) return
-    hoverTimeoutRef.current = setTimeout(() => {
-      // If an impact is currently selected and not dismissed, keep card on selected impact
-      if (selectedId && dismissedImpactIdRef.current !== selectedId) {
-        const selected = impacts.find((i) => i.id === selectedId)
-        if (selected) {
-          const pageNumber = selected.page ?? 1
-          const originalWidth = pointWidths[pageNumber] || 595.28
-          const curPageWidth = Math.min(Math.max(width - 2 * PAGE_GAP, 0), MAX_PAGE_WIDTH)
-          const scale = curPageWidth > 0 ? curPageWidth / originalWidth : 1
-          const bbox = getImpactBoundingBox(selected.bboxes)
-          hoveredImpactIdRef.current = selected.id
-          setHoveredInfo({
-            impact: selected,
-            pageNumber,
-            top: bbox.y0 * scale,
-            left: bbox.x0 * scale,
-            width: (bbox.x1 - bbox.x0) * scale,
-            height: (bbox.y1 - bbox.y0) * scale,
-          })
-          return
-        }
-      }
-      hoveredImpactIdRef.current = null
-      setHoveredInfo(null)
-    }, 250)
-  }, [clearHoverTimeout, selectedId, impacts, pointWidths, width])
-
-  const pageWidth = Math.min(Math.max(width - 2 * PAGE_GAP, 0), MAX_PAGE_WIDTH)
-
-  const scrollToSelected = useCallback(() => {
-    if (!selectedId) return false
-    const container = ref.current
-    if (!container) return false
-    const el = container.querySelector<HTMLElement>(`#impact-highlight-${CSS.escape(selectedId)}`)
-    if (el) {
-      lastScrolledIdRef.current = selectedId
-      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      el.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
-      return true
-    }
-    return false
-  }, [selectedId, ref])
-
-  // Scroll to selected impact only when user explicitly selected one
-  useEffect(() => {
-    if (!selectedId) {
-      lastScrolledIdRef.current = null
+    // If the card is already being shown for this exact impact, KEEP IT FIXED!
+    if (hoveredImpactIdRef.current === impact.id) {
       return
     }
-    if (lastScrolledIdRef.current === selectedId) return
-    if (!scrollToSelected()) {
-      const timer = setTimeout(scrollToSelected, 120)
-      return () => clearTimeout(timer)
-    }
-  }, [selectedId, scrollToSelected])
-
-  // Open hover card when selectedId is chosen by user
-  useEffect(() => {
-    if (!selectedId || !pageWidth) {
-      if (!selectedId) {
-        setHoveredInfo(null)
-        hoveredImpactIdRef.current = null
-      }
+    if (isEditingRef.current) {
       return
     }
-    if (dismissedImpactIdRef.current === selectedId) return
-    if (hoveredImpactIdRef.current === selectedId) return
-
-    const selected = impacts.find((i) => i.id === selectedId)
-    if (!selected) return
-
-    const pageNumber = selected.page ?? 1
-    const originalWidth = pointWidths[pageNumber] || 595.28
-    const scale = pageWidth / originalWidth
-    hoveredImpactIdRef.current = selected.id
-    const bbox = getImpactBoundingBox(selected.bboxes)
+    hoveredImpactIdRef.current = impact.id
+    const bbox = getImpactBoundingBox(impact.bboxes)
     setHoveredInfo({
-      impact: selected,
+      impact,
       pageNumber,
       top: bbox.y0 * scale,
       left: bbox.x0 * scale,
       width: (bbox.x1 - bbox.x0) * scale,
       height: (bbox.y1 - bbox.y0) * scale,
     })
-  }, [selectedId, impacts, pageWidth, pointWidths])
+  }
 
-  const handlePageLoadSuccess = useCallback(
-    (pageNumber: number, originalWidth: number) => {
-      setPointWidths((prev) => {
-        if (prev[pageNumber] === originalWidth) return prev
-        return { ...prev, [pageNumber]: originalWidth }
-      })
-      if (selectedId && lastScrolledIdRef.current !== selectedId) {
-        setTimeout(scrollToSelected, 50)
+  const handleMouseLeave = () => {
+    clearHoverTimeout()
+    if (isEditingRef.current) return
+    // If card belongs to the selected impact, keep it visible!
+    if (selectedId && hoveredImpactIdRef.current === selectedId) return
+    hoverTimeoutRef.current = setTimeout(() => {
+      hoveredImpactIdRef.current = null
+      setHoveredInfo(null)
+    }, 250)
+  }
+
+  const pageWidth = Math.min(Math.max(width - 2 * PAGE_GAP, 0), MAX_PAGE_WIDTH)
+  const selected = impacts.find((impact) => impact.id === selectedId)
+  const selectedPage = selected ? (selected.page ?? (selected.bboxes && selected.bboxes.length > 0 ? 1 : null)) : null
+  const selectedPageReady = selectedPage != null
+
+  useEffect(() => {
+    if (!selectedId) {
+      lastScrolledIdRef.current = null
+      return
+    }
+    if (!selectedPageReady) return
+    if (lastScrolledIdRef.current === selectedId) return
+    lastScrolledIdRef.current = selectedId
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    selectedRef.current?.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
+  }, [selectedId, selectedPageReady])
+
+  // When selection changes, anchor hover card to the selected impact
+  useEffect(() => {
+    if (!selectedId || !selected || selectedPage == null) {
+      if (!selectedId) {
+        hoveredImpactIdRef.current = null
+        setHoveredInfo(null)
       }
-    },
-    [selectedId, scrollToSelected],
-  )
+      return
+    }
+    if (!selected.bboxes || selected.bboxes.length === 0) {
+      hoveredImpactIdRef.current = null
+      setHoveredInfo(null)
+      return
+    }
+    const pageNumber = selectedPage
+    if (hoveredImpactIdRef.current === selected.id) return
+    const scale = getPageScale(pageNumber, pageWidth)
+    if (scale > 0) {
+      hoveredImpactIdRef.current = selected.id
+      const bbox = getImpactBoundingBox(selected.bboxes)
+      setHoveredInfo({
+        impact: selected,
+        pageNumber,
+        top: bbox.y0 * scale,
+        left: bbox.x0 * scale,
+        width: (bbox.x1 - bbox.x0) * scale,
+        height: (bbox.y1 - bbox.y0) * scale,
+      })
+    }
+  }, [selectedId, selectedPage, pageWidth, getPageScale, selected])
 
   return (
-    <div ref={ref} className="h-full overflow-auto bg-muted/60 py-4">
+    <div ref={ref} className="h-full overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable] bg-muted/60 py-4">
       {pageWidth > 0 && (
         <Document
           file={document.pdfUrl}
@@ -415,26 +225,110 @@ export function PdfViewer({ document, impacts, selectedId, onSelect, onDecide, d
         >
           {Array.from({ length: numPages }, (_, index) => {
             const pageNumber = index + 1
+            const scale = getPageScale(pageNumber, pageWidth)
             return (
-              <PdfPageItem
+              <div
                 key={pageNumber}
-                pageNumber={pageNumber}
-                pageWidth={pageWidth}
-                totalNumPages={numPages}
-                impacts={impacts}
-                selectedId={selectedId}
-                hoveredInfo={hoveredInfo}
-                onSelect={onSelect}
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
-                clearHoverTimeout={clearHoverTimeout}
-                isEditingRef={isEditingRef}
-                hoveredImpactIdRef={hoveredImpactIdRef}
-                setHoveredInfo={setHoveredInfo}
-                onDecide={onDecide}
-                disabled={disabled}
-                onPageLoadSuccess={handlePageLoadSuccess}
-              />
+                className="relative bg-white shadow-[0_1px_2px_oklch(0.3_0.03_258/0.08),0_4px_12px_oklch(0.3_0.03_258/0.08)]"
+                style={{ width: pageWidth }}
+              >
+                <Page
+                  pageNumber={pageNumber}
+                  width={pageWidth}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                  loading={<PageSkeleton width={pageWidth} />}
+                  onLoadSuccess={(page) => handlePageLoadSuccess(pageNumber, page.originalWidth)}
+                />
+                {scale > 0 &&
+                  impacts
+                    .filter((impact) => impact.page === pageNumber)
+                    .map((impact) =>
+                      impact.bboxes.map(([x0, y0, x1, y1], boxIndex) => {
+                        const isSelected = impact.id === selectedId
+                        return (
+                          <div
+                            key={`${impact.id}-${boxIndex}`}
+                            ref={isSelected && boxIndex === 0 ? selectedRef : undefined}
+                            id={isSelected && boxIndex === 0 ? `impact-highlight-${impact.id}` : undefined}
+                            onClick={() => {
+                              onSelect(impact.id)
+                              handleMouseEnter(impact, pageNumber, scale)
+                            }}
+                            onMouseEnter={() => handleMouseEnter(impact, pageNumber, scale)}
+                            onMouseLeave={handleMouseLeave}
+                            aria-hidden
+                            className={cn(
+                              'absolute cursor-pointer mix-blend-multiply transition-all duration-200',
+                              highlightStyle[impact.status],
+                              isSelected && (
+                                impact.status === 'accepted'
+                                  ? 'bg-emerald-500/65 ring-2 ring-emerald-600 ring-offset-1 z-10'
+                                  : impact.status === 'rejected'
+                                    ? 'bg-rose-500/50 ring-2 ring-rose-600 ring-offset-1 z-10'
+                                    : 'bg-amber-400/65 ring-2 ring-amber-500 ring-offset-1 z-10'
+                              ),
+                            )}
+                            style={{
+                              left: x0 * scale,
+                              top: y0 * scale,
+                              width: (x1 - x0) * scale,
+                              height: (y1 - y0) * scale,
+                            }}
+                          />
+                        )
+                      }),
+                    )}
+
+                {/* Floating hover card showing the new legal regulation text */}
+                {hoveredInfo && hoveredInfo.pageNumber === pageNumber && (
+                  <HoverLegalCard
+                    key={hoveredInfo.impact.id}
+                    impact={hoveredInfo.impact}
+                    bbox={{
+                      top: hoveredInfo.top,
+                      left: hoveredInfo.left,
+                      width: hoveredInfo.width,
+                      height: hoveredInfo.height,
+                    }}
+                    pageWidth={pageWidth}
+                    onMouseEnter={clearHoverTimeout}
+                    onMouseLeave={handleMouseLeave}
+                    onEditingChange={(editing) => {
+                      isEditingRef.current = editing
+                    }}
+                    onClose={() => {
+                      isEditingRef.current = false
+                      hoveredImpactIdRef.current = null
+                      setHoveredInfo(null)
+                    }}
+                    onDecide={
+                      onDecide
+                        ? (request) => {
+                            isEditingRef.current = false
+                            const approvedText =
+                              request.action === 'edit'
+                                ? request.editedText
+                                : (hoveredInfo.impact.finalText ?? hoveredInfo.impact.suggestedText)
+                            const updatedImpact: Impact = {
+                              ...hoveredInfo.impact,
+                              status: request.action === 'reject' ? 'rejected' : 'accepted',
+                              finalText: request.action === 'reject' ? undefined : approvedText,
+                            }
+                            onDecide(hoveredInfo.impact, request)
+                            setHoveredInfo((prev) => (prev ? { ...prev, impact: updatedImpact } : null))
+                          }
+                        : undefined
+                    }
+                    onSelect={onSelect}
+                    disabled={disabled}
+                  />
+                )}
+
+                <span className="absolute right-2 bottom-1 text-[11px] text-slate-400">
+                  {pageNumber}/{numPages}
+                </span>
+              </div>
             )
           })}
         </Document>
@@ -866,6 +760,13 @@ function HoverLegalCard({
 }
 
 function PageSkeleton({ width }: { width: number }) {
-  return <Skeleton className="rounded-none" style={{ width, height: width * 1.414 }} />
+  return (
+    <div
+      className="relative flex items-center justify-center bg-white shadow-[0_1px_2px_oklch(0.3_0.03_258/0.08),0_4px_12px_oklch(0.3_0.03_258/0.08)]"
+      style={{ width, height: Math.round(width * 1.414) }}
+    >
+      <Loader2 className="size-6 animate-spin text-slate-300" />
+    </div>
+  )
 }
 

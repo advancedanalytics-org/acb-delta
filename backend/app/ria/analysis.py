@@ -175,9 +175,10 @@ def start_analysis(regulation_id: str, options: dict) -> tuple[dict, bool]:
                 from app.ria.seed import seed_file
 
                 for candidate in (
-                    Path(__file__).parent / "data" / "DOC-102.parsed.json",
-                    Path("../db/DOC-102.parsed.json"),
+                    Path("/db/DOC-102.parsed.json"),
                     Path("db/DOC-102.parsed.json"),
+                    Path("../db/DOC-102.parsed.json"),
+                    Path(__file__).parent / "data" / "DOC-102.parsed.json",
                 ):
                     if candidate.is_file():
                         try:
@@ -191,8 +192,8 @@ def start_analysis(regulation_id: str, options: dict) -> tuple[dict, bool]:
                             ).scalar()
                             if n_internal:
                                 break
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            log.warning("auto-seed failed for %s: %s", candidate, exc)
 
         if not n_internal:
             if docs:
@@ -277,6 +278,25 @@ def run_analysis(job_id: str) -> dict:
         )
         obligations = _load_obligations(conn, version_id)
         corpus = load_internal_corpus(conn, options.get("internal_document_ids"))
+        if not corpus.clauses:
+            from pathlib import Path
+            from app.ria.seed import seed_parsed_document
+
+            for cand in [
+                Path("/db/DOC-102.parsed.json"),
+                Path("db/DOC-102.parsed.json"),
+                Path("../db/DOC-102.parsed.json"),
+                Path("/app/app/ria/data/DOC-102.parsed.json"),
+                Path(__file__).parent / "data" / "DOC-102.parsed.json",
+            ]:
+                if cand.is_file():
+                    try:
+                        log.info("auto-seeding internal document from %s", cand)
+                        seed_parsed_document(cand)
+                        break
+                    except Exception as e:
+                        log.warning("failed to auto-seed %s: %s", cand, e)
+            corpus = load_internal_corpus(conn, options.get("internal_document_ids"))
         if not corpus.clauses:
             raise RuntimeError("no effective internal clauses in scope")
         if model:
