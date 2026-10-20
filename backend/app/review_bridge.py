@@ -18,7 +18,7 @@ from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import exists, select, text
+from sqlalchemy import exists, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 from app import agent_client
@@ -185,7 +185,7 @@ def load_findings(analyze_job_id: str) -> list[dict]:
                 "f.verification, f.citations, f.method, f.impacted_document_id, "
                 "f.internal_clause_id, o.text AS obligation_text, o.source_clause_id, "
                 "rc.numbering AS regulation_numbering, rd.doc_number AS regulation_number, "
-                "ic.numbering AS clause_numbering, "
+                "ic.numbering AS clause_numbering, ic.ordinal AS clause_ordinal, "
                 "ic.heading AS clause_heading, pc.heading AS parent_heading, "
                 "ic.text AS clause_text, ic.bbox AS clause_bbox, e.score "
                 "FROM impact_finding f "
@@ -201,10 +201,25 @@ def load_findings(analyze_job_id: str) -> list[dict]:
             {"j": analyze_job_id},
         ).mappings()
         findings = [dict(r) for r in rows]
-    findings.sort(
-        key=lambda f: (PRIORITY_RANK.get(f["priority"], 9), -(f["score"] or 0), f["finding_id"])
-    )
+    findings.sort(key=review_order)
     return findings
+
+
+def review_order(f: dict) -> tuple:
+    """Sort key: document, then clause order in it (Điều 6 before Điều 9), then rank.
+
+    Inside one clause the highest-ranked finding comes first, so it leads the clause's group.
+    Findings without an internal clause go after the clauses of their document.
+    """
+    ordinal = f.get("clause_ordinal")
+    return (
+        f.get("impacted_document_id") or "",
+        ordinal is None,
+        ordinal or 0,
+        PRIORITY_RANK.get(f["priority"], 9),
+        -(f["score"] or 0),
+        f["finding_id"],
+    )
 
 
 def group_by_clause(findings: list[dict]) -> list[list[dict]]:
@@ -572,6 +587,21 @@ def _imported(vbpl_id: str) -> tuple[set[str], dict[str, str]]:
     return done, redo
 
 
+def _renumber(vbpl_id: str, groups: list[list[dict]]) -> None:
+    """Give impacts stored by an earlier run the position of their group in today's order."""
+    with get_sessionmaker()() as session:
+        for position, group in enumerate(groups):
+            session.execute(
+                update(Impact)
+                .where(
+                    Impact.vbpl_id == vbpl_id,
+                    Impact.finding_id.in_([g["finding_id"] for g in group]),
+                )
+                .values(position=position)
+            )
+        session.commit()
+
+
 def _store(vbpl_id: str, row: dict, redo_impact_id: str | None) -> None:
     """Insert the impact, or overwrite a failed draft in place while nobody has decided on it.
 
@@ -605,6 +635,7 @@ def run_review(job_id: str) -> dict:
             for pos, group in enumerate(groups)
             if not any(g["finding_id"] in done for g in group)
         ]
+        _renumber(vbpl_id, groups)
         jobs.update_progress(job_id, "drafting", 5)
         workers = max(1, get_settings().review_draft_concurrency)
         finished = 0

@@ -110,6 +110,18 @@ def test_findings_on_one_clause_become_one_group_led_by_the_first():
     ]  # fmt: skip
 
 
+def test_review_order_follows_the_document_then_rank():
+    art9 = _finding(finding_id="RIA-1", priority="high", clause_ordinal=9)
+    art6_low = _finding(finding_id="RIA-2", priority="low", clause_ordinal=6)
+    art6_high = _finding(finding_id="RIA-3", priority="high", clause_ordinal=6)
+    no_clause = _finding(finding_id="RIA-4", internal_clause_id=None, clause_ordinal=None)
+    other_doc = _finding(finding_id="RIA-5", impacted_document_id="DOC-101", clause_ordinal=20)
+    found = sorted(
+        [art9, no_clause, art6_low, other_doc, art6_high], key=review_bridge.review_order
+    )
+    assert [f["finding_id"] for f in found] == ["RIA-5", "RIA-3", "RIA-2", "RIA-1", "RIA-4"]
+
+
 def test_merged_span_covers_every_target_span():
     a = _finding()
     clause = a["clause_text"]
