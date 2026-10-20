@@ -344,11 +344,17 @@ def run_analysis(job_id: str) -> dict:
                 for link in graph.linked_internal_documents(job["document_id"], version_id)
                 if link["document_id"] in corpus.document_ids
             ]
+            linked, graph_info["common_bases_skipped"] = graph.drop_common_bases(
+                linked, len(corpus.document_ids), params.common_basis_share
+            )
         except Exception as exc:  # derived index: analysis continues without it
             log.warning("graph unavailable: %s", exc)
             warnings.append(f"knowledge graph unavailable ({exc.__class__.__name__}); skipped")
             graph_info["error"] = str(exc)[:300]
-    linked_docs = {link["document_id"] for link in linked}
+    # Only documents that cite the regulation or a document it replaces are relaxed and kept.
+    linked_docs = {
+        link["document_id"] for link in linked if link["relation"] in graph.STRONG_RELATIONS
+    }
 
     # Applicability: drop obligations that cannot bind the bank before spending retrieval/LLM.
     jobs.update_progress(job_id, "applicability", 3)
@@ -417,7 +423,7 @@ def run_analysis(job_id: str) -> dict:
 
     shortlist = aggregate_documents(per_obligation, params)
     shortlisted = {d["document_id"] for d in shortlist}
-    for doc_id in sorted(linked_docs - shortlisted):  # never drop a document the graph links
+    for doc_id in sorted(linked_docs - shortlisted):  # never drop a document citing the regulation
         shortlist.append({"document_id": doc_id, "score": 0.0, "coverage": 0.0})
         shortlisted.add(doc_id)
     for d in shortlist:

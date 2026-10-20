@@ -182,6 +182,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
 > Ghi kết quả các buổi thống nhất để cả nhóm tham chiếu.
 
 - **Document format tài liệu mock** (MINH-02): mẫu `db/DOC-102.md` → `db/DOC-102.parsed.json` (nạp bằng `python -m app.ria.seed`), mô hình dữ liệu `db/data-model.md`
+- **Liên kết đồ thị "cùng căn cứ pháp lý"** (MINH-01, 2026-10-21): thay cho "không bao giờ bỏ tài liệu đồ thị liên kết". Chỉ `cites_regulation` / `cites_superseded` được nới ngưỡng (`graph_relax`) và luôn giữ trong shortlist. `shared_legal_basis` chỉ còn finding `low` và bị bỏ khi căn cứ đó phổ biến: hơn `max(1, 20% × số tài liệu nội bộ trong scope)` tài liệu cùng trích (tham số `common_basis_share`), tính theo tỷ lệ corpus thay vì danh sách luật khung cố định. Lý do: "Căn cứ Luật Các tổ chức tín dụng" nối thông tư 88 với 23/37 tài liệu, 23/44 finding là nhiễu
 - **Schema chunk / metadata** (MINH-01): _chưa chốt_
 - **Model embedding** (MINH-01): _chưa chốt_ — phải chạy được cả trên server team và GreenNode MaaS
 - **Endpoint LLM** (TAI-07): GreenNode MaaS. Trước khi có tài khoản, code chỉ đọc `OPENAI_BASE_URL` + `LLM_MODEL` nên dùng tạm bất kỳ endpoint OpenAI-compatible nào; bỏ server team Phase 1

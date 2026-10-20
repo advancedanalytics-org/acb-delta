@@ -30,3 +30,29 @@ def test_self_references_in_internal_documents():
         "5.6.a"
     ]
     assert graph.self_references("3.1", "theo Điều 22 của Luật này", nums) == []
+
+
+def _link(doc: str, relation: str, via: str) -> dict:
+    return {"document_id": doc, "clause_id": None, "relation": relation, "via": via}
+
+
+def test_common_legal_basis_is_dropped_rare_one_kept():
+    tctd = "Luật Các tổ chức tín dụng"
+    links = [_link(f"DOC-{i}", "shared_legal_basis", tctd) for i in range(23)]
+    links += [
+        _link("DOC-0", "cites_regulation", "88/2026/TT-NHNN"),
+        _link("DOC-1", "shared_legal_basis", "Nghị định 13/2023/NĐ-CP"),
+    ]
+    kept, common = graph.drop_common_bases(links, n_documents=37, max_share=0.2)
+    assert common == [tctd]
+    assert {(lk["document_id"], lk["relation"]) for lk in kept} == {
+        ("DOC-0", "cites_regulation"),
+        ("DOC-1", "shared_legal_basis"),
+    }
+
+
+def test_small_corpus_keeps_its_shared_legal_basis():
+    # Two documents in scope: one citing the law is not "most of the corpus".
+    links = [_link("DOC-102", "shared_legal_basis", "Luật Các tổ chức tín dụng")]
+    kept, common = graph.drop_common_bases(links, n_documents=2, max_share=0.2)
+    assert kept == links and common == []

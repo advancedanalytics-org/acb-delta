@@ -90,7 +90,8 @@ Job phân tích (`analysis.run_analysis`):
    - Gộp bằng RRF `Σ 1/(k + rank)`.
    - **Reranker** (mục 05.6, nếu có `RERANK_*`): chấm 20 ứng viên đầu theo cặp (nghĩa vụ, điều khoản kèm ngữ cảnh), song song theo `RERANK_CONCURRENCY`. Điểm rerank thay cho gate và là điểm của ứng viên. Reranker lỗi với một nghĩa vụ thì nghĩa vụ đó quay về gate.
    - **Đồ thị tri thức** (FalkorDB, nếu có `FALKORDB_URL`), xem mục "Đồ thị tri thức" bên dưới:
-     - Tài liệu nội bộ có liên kết pháp lý với văn bản đang phân tích được nới ngưỡng (`graph_relax` = 0,6 × ngưỡng thường) và luôn được giữ trong shortlist.
+     - Tài liệu nội bộ dẫn chiếu văn bản đang phân tích (`cites_regulation`) hoặc văn bản nó thay thế (`cites_superseded`) được nới ngưỡng (`graph_relax` = 0,6 × ngưỡng thường), điều khoản tốt nhất luôn qua bước cắt đuôi, và tài liệu luôn được giữ trong shortlist.
+     - `shared_legal_basis` (cùng căn cứ một luật) chỉ là gợi ý: một finding `low`, không nới ngưỡng, không ép vào shortlist. Căn cứ mà hơn `max(1, common_basis_share × số tài liệu trong scope)` tài liệu cùng trích (mặc định 20%, ví dụ "Căn cứ Luật Các tổ chức tín dụng") bị bỏ qua vì nó nối thông tư với gần như cả corpus; danh sách ghi ở `graph.common_bases_skipped` của kết quả.
      - Điều khoản dẫn chiếu tới một điều khoản evidence (hoặc tới Điều chứa nó) được thêm làm evidence `graph:refers_to`, tối đa `graph_neighbors` = 3 mỗi nghĩa vụ; Engine 2 phán quyết như mọi evidence khác.
    - Không có reranker thì dùng lexical gate: IDF tính trên toàn corpus đã index, nên từ chủ đề phủ khắp văn bản như "dữ liệu cá nhân" không được tính là bằng chứng.
    - Aggregation cấp tài liệu `S(D,Q) = α·max + (1−α)·mean(TopK)`, kèm coverage và số section trúng.

@@ -329,6 +329,9 @@ def _chunks(rows: list, size: int = 500):
 # --- Traversals used by Engine 1 ---------------------------------------------------------
 
 LINK_PRIORITY = {"cites_regulation": 0, "cites_superseded": 1, "shared_legal_basis": 2}
+# Relations that tie a document to this regulation on their own. A shared legal basis is only a
+# hint: it adds a low-priority finding but no retrieval privilege.
+STRONG_RELATIONS = ("cites_regulation", "cites_superseded")
 
 
 _INTERNAL_CLAUSE = (
@@ -383,6 +386,27 @@ def linked_internal_documents(regulation_id: str, version_id: str) -> list[dict]
             seen.add(key)
             unique.append(item)
     return unique
+
+
+def drop_common_bases(
+    links: list[dict], n_documents: int, max_share: float
+) -> tuple[list[dict], list[str]]:
+    """Drop shared_legal_basis links through a law that most internal documents cite ("Căn cứ
+    Luật Các tổ chức tín dụng"): it ties the regulation to the whole corpus, not to a document.
+    A law is common when more than max(1, max_share × n_documents) documents cite it, so a small
+    corpus keeps its links. Returns the kept links and the common laws."""
+    citing: dict[str, set[str]] = {}
+    for link in links:
+        if link["relation"] == "shared_legal_basis":
+            citing.setdefault(link["via"], set()).add(link["document_id"])
+    limit = max(1.0, max_share * n_documents)
+    common = sorted(via for via, docs in citing.items() if len(docs) > limit)
+    kept = [
+        link
+        for link in links
+        if not (link["relation"] == "shared_legal_basis" and link["via"] in common)
+    ]
+    return kept, common
 
 
 def dependent_clauses(clause_ids: list[str]) -> list[tuple[str, str]]:

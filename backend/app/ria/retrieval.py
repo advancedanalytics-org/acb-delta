@@ -41,10 +41,13 @@ class RetrievalParams:
     # Reranker (when configured): how many fused entries it scores, and its relevance floor.
     rerank_candidates: int = 20
     rerank_min_score: float | None = None  # None = the backend's calibrated default
-    # Knowledge graph: documents linked to the regulation by legal references get this share of
-    # the usual threshold; evidence clauses pull in up to graph_neighbors dependent clauses.
+    # Knowledge graph: documents that cite the regulation (or a document it replaces) get this
+    # share of the usual threshold; evidence clauses pull in up to graph_neighbors dependent
+    # clauses. A shared legal basis counts only for a law cited by at most common_basis_share
+    # of the internal documents in scope.
     graph_relax: float = 0.6
     graph_neighbors: int = 3
+    common_basis_share: float = 0.2
     # DICE: articles matched per dense query view on their aggregated vector; their clauses
     # join the fusion. 0 turns article matching off.
     article_candidates: int = 3
