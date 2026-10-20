@@ -1147,11 +1147,10 @@ export function PdfViewer({
   const pageWidth = Math.min(Math.max(width - 2 * PAGE_GAP, 0), MAX_PAGE_WIDTH)
   const selected = impacts.find((impact) => impact.id === selectedId)
   const selectedPage = selected ? (selected.page ?? (selected.bboxes && selected.bboxes.length > 0 ? 1 : null)) : null
-  const selectedPageReady = selectedPage != null
 
   const scrollToSelected = useCallback((smooth: boolean = true) => {
     if (!selectedId) return false
-    const el = selectedRef.current || document.getElementById(`impact-highlight-${selectedId}`)
+    const el = selectedRef.current || window.document.getElementById(`impact-highlight-${selectedId}`)
     if (el) {
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       el.scrollIntoView({ block: 'center', behavior: !smooth || reduceMotion ? 'auto' : 'smooth' })
