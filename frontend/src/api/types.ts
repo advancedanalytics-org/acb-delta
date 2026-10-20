@@ -26,6 +26,8 @@ export interface Vbpl {
   error?: string
   /** RIA document version (REG-…@v1) behind this row; the id used to delete it. */
   versionId?: string
+  /** URL of the original VBPL source PDF, when available. */
+  sourceUrl?: string
 }
 
 export interface InternalDocument {
