@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS obligation (
   text               text NOT NULL,     -- the atomic proposition, verbatim
   span_start         int NOT NULL,      -- offsets inside the source clause text
   span_end           int NOT NULL,
-  extraction_method  text NOT NULL      -- rule | llm
+  extraction_method  text NOT NULL      -- rule | rule+llm:<model> (refined at applicability)
 );
 
 CREATE TABLE IF NOT EXISTS obligation_clause (
@@ -173,12 +173,14 @@ CREATE TABLE IF NOT EXISTS amendment (
 ALTER TABLE obligation ADD COLUMN IF NOT EXISTS applicability text;          -- yes | no | uncertain
 ALTER TABLE obligation ADD COLUMN IF NOT EXISTS applicability_reason text;
 ALTER TABLE obligation ADD COLUMN IF NOT EXISTS applicability_method text;   -- rule | llm:<model>
+-- Rule-extracted fields kept when the LLM refines them (extraction_method = rule+llm:<model>).
+ALTER TABLE obligation ADD COLUMN IF NOT EXISTS rule_fields jsonb;
 
 -- LLM answers keyed by a hash of (kind, model, extra body, prompt, payload). Changing the
 -- prompt or the model changes the key, so stale answers are never reused.
 CREATE TABLE IF NOT EXISTS llm_cache (
   cache_key       text PRIMARY KEY,
-  kind            text NOT NULL,            -- judge_group | applicability
+  kind            text NOT NULL,            -- judge_group | applicability | obligation_refine
   model           text NOT NULL,
   prompt_version  text NOT NULL,            -- sha256(system prompt)[:12]
   response        jsonb NOT NULL,

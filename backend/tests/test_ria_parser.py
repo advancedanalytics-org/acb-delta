@@ -51,6 +51,21 @@ def test_obligations_inherit_lead_in_and_skip_delegation():
             assert clause_text[numbering][o.span_start : o.span_end] == o.text
 
 
+def test_point_labels_are_not_subject_or_action():
+    clauses = [
+        ClauseInput("4", "article", "Điều 4. Quyền và nghĩa vụ", None, "Điều 4. Quyền và nghĩa vụ"),
+        ClauseInput("4.1", "clause", "Bên kiểm soát dữ liệu có trách nhiệm sau đây:", "4"),
+        ClauseInput("4.1.a", "point", "a) Lưu trữ nhật ký xử lý dữ liệu cá nhân;", "4.1"),
+        ClauseInput("4.1.b", "point", "b) Không được chuyển dữ liệu cá nhân ra nước ngoài;", "4.1"),
+    ]
+    obligations = extract_obligations(clauses)
+    a, b = obligations["4.1.a"][0], obligations["4.1.b"][0]
+    assert (a.subject, a.action) == ("Bên kiểm soát dữ liệu", "lưu trữ")
+    assert (b.subject, b.modality, b.action) == ("Bên kiểm soát dữ liệu", "must_not", "chuyển dữ")
+    assert a.text == "Lưu trữ nhật ký xử lý dữ liệu cá nhân;"
+    assert clauses[2].text[a.span_start : a.span_end] == a.text
+
+
 def test_scanned_or_empty_pdf_fails_closed():
     with pytest.raises(ParseError):
         parse_pdf(html_pdf("<p>.</p>"))

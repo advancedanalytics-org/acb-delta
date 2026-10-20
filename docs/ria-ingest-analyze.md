@@ -57,6 +57,7 @@ Job parse (`ingest.run_parse`) chạy trong một transaction, lỗi ở bước
 | `modalities` | `must`, `must_not`, `may` | lọc nghĩa vụ |
 | `use_llm`, `max_llm_calls` | `true`, `150` | dùng LLM judge khi đã cấu hình `LLM_MODEL`; một lần gọi cho mỗi nghĩa vụ |
 | `filter_not_applicable` | `true` | bỏ nghĩa vụ không ràng buộc ngân hàng (rule + LLM, lưu theo nghĩa vụ) |
+| `refine_obligations` | `true` | trong cùng bước lọc, LLM đọc lại các trường nghĩa vụ do rule tách (chủ thể, hành động, đối tượng, điều kiện, thời hạn, ngoại lệ); lưu theo nghĩa vụ |
 | `refresh_llm_cache` | `false` | hỏi lại LLM thay vì dùng câu trả lời đã cache |
 | `use_rerank`, `rerank_candidates`, `rerank_min_score` | `true`, `20`, `0.2` | reranker chấm 20 ứng viên đầu sau RRF; dưới ngưỡng thì loại |
 | `rrf_k`, `candidates_per_query` | `60`, `20` | RRF và số candidate mỗi truy vấn |
@@ -83,6 +84,12 @@ Job phân tích (`analysis.run_analysis`):
    - Kết quả lưu vào cột `obligation.applicability`, nên các lần chạy sau dùng lại.
    - `uncertain` vẫn giữ nghĩa vụ lại (ưu tiên không bỏ sót). Câu trả lời không hợp lệ hoặc LLM lỗi cũng giữ lại nhưng không lưu, để lần sau hỏi lại.
    - Điều khoản ủy quyền như "Chính phủ quy định chi tiết…" đã bị loại từ bước parse.
+   - **Tách lại nghĩa vụ bằng LLM** (`refine_obligations`, blueprint RIA 4.0 "LLM + Pydantic"): rule ở `obligations.py` tách trước. Nhãn điểm/khoản ("a)", "2.") được bỏ trước khi tách, nên không còn chủ thể "b)" hay hành động "a lưu". Sau đó, trong cùng lời gọi LLM theo lô 20 dùng để lọc áp dụng (`kind = obligation_refine`), LLM trả lại các trường chủ thể / hành động / đối tượng / điều kiện / thời hạn / ngoại lệ kèm `applies`.
+     - Câu trả lời được validate bằng Pydantic (`ObligationAnswer`); mục sai kiểu bị bỏ riêng, không làm hỏng cả lô.
+     - Mỗi trường phải là cụm âm tiết nguyên văn của nghĩa vụ. Riêng chủ thể được lấy từ câu dẫn của khoản cha hoặc tên Điều, cho các điểm không nêu chủ thể. Trường không khớp hoặc rỗng giữ giá trị của rule. Modality và span vẫn do rule quyết.
+     - Rule áp dụng chạy lại trên chủ thể đã tách lại; LLM chỉ quyết phần rule không quyết được.
+     - Trường mới ghi đè lên dòng `obligation`. Giá trị gốc của rule nằm ở `rule_fields`, và `extraction_method = rule+llm:<model>`, nên mỗi nghĩa vụ chỉ tách lại một lần (trừ khi `refresh_llm_cache`). Engine 1/2 dùng ngay các trường mới trong cùng lần chạy.
+     - LLM lỗi: giữ trường của rule, không đánh dấu, lần sau hỏi lại. `job.result.obligations.refinement` đếm `refined`, `fields_rejected` và `llm_failed`.
 2. **Engine 1, mục 07–09** (`retrieval.py`):
    - Mỗi nghĩa vụ sinh 3–4 query view: nguyên văn, mệnh đề chuẩn hóa, chủ đề (tên Điều), giá trị/điều kiện.
    - Chạy sparse search (Postgres FTS trên bigram âm tiết) và dense search (pgvector, nếu có `EMBEDDING_*`).

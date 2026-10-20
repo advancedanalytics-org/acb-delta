@@ -233,7 +233,7 @@ def start_analysis(regulation_id: str, options: dict) -> tuple[dict, bool]:
 def _load_obligations(conn, version_id: str) -> list[dict]:
     rows = conn.execute(
         text(
-            "SELECT o.*, c.text AS clause_text, c.numbering, c.clause_id, "
+            "SELECT o.*, c.text AS clause_text, c.numbering, c.clause_id, p.text AS parent_text, "
             "COALESCE(a.heading, a2.heading, a3.heading) AS article_heading "
             "FROM obligation o JOIN clause c ON c.clause_id = o.source_clause_id "
             "LEFT JOIN clause p ON p.clause_id = c.parent_id "
@@ -351,17 +351,24 @@ def run_analysis(job_id: str) -> dict:
     linked_docs = {link["document_id"] for link in linked}
 
     # Applicability: drop obligations that cannot bind the bank before spending retrieval/LLM.
+    # The same LLM pass refines the rule-extracted fields that Engine 1/2 read.
     jobs.update_progress(job_id, "applicability", 3)
     by_modality = [o for o in obligations if o["modality"] in modalities]
     skipped = Counter({"modality_filtered": len(obligations) - len(by_modality)})
-    if options.get("filter_not_applicable", True) is not False:
+    filter_on = options.get("filter_not_applicable", True) is not False
+    refine = options.get("refine_obligations", True) is not False
+    refinement: Counter = Counter()
+    applicability: dict = {}
+    in_scope = by_modality
+    if filter_on or (refine and use_llm):
         with get_engine().begin() as conn:
-            applies = classify_obligations(conn, by_modality, use_llm, refresh=refresh)
-        in_scope = [o for o in by_modality if applies.get(o["obligation_id"]) != "no"]
-        skipped["not_applicable"] = len(by_modality) - len(in_scope)
-        applicability = dict(Counter(applies.values()))
-    else:
-        in_scope, applicability = by_modality, {}
+            applies = classify_obligations(
+                conn, by_modality, use_llm, refresh=refresh, refine=refine, stats=refinement
+            )
+        if filter_on:
+            in_scope = [o for o in by_modality if applies.get(o["obligation_id"]) != "no"]
+            skipped["not_applicable"] = len(by_modality) - len(in_scope)
+            applicability = dict(Counter(applies.values()))
     skipped = +skipped  # drop zero counts
 
     # Engine 1: fuse sparse + dense per obligation (SQL), then rerank in parallel.
@@ -679,6 +686,7 @@ def run_analysis(job_id: str) -> dict:
             "analyzed": len(in_scope),
             "skipped": dict(skipped),
             "applicability": applicability,
+            "refinement": dict(refinement),
             "with_evidence": covered,
             "coverage": round(covered / max(1, len(in_scope)), 4),
         },

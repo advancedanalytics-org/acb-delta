@@ -65,6 +65,11 @@ class AnalyzeRequest(BaseModel):
     filter_not_applicable: bool = Field(
         True, description="Skip obligations that do not bind the bank (rules + LLM, cached)"
     )
+    refine_obligations: bool = Field(
+        True,
+        description="Re-read rule-extracted obligation fields with the LLM in the applicability "
+        "step (verbatim-checked, stored per obligation)",
+    )
     refresh_llm_cache: bool = Field(
         False, description="Ask the LLM again instead of reusing cached answers"
     )

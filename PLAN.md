@@ -156,6 +156,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [ ] Đóng gói thành tool / hàm retrieve cho agent (`TAI-01`)
   - [x] Reranker TypeSafe Jev (`typesafe/jev-1.14`, Decisions API), span detection tiếng Việt (underthesea) cho Engine 2, đồ thị tri thức FalkorDB cho ingest + Engine 1, API đọc finding + evidence pack (`/api/findings`) — xem `docs/ria-ingest-analyze.md`
   - [x] Engine 1: khớp cấp Điều bằng vector gộp từ khoản/điểm (ý tưởng DICE); Engine 2: LLM căn span `equivalent` / `contradiction` / `addition` + `anchor` cho `INSERT`, kiểm tra độ phủ trước khi nhận `EQUIVALENT` (ý tưởng SLeDoC / LegDiff) — xem `docs/ria-ingest-analyze.md`. Chưa đo trên gold set (`KHOA-01`)
+  - [x] Tách nghĩa vụ rule + LLM (blueprint RIA 4.0 "LLM + Pydantic"): rule bỏ nhãn điểm/khoản (hết chủ thể "b)", hành động "a lưu"); bước lọc áp dụng gọi LLM tách lại chủ thể / hành động / đối tượng / điều kiện / thời hạn / ngoại lệ, validate Pydantic + kiểm nguyên văn, lưu theo nghĩa vụ (`rule_fields` giữ bản rule) — tham số `refine_obligations`, xem `docs/ria-ingest-analyze.md`
 - [x] **MINH-02** – Làm việc với Tài để thống nhất document format cho tài liệu mock — mẫu `db/DOC-102.md` / `db/DOC-102.parsed.json`, mô hình dữ liệu `db/data-model.md`
 
 ---
