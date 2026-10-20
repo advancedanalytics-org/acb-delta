@@ -450,7 +450,7 @@ def test_delete_failed_regulation_removes_everything_and_allows_reupload(client)
     version_id = body["version_id"]
     assert _wait(client, body["job_id"])["status"] == "succeeded"
 
-    # Only failed documents can be deleted.
+    # A version that is still processing (parsed, not analysed yet) cannot be deleted.
     response = client.delete(f"/api/regulations/{version_id}")
     assert response.status_code == 409, response.text
 

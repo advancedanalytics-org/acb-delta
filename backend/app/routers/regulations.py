@@ -3,7 +3,7 @@
 POST /api/regulations               upload a VBPL PDF → document version + parse job (202)
 POST /api/regulations/{id}/analyze  start impact analysis on a PARSED version → job (202)
 GET  /api/regulations/{id}          document, versions and processing state
-DELETE /api/regulations/{version_id} delete a version whose processing failed
+DELETE /api/regulations/{version_id} delete a version that is not processing
 """
 
 from datetime import date
@@ -200,20 +200,21 @@ def list_regulations() -> list[dict]:
 
 
 @router.delete("/{version_id}", status_code=status.HTTP_200_OK)
-def delete_failed_version(version_id: str) -> dict:
-    """Delete a regulation version whose processing failed (inbox status `failed`), with its
-    analysis results and stored original, so the file can be uploaded again. `{version_id}` is
-    the explicit version id (REG-…@v1)."""
+def delete_version(version_id: str) -> dict:
+    """Delete a regulation version that is not processing (failed, awaiting review, reviewed or
+    nothing found), with its analysis results, review package, reviewer decisions and stored
+    original, so the file can be uploaded again. `{version_id}` is the explicit version id
+    (REG-…@v1)."""
     try:
         ensure_schema()
         with get_engine().connect() as conn:
             rows = _inbox_rows(conn, version_id)
         if not rows:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"regulation {version_id} not found")
-        if rows[0]["status"] != "failed":
+        if rows[0]["status"] == "processing":
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                f"{version_id} is {rows[0]['status']}; only failed documents can be deleted",
+                f"{version_id} is still processing; wait for it to finish before deleting",
             )
         return delete_regulation_version(version_id)
     except RemovalError as exc:

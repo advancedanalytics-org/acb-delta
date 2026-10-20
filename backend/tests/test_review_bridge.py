@@ -703,3 +703,36 @@ def test_inbox_and_review_while_analysis_runs_or_fails(ria_client):
     finally:
         with get_engine().begin() as conn:
             conn.execute(text("UPDATE job SET status = 'succeeded' WHERE job_type = 'analyze'"))
+
+
+@needs_db
+def test_delete_reviewed_regulation_removes_package_and_decisions(ria_client, drafter):
+    from app.db import get_engine
+
+    job_id = _analyze(ria_client)
+    body = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    assert _wait(ria_client, body["review_job_id"])["status"] == "succeeded"
+    impacts = ria_client.get(f"/api/vbpls/{body['vbpl_id']}/impacts").json()
+    decided = ria_client.post(
+        "/api/decisions",
+        json={"impactId": impacts[0]["id"], "action": "reject", "reviewerId": "rv-anh"},
+    )
+    assert decided.status_code == 201
+    row = next(r for r in ria_client.get("/api/regulations").json() if r["id"] == body["vbpl_id"])
+    assert row["status"] in ("awaiting_review", "done")
+
+    response = ria_client.delete(f"/api/regulations/{row['version_id']}")
+    assert response.status_code == 200, response.text
+    with get_engine().connect() as conn:
+        left = conn.execute(
+            text(
+                "SELECT (SELECT count(*) FROM vbpls WHERE id = :v), "
+                "(SELECT count(*) FROM impacts WHERE vbpl_id = :v), "
+                "(SELECT count(*) FROM decisions WHERE id = :d)"
+            ),
+            {"v": body["vbpl_id"], "d": decided.json()["id"]},
+        ).one()
+    assert tuple(left) == (0, 0, 0)
+    assert all(
+        r["version_id"] != row["version_id"] for r in ria_client.get("/api/regulations").json()
+    )

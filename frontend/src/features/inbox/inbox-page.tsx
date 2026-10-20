@@ -198,7 +198,7 @@ export function InboxPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {vbpl.status === 'failed' && <DeleteVbplDialog vbpl={vbpl} />}
+                      {vbpl.status !== 'processing' && <DeleteVbplDialog vbpl={vbpl} />}
                       {canOpen && (
                         <ArrowRight
                           className="size-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5"
