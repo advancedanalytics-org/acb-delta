@@ -22,6 +22,11 @@ _NOISE = [
     re.compile(r"^\d{1,3}\s*/\s*\d{1,3}$"),
     re.compile(r"^(Trang|Page)\s+\d+(\s*/\s*\d+)?$", re.IGNORECASE),
     re.compile(r"^https?://\S+$"),
+    # Internal document footer (DOCX → PDF): "DOC-259 · Phiên bản 1.0 · Trang 2".
+    re.compile(
+        r"^[A-ZĐ]+-\d+\s*·\s*Phiên bản\s*[\d.]+\s*·\s*Trang\s+\d+(\s*/\s*\d+)?$",
+        re.IGNORECASE,
+    ),
 ]
 
 RE_CHAPTER = re.compile(r"^Chương\s+([IVXLC]+|\d+)\b\.?\s*(.*)$", re.IGNORECASE)
@@ -132,18 +137,23 @@ def extract_lines(pdf_bytes: bytes) -> tuple[list[Line], int]:
     page_count = len(doc)
 
     # Running headers/footers: same text at the page edge on at least half of the pages.
+    # Digits are masked so a footer carrying the page number ("… · Trang 2") still repeats.
     edge_counts: Counter[str] = Counter()
     for line in raw:
         h = heights[line.page]
         if line.bbox[1] < 0.08 * h or line.bbox[3] > 0.92 * h:
-            edge_counts[line.text] += 1
+            edge_counts[_mask_digits(line.text)] += 1
     running = {t for t, c in edge_counts.items() if page_count >= 3 and c >= page_count / 2}
 
     return [
         line
         for line in raw
-        if line.text not in running and not any(p.match(line.text) for p in _NOISE)
+        if _mask_digits(line.text) not in running and not any(p.match(line.text) for p in _NOISE)
     ], page_count
+
+
+def _mask_digits(text: str) -> str:
+    return re.sub(r"\d+", "#", text)
 
 
 def build_canonical_text(lines: list[Line]) -> str:

@@ -1,8 +1,9 @@
 from pathlib import Path
 
+import pymupdf
 import pytest
 
-from app.ria.legal_parser import ParseError, parse_pdf
+from app.ria.legal_parser import ParseError, extract_lines, parse_pdf
 from app.ria.obligations import ClauseInput, extract_obligations
 from tests.ria_fixtures import html_pdf, ria_001_pdf
 
@@ -64,6 +65,32 @@ def test_point_labels_are_not_subject_or_action():
     assert (b.subject, b.modality, b.action) == ("Bên kiểm soát dữ liệu", "must_not", "chuyển dữ")
     assert a.text == "Lưu trữ nhật ký xử lý dữ liệu cá nhân;"
     assert clauses[2].text[a.span_start : a.span_end] == a.text
+
+
+def _footed_pdf(pages: int) -> bytes:
+    """Internal-document layout: body text plus "DOC-259 · Phiên bản 1.0 · Trang N" at the
+    bottom of every page."""
+    doc = pymupdf.open()
+    for n in range(1, pages + 1):
+        page = doc.new_page()
+        body = f"<p>Điều {n}. Nội dung trang {n}</p><p>Đơn vị phải lưu trữ hồ sơ khách hàng.</p>"
+        page.insert_htmlbox(pymupdf.Rect(72, 72, 520, 200), body)
+        h = page.rect.height
+        page.insert_htmlbox(
+            pymupdf.Rect(150, h - 40, 450, h - 20), f"DOC-259 · Phiên bản 1.0 · Trang {n}"
+        )
+    return doc.tobytes()
+
+
+@pytest.mark.parametrize("pages", [2, 4])
+def test_internal_page_footer_is_dropped(pages):
+    pdf = _footed_pdf(pages)
+    raw = "".join(page.get_text() for page in pymupdf.open(stream=pdf, filetype="pdf"))
+    assert raw.count("DOC-259 · Phiên bản 1.0 · Trang") == pages  # the footer is really there
+    lines, _ = extract_lines(pdf)
+    texts = [line.text for line in lines]
+    assert not any("Phiên bản 1.0" in t for t in texts)
+    assert sum("lưu trữ hồ sơ" in t for t in texts) == pages  # body kept
 
 
 def test_scanned_or_empty_pdf_fails_closed():
