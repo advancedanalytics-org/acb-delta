@@ -91,7 +91,8 @@ Job phân tích (`analysis.run_analysis`):
    - **Reranker** (mục 05.6, nếu có `RERANK_*`): chấm 20 ứng viên đầu theo cặp (nghĩa vụ, điều khoản kèm ngữ cảnh), song song theo `RERANK_CONCURRENCY`. Điểm rerank thay cho gate và là điểm của ứng viên. Reranker lỗi với một nghĩa vụ thì nghĩa vụ đó quay về gate.
    - **Đồ thị tri thức** (FalkorDB, nếu có `FALKORDB_URL`), xem mục "Đồ thị tri thức" bên dưới:
      - Tài liệu nội bộ có liên kết pháp lý với văn bản đang phân tích được nới ngưỡng (`graph_relax` = 0,6 × ngưỡng thường) và luôn được giữ trong shortlist.
-     - Điều khoản dẫn chiếu tới một điều khoản evidence (hoặc tới Điều chứa nó) được thêm làm evidence `graph:refers_to`, tối đa `graph_neighbors` = 3 mỗi nghĩa vụ; Engine 2 phán quyết như mọi evidence khác.
+     - Điều khoản dẫn chiếu tới một điều khoản evidence (hoặc tới Điều chứa nó) được thêm làm evidence `graph:refers_to`, tối đa `graph_neighbors` = 3 mỗi nghĩa vụ; Engine 2 phán quyết như mọi evidence khác. Nó vẫn phải qua lexical gate ở mức `graph_relax` × ngưỡng thường (dẫn chiếu chứng minh phụ thuộc, không chứng minh cùng chủ đề), và không bao giờ là điều khoản khung.
+   - **Điều khoản khung** (`retrieval.is_framing`): khối quyết định (`QD`, `QD.n`: "Ban hành kèm theo Quyết định này…"), phần căn cứ/kết, và các Điều Phạm vi điều chỉnh / Đối tượng áp dụng / Giải thích từ ngữ. Chúng trùng từ chủ đề với mọi nghĩa vụ nên điểm bị nhân `framing_penalty` = 0,5 trước bước cắt đuôi.
    - Không có reranker thì dùng lexical gate: IDF tính trên toàn corpus đã index, nên từ chủ đề phủ khắp văn bản như "dữ liệu cá nhân" không được tính là bằng chứng.
    - Aggregation cấp tài liệu `S(D,Q) = α·max + (1−α)·mean(TopK)`, kèm coverage và số section trúng.
    - Mở rộng ngữ cảnh: điều khoản cha và điều khoản anh em chứa ngoại lệ.

@@ -702,7 +702,11 @@ def run_analysis(job_id: str) -> dict:
 
 def _add_dependent_clauses(evidence_rows: list[dict], corpus, params: RetrievalParams) -> int:
     """Knowledge graph expansion: clauses that refer to an evidence clause (or its article) may be
-    impacted too ("thời hạn tại Điều 5"). Add them as evidence; Engine 2 judges them."""
+    impacted too ("thời hạn tại Điều 5"). Add them as evidence; Engine 2 judges them.
+
+    The reference is evidence of dependency, not of topic: a dependent still has to pass the
+    lexical gate, at graph_relax × the usual threshold. Framing clauses ("Ban hành kèm theo
+    Quyết định này Quy định …" refers to the whole document) are never added."""
     top: dict[str, list[dict]] = {}
     for ev in evidence_rows:
         top.setdefault(ev["obligation"]["obligation_id"], []).append(ev)
@@ -718,8 +722,10 @@ def _add_dependent_clauses(evidence_rows: list[dict], corpus, params: RetrievalP
         return 0
     dependents: dict[str, list[str]] = {}
     for src, dep in pairs:
-        if dep in corpus.clauses:
+        if dep in corpus.clauses and dep not in corpus.framing:
             dependents.setdefault(src, []).append(dep)
+    min_shared = max(1, round(params.min_shared_bigrams * params.graph_relax))
+    min_idf = params.min_idf_score * params.graph_relax
     added = 0
     for rows in top.values():
         have = {ev["clause"]["clause_id"] for ev in rows}
@@ -729,10 +735,12 @@ def _add_dependent_clauses(evidence_rows: list[dict], corpus, params: RetrievalP
             for dep in dependents.get(ev["clause"]["clause_id"], []):
                 if dep in have or new >= params.graph_neighbors:
                     continue
+                lex = lexical_overlap(gate_query(o), dep, corpus, params.min_term_idf)
+                if len(lex["shared"]) < min_shared or lex["idf_score"] < min_idf:
+                    continue
                 have.add(dep)
                 new += 1
                 clause = corpus.clauses[dep]
-                lex = lexical_overlap(gate_query(o), dep, corpus, params.min_term_idf)
                 evidence_rows.append(
                     {
                         "evidence_id": f"EV-{uuid.uuid4().hex[:12]}",

@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from app.ria import embeddings, rerank
 from app.ria.indexing import ARTICLE_VIEW, INDEXED_LEVELS, context_text
+from app.ria.obligations import SKIP_ARTICLE_HEADINGS
 from app.ria.textutil import content_bigrams, normalize, tsquery_from_bigrams
 
 _EXCEPTION_HINT = re.compile(r"\b(trừ|ngoại trừ|không áp dụng|miễn)\b", re.IGNORECASE)
@@ -45,6 +46,9 @@ class RetrievalParams:
     # the usual threshold; evidence clauses pull in up to graph_neighbors dependent clauses.
     graph_relax: float = 0.6
     graph_neighbors: int = 3
+    # Framing clauses (decision wrapper, scope / applicability / definitions articles) share the
+    # topic words of every obligation; their score is multiplied by this.
+    framing_penalty: float = 0.5
     # DICE: articles matched per dense query view on their aggregated vector; their clauses
     # join the fusion. 0 turns article matching off.
     article_candidates: int = 3
@@ -58,6 +62,7 @@ class InternalCorpus:
     bigrams: dict[str, set[str]]
     idf: dict[str, float]
     children: dict[str, list[str]] = field(default_factory=dict)
+    framing: set[str] = field(default_factory=set)
 
     @property
     def document_ids(self) -> set[str]:
@@ -88,7 +93,24 @@ def load_internal_corpus(conn, document_ids: list[str] | None) -> InternalCorpus
         cid: set(content_bigrams(context_text(c, clauses, with_title=False)))
         for cid, c in clauses.items()
     }
-    return InternalCorpus(clauses, bigrams, corpus_idf(conn), children)
+    framing = {cid for cid in clauses if is_framing(cid, clauses)}
+    return InternalCorpus(clauses, bigrams, corpus_idf(conn), children, framing)
+
+
+def is_framing(cid: str, clauses: dict[str, dict]) -> bool:
+    """Clauses that frame the document rather than set a rule: the decision wrapper ("Ban hành
+    kèm theo Quyết định này …", parsed as QD / QD.n), preamble, closing, and the scope /
+    applicability / definitions articles. They match any obligation of the document's topic."""
+    node = clauses[cid]
+    while node:
+        root = (node["numbering"] or "").split(".")[0]
+        if node["level"] in ("preamble", "closing") or root in ("QD", "PREAMBLE"):
+            return True
+        if node["level"] == "article":
+            heading = (node["heading"] or "").lower()
+            return any(h in heading for h in SKIP_ARTICLE_HEADINGS)
+        node = clauses.get(node["parent_id"]) if node["parent_id"] else None
+    return False
 
 
 def corpus_idf(conn) -> dict[str, float]:
@@ -378,6 +400,8 @@ def select_candidates(
                 len(lex["shared"]) >= params.min_shared_bigrams
                 and lex["idf_score"] >= params.min_idf_score
             )
+        if cid in corpus.framing:
+            score *= params.framing_penalty
         candidates.append(
             {
                 "clause_id": cid,
