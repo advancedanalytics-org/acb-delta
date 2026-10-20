@@ -24,6 +24,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+
+import { ImpactTree } from './impact-tree'
 import {
   useDocumentClauses,
   useDocuments,
@@ -494,6 +496,12 @@ export function InternalDocumentsPage() {
                   >
                     Tài liệu gốc
                   </TabsTrigger>
+                  <TabsTrigger
+                    value="impact-tree"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-11 px-2 text-xs font-medium"
+                  >
+                    Đồ thị tác động
+                  </TabsTrigger>
                 </TabsList>
 
                 {clauseData && (
@@ -802,6 +810,14 @@ export function InternalDocumentsPage() {
                     <p className="text-sm">Chưa có tài liệu gốc để hiển thị.</p>
                   </div>
                 )}
+              </TabsContent>
+
+              {/* TAB 4: ĐỒ THỊ TÁC ĐỘNG */}
+              <TabsContent
+                value="impact-tree"
+                className="flex-1 flex flex-col min-h-0 h-full overflow-hidden p-0 m-0 border-0 data-[state=active]:flex data-[state=inactive]:hidden"
+              >
+                <ImpactTree doc={activeDoc} docs={documents ?? []} />
               </TabsContent>
             </Tabs>
           </>
