@@ -13,7 +13,7 @@ import type {
   VbplStatus,
 } from '@/api/types'
 
-import { documents, evalRuns, impactSeeds, reviewers, vbplSeeds } from './fixtures'
+import { documents, evalRuns, exampleSets, impactSeeds, reviewers, vbplSeeds } from './fixtures'
 import { store } from './store'
 
 /** Simulated network latency so loading states are visible. */
@@ -290,6 +290,8 @@ export const mockApi: ApiClient = {
       draftExamples: { positiveAvailable: 9, negativeAvailable: 4 },
       judgeExamples: { positiveAvailable: 9, negativeAvailable: 2 },
     }),
+
+  getEvalExamples: (task) => delay(exampleSets[task]),
 
   decide(input) {
     const impact = getAllImpactSeeds().find((seed) => seed.id === input.impactId)

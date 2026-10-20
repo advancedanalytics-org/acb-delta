@@ -23,6 +23,7 @@ export const queryKeys = {
   reviewers: ['reviewers'] as const,
   evalRuns: ['eval-runs'] as const,
   feedbackStatus: ['feedback-status'] as const,
+  evalExamples: (task: 'draft' | 'judge') => ['eval-examples', task] as const,
   health: ['health'] as const,
 }
 
@@ -112,6 +113,9 @@ export const useEvalRuns = () => useQuery({ queryKey: queryKeys.evalRuns, queryF
 
 export const useFeedbackStatus = () =>
   useQuery({ queryKey: queryKeys.feedbackStatus, queryFn: api.getFeedbackStatus })
+
+export const useEvalExamples = (task: 'draft' | 'judge') =>
+  useQuery({ queryKey: queryKeys.evalExamples(task), queryFn: () => api.getEvalExamples(task) })
 
 export const useHealth = () =>
   useQuery({ queryKey: queryKeys.health, queryFn: api.getHealth, refetchInterval: 10_000, retry: false })

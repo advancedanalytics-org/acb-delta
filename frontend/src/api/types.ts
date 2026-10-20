@@ -147,6 +147,31 @@ export interface FeedbackStatus {
   judgeExamples: { positiveAvailable: number; negativeAvailable: number }
 }
 
+/** One reviewer decision shaped as a few-shot example (KHOA-02, `GET /api/eval/examples`). */
+export interface FeedbackExample {
+  impactId: string
+  category: string | null
+  reasonTags: string[]
+  /** The internal-document text the finding is about. */
+  affectedText: string
+  /** The text the reviewer kept, and the AI text they did not take. Either can be null: an
+   *  accept has nothing rejected, a failed draft has no AI text at all. */
+  chosen: string | null
+  rejected: string | null
+  /** Why RIA raised the finding. */
+  rationale: string | null
+}
+
+/** Few-shot examples for one pipeline step, built from reviewer decisions (KHOA-02). */
+export interface ExampleSet {
+  task: 'draft' | 'judge'
+  positive: FeedbackExample[]
+  negative: FeedbackExample[]
+  /** `counts` is a plain dict on the wire, so its keys stay snake_case:
+   *  `decisions_read`, `positive_available`, `negative_available`. */
+  counts: Record<string, number>
+}
+
 export interface HealthReport {
   status: 'ok' | 'degraded'
   checks: Record<string, string>

@@ -3,7 +3,7 @@
  * Documents and impacts live in JSON so scripts/demo-data/generate_demo_pdfs.py can render the
  * PDFs and compute real highlight positions (highlights.json) from the same source.
  */
-import type { BBox, Decision, EvalRun, Impact, InternalDocument, Reviewer, Vbpl } from '@/api/types'
+import type { BBox, Decision, EvalRun, ExampleSet, Impact, InternalDocument, Reviewer, Vbpl } from '@/api/types'
 
 import documentsJson from './demo-documents.json'
 import impactsJson from './demo-impacts.json'
@@ -175,3 +175,78 @@ export const evalRuns: EvalRun[] = [
     },
   },
 ]
+
+/**
+ * Illustrative few-shot examples only. The real set is built from HITL decisions by the backend
+ * (`GET /api/eval/examples`); these mirror its shape so the panel can be previewed in mock mode.
+ */
+export const exampleSets: Record<'draft' | 'judge', ExampleSet> = {
+  draft: {
+    task: 'draft',
+    positive: [
+      {
+        impactId: 'imp-15',
+        category: 'conflict',
+        reasonTags: ['Sai số liệu'],
+        affectedText: 'Phí chậm thanh toán bằng 6% số tiền thanh toán tối thiểu chưa thanh toán.',
+        chosen:
+          'Phí chậm thanh toán bằng 4% số tiền thanh toán tối thiểu chưa thanh toán, tối thiểu 80.000 đồng.',
+        rejected: 'Phí chậm thanh toán bằng 5% số tiền thanh toán tối thiểu chưa thanh toán.',
+        rationale:
+          'Thông tư 27/2026 hạ trần phí chậm thanh toán thẻ tín dụng; mức cũ 6% vượt trần mới.',
+      },
+      {
+        impactId: 'imp-01',
+        category: 'new_obligation',
+        reasonTags: [],
+        affectedText: 'Khách hàng vay tiêu dùng được định danh bằng giấy tờ tùy thân hợp lệ.',
+        chosen:
+          'Khách hàng vay tiêu dùng phải được định danh bằng giấy tờ tùy thân hợp lệ và xác thực sinh trắc học theo Thông tư 31/2026/TT-NHNN.',
+        rejected: null,
+        rationale: 'Thông tư 31/2026 bổ sung yêu cầu xác thực sinh trắc học với cho vay tiêu dùng.',
+      },
+    ],
+    negative: [
+      {
+        impactId: 'imp-09',
+        category: 'outdated_reference',
+        reasonTags: ['Thiếu nội dung'],
+        affectedText: 'Hồ sơ nhận biết khách hàng được lưu trữ tối thiểu 5 năm.',
+        chosen:
+          'Hồ sơ nhận biết khách hàng được lưu trữ tối thiểu 10 năm kể từ ngày kết thúc giao dịch hoặc đóng tài khoản.',
+        rejected: 'Hồ sơ nhận biết khách hàng được lưu trữ tối thiểu 10 năm.',
+        rationale: 'Thời hạn lưu trữ cần nêu rõ mốc tính và căn cứ quy định nội bộ.',
+      },
+    ],
+    counts: { decisions_read: 11, positive_available: 2, negative_available: 1 },
+  },
+  judge: {
+    task: 'judge',
+    positive: [
+      {
+        impactId: 'imp-14',
+        category: 'conflict',
+        reasonTags: [],
+        affectedText: 'Căn cứ Thông tư 18/2024/TT-NHNN về hoạt động thẻ ngân hàng.',
+        chosen:
+          'Căn cứ Thông tư 18/2024/TT-NHNN (được sửa đổi, bổ sung bởi Thông tư 27/2026/TT-NHNN) về hoạt động thẻ ngân hàng.',
+        rejected: null,
+        rationale: 'Văn bản dẫn chiếu đã được sửa đổi; cần cập nhật căn cứ pháp lý.',
+      },
+    ],
+    negative: [
+      {
+        impactId: 'imp-10',
+        category: 'outdated_reference',
+        reasonTags: ['Đã xử lý ở văn bản khác'],
+        affectedText: 'Quy định về hạn mức rút tiền mặt tại máy ATM.',
+        chosen: null,
+        rejected:
+          'Đề xuất cập nhật hạn mức rút tiền mặt theo Thông tư 31/2026/TT-NHNN.',
+        rationale:
+          'RIA cho rằng điều khoản bị tác động, nhưng nội dung này đã được điều chỉnh ở một văn bản nội bộ khác — không phải tác động cần sửa ở đây.',
+      },
+    ],
+    counts: { decisions_read: 11, positive_available: 1, negative_available: 1 },
+  },
+}
