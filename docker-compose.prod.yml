@@ -136,9 +136,9 @@ services:
       args:
         VITE_API_MODE: ${VITE_API_MODE:-mock}
     environment:
-      # Public entry point: every page and /api sits behind basic auth.
-      BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set in .env}
-      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:?set in .env}
+      # Optional basic auth on every page and /api: set both in .env to turn it on.
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-}
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
