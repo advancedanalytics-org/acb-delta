@@ -30,10 +30,13 @@ _NOISE = [
 ]
 
 RE_CHAPTER = re.compile(r"^Chương\s+([IVXLC]+|\d+)\b\.?\s*(.*)$", re.IGNORECASE)
-RE_SECTION = re.compile(r"^Mục\s+(\d+|[IVXLC]+)\b\.?\s*(.*)$")
-RE_ARTICLE = re.compile(r"^Điều\s+(\d+)\s*\.\s*(.*)$")
-RE_CLAUSE = re.compile(r"^(\d{1,3})\.\s+(\S.*)$")
-RE_POINT = re.compile(r"^([a-zđ])\)\s+(\S.*)$")
+RE_SECTION = re.compile(r"^(?:Mục|MỤC)\s+(\d+|[IVXLC]+)\b\.?\s*(.*)$", re.IGNORECASE)
+RE_ARTICLE = re.compile(
+    r"^(?:Điều|ĐIỀU)\s+(\d+)(?:\s*[:.\-]\s*|\s*$|\s+(?!(?:của|tại|trong|theo|này|được|đã)\b))(.*)$",
+    re.IGNORECASE,
+)
+RE_CLAUSE = re.compile(r"^(?:Khoản\s+)?(\d{1,3})[\.)]\s+(\S.*)$", re.IGNORECASE)
+RE_POINT = re.compile(r"^(?:Điểm\s+)?([a-zđ])[\.)]\s+(\S.*)$", re.IGNORECASE)
 RE_APPENDIX = re.compile(r"^(PHỤ LỤC|Phụ lục)(\s+[IVXLC\d]+)?\s*$")
 RE_CLOSING = re.compile(
     r"^(Nơi nhận\s*:|TM\.\s|KT\.\s|CHỦ TỊCH QUỐC HỘI$|(Luật|Nghị quyết) này (đã )?được Quốc hội)"
@@ -272,13 +275,22 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
                 last_khoan = 0
                 last_point = None
                 mode = "body"
-            elif (m := RE_ARTICLE.match(t)) and (
-                int(m.group(1)) == last_article + 1 or (last_article == 0 and article is None)
-            ):
-                last_article = int(m.group(1))
-                article = f"QD.{last_article}"
-                open_clause(article, "article", "QD", line, m.start(2), heading=m.group(2) or None)
-                continue
+            elif m := RE_ARTICLE.match(t):
+                art_num = int(m.group(1))
+                if (last_article == 0 and article is None) or (
+                    last_article > 0 and last_article < art_num <= last_article + 10
+                ):
+                    last_article = art_num
+                    article = f"QD.{last_article}"
+                    open_clause(
+                        article,
+                        "article",
+                        "QD",
+                        line,
+                        m.start(2),
+                        heading=m.group(2).strip() or None,
+                    )
+                    continue
             elif RE_CLOSING.match(t):
                 continue
 
@@ -324,30 +336,41 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
             section = f"{chapter}.M{m.group(1)}"
             open_clause(section, "section", chapter, line, m.start(2) if m.group(2) else len(t))
             continue
-        if (m := RE_ARTICLE.match(t)) and (
-            int(m.group(1)) == last_article + 1 or (last_article == 0 and article is None)
-        ):
-            last_article = int(m.group(1))
-            article = str(last_article)
-            khoan, last_khoan, last_point = None, 0, None
-            heading = m.group(2) or None
-            open_clause(article, "article", section or chapter, line, m.start(2), heading=heading)
-            continue
-        if article and (m := RE_CLAUSE.match(t)) and int(m.group(1)) == last_khoan + 1:
-            last_khoan = int(m.group(1))
-            khoan = f"{article}.{last_khoan}"
-            last_point = None
-            open_clause(khoan, "clause", article, line, m.start(2))
-            continue
-        if (
-            article
-            and (m := RE_POINT.match(t))
-            and (m.group(1) == _next_letter(last_point) or last_point is None)
-        ):
-            last_point = m.group(1)
-            parent = khoan or article
-            open_clause(f"{parent}.{last_point}", "point", parent, line, m.start(2))
-            continue
+        if m := RE_ARTICLE.match(t):
+            art_num = int(m.group(1))
+            if (last_article == 0 and (article is None or art_num <= 5)) or (
+                last_article > 0 and last_article < art_num <= last_article + 10
+            ):
+                last_article = art_num
+                article = str(last_article)
+                khoan, last_khoan, last_point = None, 0, None
+                heading = m.group(2).strip() or None
+                open_clause(
+                    article, "article", section or chapter, line, m.start(2), heading=heading
+                )
+                continue
+        if article and (m := RE_CLAUSE.match(t)):
+            clause_num = int(m.group(1))
+            if (last_khoan == 0 and clause_num in (1, 2)) or (
+                last_khoan > 0 and last_khoan < clause_num <= last_khoan + 5
+            ):
+                last_khoan = clause_num
+                khoan = f"{article}.{last_khoan}"
+                last_point = None
+                open_clause(khoan, "clause", article, line, m.start(2))
+                continue
+        if article and (m := RE_POINT.match(t)):
+            point_char = m.group(1).lower()
+            idx = POINT_LETTERS.find(point_char)
+            if idx >= 0:
+                last_idx = POINT_LETTERS.find(last_point) if last_point else -1
+                if (last_point is None and idx <= 2) or (
+                    last_point is not None and last_idx < idx <= last_idx + 4
+                ):
+                    last_point = point_char
+                    parent = khoan or article
+                    open_clause(f"{parent}.{last_point}", "point", parent, line, m.start(2))
+                    continue
 
     if last_article == 0:
         warnings.append("no Điều structure recognised; fell back to fixed-size chunks")
