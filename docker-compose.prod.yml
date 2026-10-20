@@ -120,6 +120,10 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    volumes:
+      - ./data:/data:ro
+      - ./frontend/public/demo:/frontend/public/demo:ro
+      - ./db:/db:ro
     restart: unless-stopped
 
   frontend:
