@@ -3,8 +3,10 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from pydantic.alias_generators import to_camel
+
+from app.models.hitl import can_delete
 
 DecisionAction = Literal["accept", "edit", "reject"]
 VbplStatus = Literal["processing", "awaiting_review", "done", "failed", "not_found"]
@@ -52,6 +54,12 @@ class ReviewerOut(CamelModel):
     id: str
     name: str
     role: str
+
+    @computed_field(alias="canDelete")
+    @property
+    def can_delete(self) -> bool:
+        """Whether this reviewer may delete a regulation (department heads only)."""
+        return can_delete(self.role)
 
 
 class DecisionOut(CamelModel):

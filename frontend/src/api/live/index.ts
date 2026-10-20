@@ -98,9 +98,12 @@ export const liveApi: ApiClient = {
     return []
   },
 
-  deleteVbpl: async (vbpl: Vbpl): Promise<void> => {
+  deleteVbpl: async (vbpl: Vbpl, reviewerId: string): Promise<void> => {
     const versionId = vbpl.versionId ?? vbpl.id
-    const response = await fetch(`/api/regulations/${encodeURIComponent(versionId)}`, { method: 'DELETE' })
+    const response = await fetch(`/api/regulations/${encodeURIComponent(versionId)}`, {
+      method: 'DELETE',
+      headers: { 'X-Reviewer-Id': reviewerId },
+    })
     if (!response.ok) {
       const err = await response.json().catch(() => ({}))
       throw new Error(err.detail || `Xóa thất bại (HTTP ${response.status})`)

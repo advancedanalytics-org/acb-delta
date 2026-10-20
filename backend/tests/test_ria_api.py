@@ -22,6 +22,9 @@ GRAPH_URL = os.environ.get("RIA_TEST_FALKORDB_URL", "")
 pytestmark = pytest.mark.skipif(not DB_URL, reason="RIA_TEST_DATABASE_URL not set")
 DOC_102 = Path(__file__).resolve().parents[2] / "db" / "DOC-102.parsed.json"
 
+# Only a department head may delete a regulation.
+HEAD_OF_DEPARTMENT = {"X-Reviewer-Id": "rv-bao"}
+
 
 def _reset_caches():
     from app.config import get_settings
@@ -451,7 +454,7 @@ def test_delete_failed_regulation_removes_everything_and_allows_reupload(client)
     assert _wait(client, body["job_id"])["status"] == "succeeded"
 
     # A version that is still processing (parsed, not analysed yet) cannot be deleted.
-    response = client.delete(f"/api/regulations/{version_id}")
+    response = client.delete(f"/api/regulations/{version_id}", headers=HEAD_OF_DEPARTMENT)
     assert response.status_code == 409, response.text
 
     job = _analyze(client, body["regulation_id"])
@@ -463,7 +466,13 @@ def test_delete_failed_regulation_removes_everything_and_allows_reupload(client)
     row = next(r for r in client.get("/api/regulations").json() if r["version_id"] == version_id)
     assert row["status"] == "failed"
 
-    response = client.delete(f"/api/regulations/{version_id}")
+    # A specialist, an unknown reviewer, or no reviewer at all may not delete.
+    for headers in ({"X-Reviewer-Id": "rv-anh"}, {"X-Reviewer-Id": "nobody"}, {}):
+        response = client.delete(f"/api/regulations/{version_id}", headers=headers)
+        assert response.status_code == 403, response.text
+    assert _version_rows(version_id)["version"] == 1
+
+    response = client.delete(f"/api/regulations/{version_id}", headers=HEAD_OF_DEPARTMENT)
     assert response.status_code == 200, response.text
     assert response.json()["document_removed"] is True
     assert response.json()["warnings"] == []
@@ -477,7 +486,10 @@ def test_delete_failed_regulation_removes_everything_and_allows_reupload(client)
         assert left[0][0] == 0
     assert _version_rows(version_id) == {"version": 0, "clause": 0, "job": 0, "finding": 0}
     assert all(r["version_id"] != version_id for r in client.get("/api/regulations").json())
-    assert client.delete(f"/api/regulations/{version_id}").status_code == 404
+    assert (
+        client.delete(f"/api/regulations/{version_id}", headers=HEAD_OF_DEPARTMENT).status_code
+        == 404
+    )
 
     # Same bytes again: a fresh upload, not a duplicate of the deleted version.
     again = _upload(client, pdf)
@@ -510,7 +522,10 @@ def test_delete_regulation_whose_parse_failed(client):
             )
         )
     # A job still running blocks the delete; the row is not failed yet either.
-    assert client.delete("/api/regulations/REG-BROKEN-TEST@v1").status_code == 409
+    assert (
+        client.delete("/api/regulations/REG-BROKEN-TEST@v1", headers=HEAD_OF_DEPARTMENT).status_code
+        == 409
+    )
     with get_engine().begin() as conn:
         conn.execute(text("UPDATE job SET status = 'failed' WHERE job_id = 'JOB-broken-test'"))
     row = next(
@@ -518,5 +533,8 @@ def test_delete_regulation_whose_parse_failed(client):
     )
     assert (row["status"], row["error"]) == ("failed", "Đọc văn bản thất bại")
 
-    assert client.delete("/api/regulations/REG-BROKEN-TEST@v1").status_code == 200
+    assert (
+        client.delete("/api/regulations/REG-BROKEN-TEST@v1", headers=HEAD_OF_DEPARTMENT).status_code
+        == 200
+    )
     assert _version_rows("REG-BROKEN-TEST@v1")["version"] == 0

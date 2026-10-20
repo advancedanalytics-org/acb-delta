@@ -91,6 +91,8 @@ export interface Reviewer {
   id: string
   name: string
   role: string
+  /** Department heads may delete regulations; specialists may not. */
+  canDelete: boolean
 }
 
 export interface Decision {

@@ -50,8 +50,8 @@ export const vbplSeeds: VbplSeed[] = [
 ]
 
 export const reviewers: Reviewer[] = [
-  { id: 'rv-anh', name: 'Nguyễn Minh Anh', role: 'Chuyên viên pháp chế' },
-  { id: 'rv-bao', name: 'Trần Quốc Bảo', role: 'Trưởng phòng tuân thủ' },
+  { id: 'rv-anh', name: 'Nguyễn Minh Anh', role: 'Chuyên viên pháp chế', canDelete: false },
+  { id: 'rv-bao', name: 'Trần Quốc Bảo', role: 'Trưởng phòng tuân thủ', canDelete: true },
 ]
 
 const highlights = highlightsJson.highlights as Record<string, { page: number; bboxes: number[][] }>

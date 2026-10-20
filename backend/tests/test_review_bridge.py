@@ -22,6 +22,9 @@ needs_db = pytest.mark.skipif(not DB_URL, reason="RIA_TEST_DATABASE_URL not set"
 DOC_102 = Path(__file__).resolve().parents[2] / "db" / "DOC-102.parsed.json"
 
 
+# Only a department head may delete a regulation.
+HEAD_OF_DEPARTMENT = {"X-Reviewer-Id": "rv-bao"}
+
 # --- mapping, no DB ---
 
 
@@ -721,7 +724,9 @@ def test_delete_regulation_with_decisions_is_refused_and_keeps_audit_trail(ria_c
     row = next(r for r in ria_client.get("/api/regulations").json() if r["id"] == body["vbpl_id"])
     assert row["status"] in ("awaiting_review", "done")
 
-    response = ria_client.delete(f"/api/regulations/{row['version_id']}")
+    response = ria_client.delete(
+        f"/api/regulations/{row['version_id']}", headers=HEAD_OF_DEPARTMENT
+    )
     assert response.status_code == 409, response.text
     with get_engine().connect() as conn:
         left = conn.execute(
