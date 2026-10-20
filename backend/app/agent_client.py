@@ -16,6 +16,10 @@ log = logging.getLogger(__name__)
 INVOKE_TIMEOUT_SECONDS = 600
 # One /draft is two or three LLM calls.
 DRAFT_TIMEOUT_SECONDS = 180
+# Agent runs for submitted VBPLs that may call the agent at once; later ones wait their turn,
+# so a burst of submissions cannot fan out into unbounded parallel LLM spend.
+MAX_PARALLEL_INVOKES = 2
+_invoke_slots = threading.BoundedSemaphore(MAX_PARALLEL_INVOKES)
 
 
 # Refresh the IAM token this long before it expires, so a slow call never starts with a stale one.
@@ -118,7 +122,7 @@ def run_analysis(vbpl_id: str) -> None:
             return
         vbpl_text = vbpl.text
     try:
-        with http_client() as client:
+        with _invoke_slots, http_client() as client:
             response = client.post(
                 "/invoke",
                 json={"vbpl_text": vbpl_text},

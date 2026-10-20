@@ -4,7 +4,7 @@ import logging
 import uuid
 
 from fastapi import FastAPI, Header, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent.draft_graph import build_draft_graph, to_proposal
 from agent.graph import build_graph
@@ -15,8 +15,12 @@ from agent.tracing import get_callbacks
 log = logging.getLogger(__name__)
 
 
+# Longest VBPL text accepted (a long circular is ~150k characters); bounds the LLM cost of a call.
+MAX_VBPL_TEXT_CHARS = 300_000
+
+
 class InvokeRequest(BaseModel):
-    vbpl_text: str
+    vbpl_text: str = Field(min_length=1, max_length=MAX_VBPL_TEXT_CHARS)
 
 
 class InvokeResponse(BaseModel):

@@ -55,13 +55,19 @@ class SearchResult(BaseModel):
     score: float
 
 
+# Caps on text that goes into an LLM prompt, so one request cannot run up the model bill.
+# A clause or a regulation excerpt is a few thousand characters at most.
+MAX_PROMPT_TEXT_CHARS = 20_000
+MAX_LABEL_CHARS = 500
+
+
 class SuggestEditRequest(BaseModel):
-    impact_id: str | None = None
-    affected_text: str
-    change_clause: str | None = None
-    citation: str | None = None
-    location: str | None = None
-    document_code: str | None = None
+    impact_id: str | None = Field(None, max_length=MAX_LABEL_CHARS)
+    affected_text: str = Field(max_length=MAX_PROMPT_TEXT_CHARS)
+    change_clause: str | None = Field(None, max_length=MAX_PROMPT_TEXT_CHARS)
+    citation: str | None = Field(None, max_length=MAX_LABEL_CHARS)
+    location: str | None = Field(None, max_length=MAX_LABEL_CHARS)
+    document_code: str | None = Field(None, max_length=MAX_LABEL_CHARS)
 
 
 class SuggestEditResponse(BaseModel):

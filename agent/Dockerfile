@@ -11,6 +11,9 @@ COPY agent ./agent
 COPY --from=corpus demo-documents.json /app/data/corpus.json
 ENV CORPUS_PATH=/app/data/corpus.json
 # AgentBase Runtime requires port 8080 (not configurable).
+# Run as an unprivileged user: the app only reads its code and writes under /tmp.
+RUN useradd --system --uid 10001 --create-home app
+USER app
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"

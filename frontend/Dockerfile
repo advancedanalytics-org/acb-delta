@@ -15,5 +15,5 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80 443 3000
-HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1:3000/ >/dev/null || wget -qO- http://127.0.0.1:80/ >/dev/null || exit 1
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1:3000/healthz >/dev/null || wget -qO- http://127.0.0.1:80/healthz >/dev/null || exit 1
 ENTRYPOINT ["/docker-entrypoint.sh"]
