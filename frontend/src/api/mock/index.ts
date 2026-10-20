@@ -312,7 +312,10 @@ export const mockApi: ApiClient = {
     return delay(decision)
   },
 
-  deleteVbpl(vbpl) {
+  deleteVbpl(vbpl, reviewerId) {
+    if (!reviewers.find((r) => r.id === reviewerId)?.canDelete) {
+      return Promise.reject(new Error('Chỉ trưởng phòng được xóa văn bản'))
+    }
     store.removeVbpl(vbpl.id)
     return delay(undefined)
   },

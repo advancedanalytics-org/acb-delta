@@ -262,7 +262,7 @@ export function useResetDemo() {
 export function useDeleteVbpl() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (vbpl: Vbpl) => api.deleteVbpl(vbpl),
+    mutationFn: ({ vbpl, reviewerId }: { vbpl: Vbpl; reviewerId: string }) => api.deleteVbpl(vbpl, reviewerId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.vbpls })
     },

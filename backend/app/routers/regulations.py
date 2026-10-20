@@ -3,18 +3,20 @@
 POST /api/regulations               upload a VBPL PDF → document version + parse job (202)
 POST /api/regulations/{id}/analyze  start impact analysis on a PARSED version → job (202)
 GET  /api/regulations/{id}          document, versions and processing state
-DELETE /api/regulations/{version_id} delete a version that is not processing and has no decisions
+DELETE /api/regulations/{version_id} delete a version that is not processing and has no decisions;
+                                    department heads only (X-Reviewer-Id header)
 """
 
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, File, Form, Header, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from app.db import get_engine
+from app.models.hitl import can_delete
 from app.ria.analysis import AnalyzeError, start_analysis
 from app.ria.ingest import IngestError, create_regulation
 from app.ria.removal import RemovalError, delete_regulation_version
@@ -205,15 +207,26 @@ def list_regulations() -> list[dict]:
 
 
 @router.delete("/{version_id}", status_code=status.HTTP_200_OK)
-def delete_version(version_id: str) -> dict:
+def delete_version(
+    version_id: str,
+    reviewer_id: Annotated[str | None, Header(alias="X-Reviewer-Id")] = None,
+) -> dict:
     """Delete a regulation version that is not processing and has no reviewer decisions (failed,
     nothing found, or not reviewed yet), with its analysis results, review package and stored
     original, so the file can be uploaded again. Reviewer decisions are the audit trail, so a
     version with any of them answers 409. `{version_id}` is the explicit version id
-    (REG-…@v1)."""
+    (REG-…@v1). Only a department head may delete: `X-Reviewer-Id` names the acting reviewer,
+    anyone else gets 403."""
+    if not reviewer_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ trưởng phòng được xóa văn bản")
     try:
         ensure_schema()
         with get_engine().connect() as conn:
+            role = conn.execute(
+                text("SELECT role FROM reviewers WHERE id = :r"), {"r": reviewer_id}
+            ).scalar()
+            if role is None or not can_delete(role):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Chỉ trưởng phòng được xóa văn bản")
             rows = _inbox_rows(conn, version_id)
         if not rows:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"regulation {version_id} not found")

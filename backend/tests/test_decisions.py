@@ -32,6 +32,7 @@ def test_accept_uses_suggested_text(client, impacts):
     }  # fmt: skip
     assert decision["reviewer"] == {
         "id": "rv-anh", "name": "Nguyễn Minh Anh", "role": "Chuyên viên pháp chế",
+        "canDelete": False,
     }  # fmt: skip
     after = impact_by_id(client, vbpl_id, impact["id"])
     assert after["status"] == "accepted"
@@ -122,3 +123,8 @@ def test_unknown_impact_or_reviewer_is_404(client, impacts):
 
 def test_reviewers_are_seeded(client):
     assert [r["id"] for r in client.get("/api/reviewers").json()] == ["rv-anh", "rv-bao"]
+    # Only the department head may delete regulations.
+    assert {r["id"]: r["canDelete"] for r in client.get("/api/reviewers").json()} == {
+        "rv-anh": False,
+        "rv-bao": True,
+    }

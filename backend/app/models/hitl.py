@@ -110,6 +110,14 @@ class Decision(HitlBase):
 
 
 # Mock reviewers until auth exists; same ids as the UI's mock fixtures.
+# Department heads ("Trưởng phòng …") may delete regulations; specialists may not.
+DELETE_ROLE_PREFIX = "Trưởng phòng"
+
+
+def can_delete(role: str) -> bool:
+    return role.startswith(DELETE_ROLE_PREFIX)
+
+
 SEED_REVIEWERS = [
     {"id": "rv-anh", "name": "Nguyễn Minh Anh", "role": "Chuyên viên pháp chế"},
     {"id": "rv-bao", "name": "Trần Quốc Bảo", "role": "Trưởng phòng tuân thủ"},

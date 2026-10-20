@@ -15,16 +15,25 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { useDeleteVbpl } from '@/hooks/queries'
+import { useCurrentUser } from '@/hooks/use-current-user'
 
-/** Trash button + confirmation for a VBPL that is not processing (failed or reviewable). */
+/**
+ * Trash button + confirmation for a VBPL that is not processing (failed or reviewable).
+ * Shown only to a department head (`canDelete`); specialists cannot delete.
+ */
 export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
   const [open, setOpen] = useState(false)
+  const { reviewer } = useCurrentUser()
   const failed = vbpl.status === 'failed'
   const decidedCount = vbpl.impactCount - vbpl.pendingCount
+  // The API refuses to delete a VBPL with reviewer decisions: they are the audit trail.
+  const hasDecisions = !failed && decidedCount > 0
   const deleteMutation = useDeleteVbpl()
 
+  if (!reviewer?.canDelete) return null
+
   const handleDelete = () => {
-    deleteMutation.mutate(vbpl, {
+    deleteMutation.mutate({ vbpl, reviewerId: reviewer.id }, {
       onSuccess: () => {
         toast.success(`Đã xóa ${vbpl.number}. Có thể tải lại văn bản này.`)
         setOpen(false)
@@ -61,9 +70,10 @@ export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
           </DialogDescription>
         </DialogHeader>
         {vbpl.error && <p className="text-sm text-destructive">Lỗi: {vbpl.error}</p>}
-        {!failed && decidedCount > 0 && (
+        {hasDecisions && (
           <p className="text-sm text-destructive">
-            {decidedCount}/{vbpl.impactCount} tác động đã được duyệt. Các quyết định duyệt này cũng sẽ bị xóa.
+            {decidedCount}/{vbpl.impactCount} tác động đã được duyệt. Không thể xóa vì các quyết định duyệt là
+            nhật ký kiểm toán.
           </p>
         )}
         <DialogFooter>
@@ -72,7 +82,7 @@ export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
               Hủy
             </Button>
           </DialogClose>
-          <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending}>
+          <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending || hasDecisions}>
             {deleteMutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
             Xóa văn bản
           </Button>
