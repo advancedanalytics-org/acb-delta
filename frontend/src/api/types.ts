@@ -161,3 +161,80 @@ export interface IngestDocumentResult {
   }>
 }
 
+export interface DocumentClause {
+  clause_id: string
+  version_id: string
+  parent_id?: string | null
+  numbering: string
+  level?: string | null
+  heading?: string | null
+  text: string
+  page?: number | null
+  char_start: number
+  char_end: number
+  bbox?: BBox[] | null
+  ordinal: number
+}
+
+export interface DocumentObligation {
+  obligation_id: string
+  source_clause_id: string
+  subject: string
+  action: string
+  object: string
+  modality: string
+  condition?: string | null
+  deadline?: string | null
+  exception?: string | null
+  text: string
+}
+
+export interface DocumentDetailResponse {
+  document: {
+    document_id: string
+    title: string
+    doc_type: string
+    owner?: string
+    doc_number?: string
+    issuer?: string
+    legal_form?: string
+    version_id?: string
+    version_label?: string
+    status?: string
+    valid_from?: string
+    valid_to?: string
+    page_count?: number
+    source_uri?: string
+    created_at?: string
+  }
+  clauses: DocumentClause[]
+  obligations: DocumentObligation[]
+  total_clauses: number
+  total_obligations: number
+}
+
+export interface IngestInternalResult {
+  status: string
+  message?: string
+  filename?: string
+  document_id?: string
+  version_id?: string
+  title?: string
+  clauses?: number
+  obligations?: number
+  views_indexed?: number
+}
+
+export interface IngestInternalStatus {
+  is_processing: boolean
+  filename: string | null
+  status: 'idle' | 'processing' | 'completed' | 'failed'
+  message: string | null
+  error: string | null
+  progress?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  result?: IngestInternalResult | null
+}
+
+

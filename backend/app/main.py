@@ -52,6 +52,26 @@ async def lifespan(app: FastAPI):
         ensure_schema()
         recover_interrupted()
         review_bridge.fail_interrupted_packages()
+
+        # Auto-seed internal documents in the background if the database is empty
+        try:
+            from sqlalchemy import text
+
+            from app.db import get_engine
+
+            with get_engine().connect() as conn:
+                n_docs = conn.execute(
+                    text("SELECT count(*) FROM document WHERE doc_type = 'internal'")
+                ).scalar()
+            if not n_docs:
+                log.info("No internal documents found in DB. Auto-seeding in background...")
+                import threading
+
+                from app.ria.ingest_internal import ingest_all
+
+                threading.Thread(target=ingest_all, daemon=True).start()
+        except Exception as seed_err:
+            log.warning("Auto-seed check skipped: %s", seed_err)
     except Exception as exc:
         log.warning("RIA schema/job recovery skipped: %s", exc)
     yield

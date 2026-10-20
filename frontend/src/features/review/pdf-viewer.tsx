@@ -91,26 +91,76 @@ function getImpactBoundingBox(bboxes: [number, number, number, number][]) {
   return { x0, y0, x1, y1 }
 }
 
+function isArticleLocation(loc?: string): boolean {
+  if (!loc) return false
+  const trimmed = loc.trim()
+  // If it refers to a sub-clause ("khoản") or sub-point ("điểm"), it is NOT an article level replacement
+  if (/khoản|điểm/i.test(trimmed)) return false
+  return /^Điều\s+\d+/i.test(trimmed)
+}
+
 function inferPrefixFromLocation(loc: string): string {
   if (!loc) return ''
   const trimmed = loc.trim()
-  // 1. Sub-item letters, e.g. "5.6.d", "2.1.đ", "Khoản 2.a"
-  const letterMatch = trimmed.match(/\.([a-zđĐ])(?:\b|$|\s|\.)/i)
-  if (letterMatch) {
-    return `${letterMatch[1]}) `
+
+  // 1. Point / Điểm: e.g. "Điều 14, khoản 5, điểm a", "Điểm a", "Khoản 2, điểm b", "14.5.a"
+  const diemMatch = trimmed.match(/(?:điểm|\.)\s*([a-zđĐ])(?:\b|$|\s|[.)])/i)
+  if (diemMatch) {
+    return `${diemMatch[1].toLowerCase()}) `
   }
-  // 2. Specific article format, e.g. "Điều 5"
-  const dieuMatch = trimmed.match(/^Điều\s+(\d+[a-zđĐ]?)/i)
+
+  // 2. Clause / Khoản: e.g. "Điều 14, khoản 5", "Khoản 5", "Khoản 14.5", "14.5"
+  // In Vietnamese documents, sequential numbered paragraphs inside an article are "1. ", "2. ", "5. "
+  // They must NEVER be prefixed with "Khoản" in the document body!
+  const khoanMatch = trimmed.match(/khoản\s*(\d+(?:\.\d+)*)/i)
+  if (khoanMatch) {
+    const parts = khoanMatch[1].split('.')
+    const clauseNum = parts[parts.length - 1]
+    return `${clauseNum}. `
+  }
+
+  // 3. Article / Điều (only if it has no khoản/điểm, which were handled above)
+  const dieuMatch = trimmed.match(/^Điều\s*([IVXLC\d]+)/i)
   if (dieuMatch) {
-    return `${dieuMatch[0]}. `
+    return `Điều ${dieuMatch[1]}. `
   }
-  // 3. Clause numbering at start of location, e.g. "2.2. Đối tượng áp dụng", "3. Rà soát"
+
+  // 4. Chapter / Chương: e.g. "Chương I"
+  const chuongMatch = trimmed.match(/^Chương\s*([IVXLC\d]+)/i)
+  if (chuongMatch) {
+    return `Chương ${chuongMatch[1]}. `
+  }
+
+  // 5. Appendix / Phụ lục: e.g. "Phụ lục 1"
+  const phuLucMatch = trimmed.match(/^Phụ\s*lục\s*([IVXLC\d]+)?/i)
+  if (phuLucMatch) {
+    return phuLucMatch[1] ? `Phụ lục ${phuLucMatch[1]}. ` : 'Phụ lục. '
+  }
+
+  // 6. Section / Mục / Mục lục
+  const mucLucMatch = trimmed.match(/^Mục\s*lục\b/i)
+  if (mucLucMatch) {
+    return 'Mục lục. '
+  }
+  const mucMatch = trimmed.match(/^Mục\s*([IVXLC\d]+)/i)
+  if (mucMatch) {
+    return `Mục ${mucMatch[1]}. `
+  }
+
+  // 7. Decimal or simple numbering: e.g. "14.5", "2.2. Đối tượng", "1. Phạm vi"
   const firstToken = trimmed.split(/\s+/)[0]?.replace(/\.+$/, '')
   if (firstToken) {
     const parts = firstToken.split('.')
-    const lastPart = parts[parts.length - 1]
-    if (lastPart && /^\d+$/.test(lastPart)) {
-      return `${lastPart}. `
+    if (parts.length > 1) {
+      const lastPart = parts[parts.length - 1]
+      if (/^[a-zđĐ]$/i.test(lastPart)) {
+        return `${lastPart.toLowerCase()}) `
+      }
+      if (/^\d+$/.test(lastPart)) {
+        return `${lastPart}. `
+      }
+    } else if (/^\d+$/.test(firstToken)) {
+      return `${firstToken}. `
     }
   }
   return ''
@@ -130,17 +180,29 @@ export function getReplacementParts(impact: Impact): {
     return { prefix: '', content: '', fullText: '' }
   }
 
-  const prefixRegex = /^((?:(?:Điều|Khoản|Điểm)\s+\d+[a-zđĐ]?(?:\.\d+)*[.)]?|\d+(?:\.\d+)*[.)]|[a-zđĐ][.)]|[-+•*])\s*)/i
+  const prefixRegex =
+    /^((?:(?:Điều|Khoản|Điểm|Chương|Phụ lục|Mục lục|Mục)\s*(?:[IVXLC\d]+|[a-zđĐ])?[.)]?|\d+(?:\.\d+)*[.)]|[a-zđĐ][.)]|[-+•*])\s*)/i
 
-  // 1. Check if rawText already starts with a prefix (e.g. "1. ", "a) ")
+  // 1. Check if rawText already starts with a prefix (e.g. "Điều 1. ", "1. ", "a) ")
   const rawMatch = rawText.match(prefixRegex)
   if (rawMatch) {
-    const prefix = rawMatch[1]
-    const content = rawText.slice(prefix.length).trim()
+    let prefix = rawMatch[1].trimEnd() + ' '
+    const content = rawText.slice(rawMatch[1].length).trim()
+
+    // If prefix is just digits like "1." or "1)", but location explicitly indicates it is an Article (Điều X)
+    // (and NOT a clause/khoản), keep "Điều X. "
+    const isArticle = /^\d+[.)]\s*$/.test(prefix) && isArticleLocation(impact.location)
+    if (isArticle) {
+      const numMatch = prefix.match(/^(\d+)/)
+      if (numMatch) {
+        prefix = `Điều ${numMatch[1]}. `
+      }
+    }
+
     return {
-      prefix: prefix.trimEnd() + ' ',
+      prefix,
       content,
-      fullText: rawText,
+      fullText: prefix ? `${prefix}${content}` : rawText,
     }
   }
 
@@ -149,6 +211,13 @@ export function getReplacementParts(impact: Impact): {
   let prefix = ''
   if (affectedMatch) {
     prefix = affectedMatch[1].trimEnd() + ' '
+    const isArticle = /^\d+[.)]\s*$/.test(prefix) && isArticleLocation(impact.location)
+    if (isArticle) {
+      const numMatch = prefix.match(/^(\d+)/)
+      if (numMatch) {
+        prefix = `Điều ${numMatch[1]}. `
+      }
+    }
   } else if (impact.location) {
     prefix = inferPrefixFromLocation(impact.location)
   }

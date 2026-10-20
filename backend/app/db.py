@@ -13,9 +13,14 @@ from app.config import get_settings
 
 @lru_cache
 def get_engine() -> Engine:
-    # Short connect timeout so /health/ready reports an unreachable DB instead of hanging.
+    # Generous pool size so background indexing does not starve web API requests.
     return create_engine(
-        get_settings().database_url, pool_pre_ping=True, connect_args={"connect_timeout": 3}
+        get_settings().database_url,
+        pool_pre_ping=True,
+        pool_size=25,
+        max_overflow=25,
+        pool_timeout=30,
+        connect_args={"connect_timeout": 5},
     )
 
 

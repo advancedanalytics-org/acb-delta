@@ -414,40 +414,55 @@ def run_analysis(job_id: str) -> dict:
 
     with get_engine().begin() as conn:
         if evidence_rows:
-            conn.execute(
-                text(
-                    "INSERT INTO evidence (evidence_id, job_id, obligation_id, internal_clause_id, "
-                    "span_start, span_end, span_text, retrieval_method, score, details) VALUES "
-                    "(:id, :job, :obl, :cid, :s, :e, :st, :m, :score, CAST(:details AS jsonb))"
-                ),
-                [
-                    {
-                        "id": ev["evidence_id"],
-                        "job": job_id,
-                        "obl": ev["obligation"]["obligation_id"],
-                        "cid": ev["clause"]["clause_id"],
-                        "s": ev["span"][0],
-                        "e": ev["span"][1],
-                        "st": ev["clause"]["text"][ev["span"][0] : ev["span"][1]],
-                        "m": ev["method"],
-                        "score": ev["candidate"]["score"],
-                        "details": json.dumps(
-                            {
-                                "ranks": ev["candidate"]["ranks"],
-                                "rrf": ev["candidate"]["rrf"],
-                                "dense": ev["candidate"]["dense"],
-                                "rerank": ev["candidate"]["rerank"],
-                                "shared_terms": ev["candidate"]["shared_terms"],
-                                "idf_score": ev["candidate"]["idf_score"],
-                                "queries": traces[ev["obligation"]["obligation_id"]]["queries"],
-                                "parent_context": ev["context"],
-                            },
-                            ensure_ascii=False,
-                        ),
-                    }
-                    for ev in evidence_rows
-                ],
+            # Defensive check: only insert evidence for clauses currently present in clause
+            candidate_cids = list({ev["clause"]["clause_id"] for ev in evidence_rows})
+            valid_cids = set(
+                conn.execute(
+                    text("SELECT clause_id FROM clause WHERE clause_id = ANY(:cids)"),
+                    {"cids": candidate_cids},
+                )
+                .scalars()
+                .all()
             )
+            valid_evidence_rows = [
+                ev for ev in evidence_rows if ev["clause"]["clause_id"] in valid_cids
+            ]
+            if valid_evidence_rows:
+                conn.execute(
+                    text(
+                        "INSERT INTO evidence (evidence_id, job_id, obligation_id, "
+                        "internal_clause_id, span_start, span_end, span_text, "
+                        "retrieval_method, score, details) VALUES "
+                        "(:id, :job, :obl, :cid, :s, :e, :st, :m, :score, CAST(:details AS jsonb))"
+                    ),
+                    [
+                        {
+                            "id": ev["evidence_id"],
+                            "job": job_id,
+                            "obl": ev["obligation"]["obligation_id"],
+                            "cid": ev["clause"]["clause_id"],
+                            "s": ev["span"][0],
+                            "e": ev["span"][1],
+                            "st": ev["clause"]["text"][ev["span"][0] : ev["span"][1]],
+                            "m": ev["method"],
+                            "score": ev["candidate"]["score"],
+                            "details": json.dumps(
+                                {
+                                    "ranks": ev["candidate"]["ranks"],
+                                    "rrf": ev["candidate"]["rrf"],
+                                    "dense": ev["candidate"]["dense"],
+                                    "rerank": ev["candidate"]["rerank"],
+                                    "shared_terms": ev["candidate"]["shared_terms"],
+                                    "idf_score": ev["candidate"]["idf_score"],
+                                    "queries": traces[ev["obligation"]["obligation_id"]]["queries"],
+                                    "parent_context": ev["context"],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        }
+                        for ev in valid_evidence_rows
+                    ],
+                )
         _set_status(conn, version_id, "RETRIEVAL_COMPLETED")
 
     # Engine 2: one LLM call per obligation with all its candidate clauses.

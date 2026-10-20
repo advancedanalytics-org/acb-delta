@@ -8,6 +8,7 @@ import { InboxPage } from '@/features/inbox/inbox-page'
 import { ReviewIndexRedirect } from '@/features/review/review-index-redirect'
 
 import { ReviewPage } from '@/features/review/review-page'
+import { VisualizePage } from '@/features/review/visualize-page'
 
 // Heavy screens (PDF viewer, charts, tables) load on demand to keep the first load small.
 const EvaluationPage = lazy(() =>
@@ -15,6 +16,11 @@ const EvaluationPage = lazy(() =>
 )
 const AuditPage = lazy(() => import('@/features/audit/audit-page').then((m) => ({ default: m.AuditPage })))
 const SystemPage = lazy(() => import('@/features/system/system-page').then((m) => ({ default: m.SystemPage })))
+const InternalDocumentsPage = lazy(() =>
+  import('@/features/internal-documents/internal-documents-page').then((m) => ({
+    default: m.InternalDocumentsPage,
+  })),
+)
 
 const page = (element: ReactNode) => <Suspense fallback={<Skeleton className="m-6 h-40" />}>{element}</Suspense>
 
@@ -23,7 +29,9 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <InboxPage /> },
+      { path: 'internal-documents', element: page(<InternalDocumentsPage />) },
       { path: 'review', element: <ReviewIndexRedirect /> },
+      { path: 'review/:vbplId/visualize', element: <VisualizePage /> },
       { path: 'review/:vbplId', element: <ReviewPage /> },
       { path: 'evaluation', element: page(<EvaluationPage />) },
       { path: 'audit', element: page(<AuditPage />) },

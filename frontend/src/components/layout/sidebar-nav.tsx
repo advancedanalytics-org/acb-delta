@@ -1,4 +1,4 @@
-import { Activity, BarChart3, History, Inbox, type LucideIcon } from 'lucide-react'
+import { Activity, BarChart3, FileText, History, Inbox, type LucideIcon } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 
 const items: { to: string; label: string; Icon: LucideIcon }[] = [
   { to: '/', label: 'Hộp thư VBPL', Icon: Inbox },
+  { to: '/internal-documents', label: 'Văn bản nội bộ', Icon: FileText },
   { to: '/evaluation', label: 'Đánh giá', Icon: BarChart3 },
   { to: '/audit', label: 'Nhật ký kiểm toán', Icon: History },
   { to: '/system', label: 'Trạng thái hệ thống', Icon: Activity },
