@@ -1,4 +1,4 @@
-import { Check, FlaskConical, Moon, RotateCcw, Search, Sun } from 'lucide-react'
+import { Check, FlaskConical, LogOut, Moon, RotateCcw, Search, Sun } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useResetDemo } from '@/hooks/queries'
+import { useAuth } from '@/hooks/use-auth'
 import { useCurrentUser } from '@/hooks/use-current-user'
 import { useTheme } from '@/hooks/use-theme'
 import { initials } from '@/lib/format'
@@ -24,6 +25,7 @@ import { initials } from '@/lib/format'
 export function AppHeader() {
   const { theme, toggle } = useTheme()
   const { reviewer, reviewers, setReviewerId } = useCurrentUser()
+  const { logout } = useAuth()
   const resetDemo = useResetDemo()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -112,6 +114,11 @@ export function AppHeader() {
                 </DropdownMenuItem>
               </>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={logout}>
+              <LogOut aria-hidden />
+              Đăng xuất
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
