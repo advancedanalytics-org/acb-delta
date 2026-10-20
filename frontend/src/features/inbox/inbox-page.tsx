@@ -1,11 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Check, Search } from 'lucide-react'
+import { ArrowRight, Check, FileText, Search } from 'lucide-react'
+import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 
 import { api } from '@/api/client'
-import type { VbplStatus } from '@/api/types'
+import type { Vbpl, VbplStatus } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/query-states'
 import { VbplStatusBadge } from '@/components/status-badges'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -28,6 +31,7 @@ export function InboxPage() {
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
   const filter = (params.get('status') as Filter | null) ?? 'all'
+  const [sourceVbpl, setSourceVbpl] = useState<Vbpl | null>(null)
 
   const update = (key: string, value: string) =>
     setParams(
@@ -102,6 +106,7 @@ export function InboxPage() {
                 <TableHead className="w-28">Hiệu lực</TableHead>
                 <TableHead className="w-32">Trạng thái</TableHead>
                 <TableHead className="w-28 text-right">Chờ duyệt</TableHead>
+                <TableHead className="w-24">Tài liệu</TableHead>
                 <TableHead className="w-10">
                   <span className="sr-only">Thao tác</span>
                 </TableHead>
@@ -111,7 +116,7 @@ export function InboxPage() {
               {isPending &&
                 Array.from({ length: 3 }, (_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={7}>
+                    <TableCell colSpan={8}>
                       <Skeleton className="h-10" />
                     </TableCell>
                   </TableRow>
@@ -198,6 +203,25 @@ export function InboxPage() {
                       )}
                     </TableCell>
                     <TableCell>
+                      {vbpl.sourceUrl ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSourceVbpl(vbpl)
+                          }}
+                          title={`Xem tài liệu gốc ${vbpl.number}`}
+                        >
+                          <FileText className="size-3.5" aria-hidden />
+                          Xem
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       {vbpl.status !== 'processing' && <DeleteVbplDialog vbpl={vbpl} />}
                       {canOpen && (
                         <ArrowRight
@@ -216,6 +240,35 @@ export function InboxPage() {
           <EmptyState title="Không có VBPL phù hợp" description="Thử bỏ bớt từ khóa hoặc bộ lọc trạng thái." />
         )}
       </div>
+
+      <Dialog open={!!sourceVbpl} onOpenChange={(open) => !open && setSourceVbpl(null)}>
+        <DialogContent className="flex h-[85vh] max-w-5xl flex-col p-4">
+          <DialogHeader className="flex flex-row items-center justify-between border-b pb-2">
+            <div className="min-w-0">
+              <DialogTitle className="truncate text-base font-semibold">
+                {sourceVbpl?.number} — Tài liệu gốc
+              </DialogTitle>
+              <p className="truncate text-xs text-muted-foreground">{sourceVbpl?.title}</p>
+            </div>
+            {sourceVbpl?.sourceUrl && (
+              <Button variant="outline" size="sm" asChild className="mr-6 h-7 shrink-0 text-xs">
+                <a href={sourceVbpl.sourceUrl} target="_blank" rel="noreferrer">
+                  Mở trong tab mới
+                </a>
+              </Button>
+            )}
+          </DialogHeader>
+          <div className="h-full w-full flex-1 pt-2">
+            {sourceVbpl?.sourceUrl && (
+              <iframe
+                src={sourceVbpl.sourceUrl}
+                title="Tài liệu VBPL gốc"
+                className="h-full w-full rounded border border-border"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

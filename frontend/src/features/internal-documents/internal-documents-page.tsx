@@ -488,6 +488,12 @@ export function InternalDocumentsPage() {
                   >
                     Nội dung chi tiết
                   </TabsTrigger>
+                  <TabsTrigger
+                    value="source"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-11 px-2 text-xs font-medium"
+                  >
+                    Tài liệu gốc
+                  </TabsTrigger>
                 </TabsList>
 
                 {clauseData && (
@@ -770,6 +776,32 @@ export function InternalDocumentsPage() {
                     </div>
                   )}
                 </div>
+              </TabsContent>
+
+              {/* TAB 3: TÀI LIỆU GỐC */}
+              <TabsContent
+                value="source"
+                className="flex-1 flex flex-col min-h-0 h-full overflow-hidden p-0 m-0 border-0 data-[state=active]:flex data-[state=inactive]:hidden"
+              >
+                {activeDoc.pdfUrl ? (
+                  <div className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex items-center justify-between px-4 md:px-6 py-2 border-b bg-muted/20 shrink-0">
+                      <p className="text-xs text-muted-foreground">Bản PDF gốc, chưa qua xử lý.</p>
+                      <Button variant="outline" size="sm" asChild className="h-7 text-xs gap-1.5">
+                        <a href={activeDoc.pdfUrl} target="_blank" rel="noreferrer">
+                          <ExternalLink className="size-3.5" />
+                          Mở trong tab mới
+                        </a>
+                      </Button>
+                    </div>
+                    <iframe src={activeDoc.pdfUrl} title="Tài liệu gốc" className="flex-1 w-full min-h-0 border-0" />
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+                    <FileText className="size-10 mb-3 text-muted-foreground/40" />
+                    <p className="text-sm">Chưa có tài liệu gốc để hiển thị.</p>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </>

@@ -71,6 +71,7 @@ export const liveApi: ApiClient = {
               status: d.status,
               error: d.error ?? undefined,
               versionId: d.version_id,
+              sourceUrl: d.document_id ? `/api/documents/${encodeURIComponent(d.document_id)}/pdf` : undefined,
               impactCount,
               pendingCount: d.pending_count ?? impactCount,
             }

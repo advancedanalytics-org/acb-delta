@@ -14,6 +14,7 @@ type VbplSeed = Omit<Vbpl, 'status' | 'impactCount' | 'pendingCount'> & { proces
 export const vbplSeeds: VbplSeed[] = [
   {
     id: 'vbpl-tt-31-2026',
+    sourceUrl: '/demo/doc-cv-01.pdf',
     number: '31/2026/TT-NHNN',
     title: 'Thông tư quy định về hoạt động cho vay và bảo vệ quyền lợi khách hàng vay',
     issuer: 'Ngân hàng Nhà nước Việt Nam',
@@ -25,6 +26,7 @@ export const vbplSeeds: VbplSeed[] = [
   },
   {
     id: 'vbpl-qd-2045-2026',
+    sourceUrl: '/demo/doc-kyc-02.pdf',
     number: '2045/QĐ-NHNN',
     title: 'Quyết định về tỷ lệ dự trữ bắt buộc đối với tổ chức tín dụng',
     issuer: 'Ngân hàng Nhà nước Việt Nam',
@@ -36,6 +38,7 @@ export const vbplSeeds: VbplSeed[] = [
   },
   {
     id: 'vbpl-tt-27-2026',
+    sourceUrl: '/demo/doc-the-03.pdf',
     number: '27/2026/TT-NHNN',
     title: 'Thông tư sửa đổi, bổ sung một số điều của Thông tư 18/2024/TT-NHNN về hoạt động thẻ ngân hàng',
     issuer: 'Ngân hàng Nhà nước Việt Nam',
