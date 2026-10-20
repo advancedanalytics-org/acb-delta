@@ -3,10 +3,10 @@
 # service account (acb-delta-vm, roles/aiplatform.user + roles/discoveryengine.viewer,
 # cloud-platform scope), so no key is stored.
 model_list:
-  # Gemini 3.8 Flash, served by Vertex AI in the "global" location.
-  - model_name: gemini-3.8-flash
+  # Gemini 4 Argon, served by Vertex AI in the "global" location. It is a thinking model.
+  - model_name: gemini-4-argon
     litellm_params:
-      model: vertex_ai/gemini-3.8-flash
+      model: vertex_ai/gemini-4-argon
       vertex_project: acb-delta-demo-2340
       vertex_location: global
 

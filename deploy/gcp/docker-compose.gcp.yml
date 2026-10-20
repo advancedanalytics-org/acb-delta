@@ -4,7 +4,7 @@
 # scripts/run.sh on the VM always include this file. SITE_ADDRESS and BASIC_AUTH_* come from there too.
 #
 # Models on the VM (no OpenRouter, no API keys):
-#   chat       litellm   → Vertex AI Gemini 3.8 Flash, authenticated as the VM's service account
+#   chat       litellm   → Vertex AI Gemini 4 Argon, authenticated as the VM's service account
 #   rerank     litellm   → Vertex AI Ranking API semantic-ranker-default, same service account
 #   embedding  embedding → BAAI/bge-m3 (1024-dim) on Hugging Face text-embeddings-inference, CPU
 # These values replace whatever the VM's .env holds for the same variables.
@@ -72,7 +72,7 @@ services:
     environment:
       OPENAI_BASE_URL: http://litellm:4000/v1
       OPENAI_API_KEY: unused
-      LLM_MODEL: gemini-3.8-flash
+      LLM_MODEL: gemini-4-argon
       # Clear any OpenRouter-only body (e.g. Qwen3's reasoning switch) left in the VM's .env.
       LLM_EXTRA_BODY: ""
       EMBEDDING_BASE_URL: http://embedding:80/v1
@@ -92,7 +92,7 @@ services:
     environment:
       OPENAI_BASE_URL: http://litellm:4000/v1
       OPENAI_API_KEY: unused
-      LLM_MODEL: gemini-3.8-flash
+      LLM_MODEL: gemini-4-argon
       LLM_STRUCTURED_METHOD: json_schema
     depends_on:
       litellm:
