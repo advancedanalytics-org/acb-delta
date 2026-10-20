@@ -360,12 +360,20 @@ export function InternalDocumentsPage() {
             <div className="p-6 text-center text-xs text-muted-foreground">
               {searchDocQuery ? (
                 'Không tìm thấy văn bản phù hợp'
-              ) : (
+              ) : ingestStatus?.is_processing ? (
                 <div className="space-y-2.5 py-6">
                   <Loader2 className="size-5 animate-spin mx-auto text-primary" />
                   <p className="font-medium text-foreground text-xs">Đang đồng bộ văn bản nội bộ...</p>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Backend đang tự động nạp các văn bản từ thư mục data/ vào cơ sở dữ liệu.
+                    {ingestStatus.message || 'Backend đang tự động nạp các văn bản từ thư mục data/ vào cơ sở dữ liệu.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 py-6">
+                  <FileText className="size-8 mx-auto text-muted-foreground/40" />
+                  <p className="font-medium text-foreground text-xs">Chưa có văn bản nội bộ nào</p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed max-w-xs mx-auto">
+                    Nhấn vào nút &quot;Chọn tệp PDF nội bộ&quot; ở trên để tải lên và phân tích văn bản.
                   </p>
                 </div>
               )}
