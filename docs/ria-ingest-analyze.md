@@ -38,7 +38,7 @@ Job parse (`ingest.run_parse`) chạy trong một transaction, lỗi ở bước
 
 | Bước | Module | Kết quả |
 |---|---|---|
-| PDF → dòng có `page` + `bbox`, bỏ header/footer lặp và rác in trình duyệt | `legal_parser.extract_lines` | canonical text |
+| PDF → dòng có `page` + `bbox`, bỏ header/footer lặp (so sau khi che chữ số, nên footer có số trang vẫn bị bỏ), footer văn bản nội bộ `DOC-259 · Phiên bản 1.0 · Trang 2` và rác in trình duyệt | `legal_parser.extract_lines` | canonical text |
 | Quá ít chữ (PDF scan, chưa có OCR) | `legal_parser.parse_pdf` | **job failed** (fail closed) |
 | Chương → Mục → Điều → Khoản → Điểm, phụ lục chia chunk L3, phần ký/nơi nhận | `legal_parser.parse_structure` | `clause` với `char_start/char_end`, đảm bảo `content[start:end] == text` |
 | Metadata: số hiệu, cơ quan ban hành, loại văn bản, ngày ban hành, ngày hiệu lực, văn bản bị thay thế | `legal_parser.extract_metadata` | `document`, `document_version` |
