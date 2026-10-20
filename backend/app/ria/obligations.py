@@ -222,8 +222,14 @@ def _named_duty(text: str) -> tuple[str, str] | None:
     return modality, _clip_words(m.group(2), 15)
 
 
+# "a) ", "đ) ", "2. ", "3.1. " opening a point/clause: numbering, not words of the sentence.
+_LABEL_RE = re.compile(r"^\s*(?:[a-zđ]|\d+(?:\.\d+)*)[).]\s+")
+
+
 def _body(clause: ClauseInput) -> str:
-    """Article text minus its heading line; other clauses unchanged."""
+    """Article text minus its heading line; clause/point text minus its label."""
     if clause.level == "article" and clause.heading and clause.text.startswith(clause.heading):
         return clause.text[len(clause.heading) :].lstrip("\n ")
+    if clause.level in ("clause", "point"):
+        return _LABEL_RE.sub("", clause.text, count=1)
     return clause.text

@@ -61,3 +61,81 @@ def test_without_llm_unclear_obligations_stay_in_scope():
     conn = _Conn()
     result = applicability.classify_obligations(conn, [_o("5", "Nhà cung cấp")], use_llm=False)
     assert result == {"5": "uncertain"} and conn.updates == []
+
+
+def _point(oid, text, subject="", action="", method="rule", stored=None):
+    return {
+        "obligation_id": oid,
+        "subject": subject,
+        "action": action,
+        "object": "",
+        "condition": None,
+        "deadline": None,
+        "exception": None,
+        "text": text,
+        "parent_text": "Bên kiểm soát dữ liệu cá nhân có trách nhiệm sau đây:",
+        "article_heading": "Điều 9. Trách nhiệm",
+        "extraction_method": method,
+        "applicability": stored,
+    }
+
+
+def test_refine_applies_only_verbatim_fields_and_stores_them(monkeypatch):
+    asked = []
+
+    def fake(kind, system, user, refresh=False):
+        asked.append(kind)
+        return {
+            "items": [
+                {
+                    "id": "p1",
+                    "subject": "Bên kiểm soát dữ liệu cá nhân",  # from the lead-in
+                    "action": "lưu trữ",
+                    "object": "nhật ký xử lý dữ liệu cá nhân",
+                    "condition": None,
+                    "deadline": "02 năm",
+                    "exception": "trừ khi được miễn trừ",  # not in the text: rejected
+                    "applies": "uncertain",
+                },
+                {"id": "p2", "subject": "b)", "action": "chuyển", "applies": "no"},
+                {"id": "p3", "applies": "yes", "subject": 42},  # invalid item: dropped
+            ]
+        }, False
+
+    monkeypatch.setattr(applicability.llm, "chat_json_cached", fake)
+    monkeypatch.setattr(applicability.llm, "llm_model", lambda: "m")
+    conn = _Conn()
+    p1 = _point("p1", "Lưu trữ nhật ký xử lý dữ liệu cá nhân trong 02 năm;", action="a lưu")
+    p2 = _point("p2", "Không được chuyển dữ liệu ra nước ngoài;", subject="Nhà cung cấp X")
+    p3 = _point("p3", "Báo cáo cơ quan chuyên trách;")
+    done = _point("p4", "Đã tách.", subject="Ai đó", method="rule+llm:m", stored="yes")
+    stats = applicability.Counter()
+    result = applicability.classify_obligations(
+        conn, [p1, p2, p3, done], use_llm=True, refine=True, stats=stats
+    )
+
+    assert asked == ["obligation_refine"]  # one combined call, p4 already refined
+    assert p1["subject"] == "Bên kiểm soát dữ liệu cá nhân" and p1["action"] == "lưu trữ"
+    assert p1["object"] == "nhật ký xử lý dữ liệu cá nhân" and p1["deadline"] == "02 năm"
+    assert p1["exception"] is None
+    assert p2["subject"] == "Nhà cung cấp X"  # "b)" is not verbatim words of the text
+    # p1's refined subject is a controller, so the rule decides it; p2 keeps the LLM's "no".
+    assert result == {"p1": "yes", "p2": "no", "p3": "uncertain", "p4": "yes"}
+    refined_rows = {u["id"]: u for u in conn.updates if "rf" in u}
+    assert set(refined_rows) == {"p1", "p2"}
+    assert refined_rows["p1"]["m"] == "rule+llm:m"
+    assert '"action": "a lưu"' in refined_rows["p1"]["rf"]
+    assert stats["refined"] == 2 and stats["fields_rejected"] == 2
+
+
+def test_refine_failure_keeps_rule_fields_and_scope(monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("llm down")
+
+    monkeypatch.setattr(applicability.llm, "chat_json_cached", boom)
+    conn = _Conn()
+    o = _point("p1", "Lưu trữ nhật ký;", subject="Tổ chức tín dụng", action="a lưu")
+    result = applicability.classify_obligations(conn, [o], use_llm=True, refine=True)
+    assert result == {"p1": "yes"}  # the rule still decides on the rule subject
+    assert o["action"] == "a lưu" and o["extraction_method"] == "rule"
+    assert all("rf" not in u for u in conn.updates)
