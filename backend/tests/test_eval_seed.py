@@ -21,7 +21,7 @@ def _body(label: str, *, dataset_size: int = 48, created_at: str | None = None) 
     body = {
         "label": label,
         "datasetSize": dataset_size,
-        "note": "Baseline đo thật, dùng làm seed.",
+        "note": "Baseline seed",
         "metrics": {
             "extraction": {"precision": 0.874, "recall": 0.812},
             "retrieval": {"recallAtK": 0.781, "k": 5, "mrr": 0.643},
