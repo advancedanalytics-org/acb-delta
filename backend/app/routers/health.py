@@ -1,9 +1,8 @@
 """Liveness and readiness probes used by docker compose, CI, and the frontend status card."""
 
-import httpx
 from fastapi import APIRouter, Response, status
 
-from app.config import get_settings
+from app import agent_client
 from app.db import ping_database
 
 router = APIRouter(tags=["health"])
@@ -27,7 +26,9 @@ def ready(response: Response) -> dict:
         checks["database"] = f"error: {exc.__class__.__name__}: {exc}"
 
     try:
-        httpx.get(f"{get_settings().agent_url}/health", timeout=2).raise_for_status()
+        # Same client as real calls, so an AgentBase Runtime is checked with its IAM token too.
+        with agent_client.http_client() as client:
+            client.get("/health", timeout=5).raise_for_status()
         checks["agent"] = "ok"
     except Exception as exc:
         checks["agent"] = f"error: {exc.__class__.__name__}"

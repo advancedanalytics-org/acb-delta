@@ -1,6 +1,8 @@
 """Runs the agent for one VBPL and stores its impacts. Called as a FastAPI background task."""
 
 import logging
+import threading
+import time
 
 import httpx
 
@@ -16,9 +18,78 @@ INVOKE_TIMEOUT_SECONDS = 600
 DRAFT_TIMEOUT_SECONDS = 180
 
 
+# Refresh the IAM token this long before it expires, so a slow call never starts with a stale one.
+TOKEN_EXPIRY_MARGIN_SECONDS = 60
+# Lifetime assumed when the IAM reply has no `expires_in`.
+DEFAULT_TOKEN_LIFETIME_SECONDS = 300
+
+
+class AgentBaseAuth(httpx.Auth):
+    """Bearer token for an AgentBase Runtime whose inbound auth is "IAM Permissions".
+
+    The token comes from GreenNode IAM (client credentials of a Service Account), is cached and
+    shared across threads, and is fetched again once if the Runtime answers 401.
+    """
+
+    def __init__(self, client_id: str, client_secret: str, token_url: str) -> None:
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.token_url = token_url
+        self._token = ""
+        self._expires_at = 0.0
+        self._lock = threading.Lock()
+
+    def auth_flow(self, request: httpx.Request):
+        request.headers["Authorization"] = f"Bearer {self.token()}"
+        response = yield request
+        if response.status_code == 401:
+            request.headers["Authorization"] = f"Bearer {self.token(refresh=True)}"
+            yield request
+
+    def token(self, refresh: bool = False) -> str:
+        with self._lock:
+            if refresh or not self._token or time.monotonic() >= self._expires_at:
+                self._token, lifetime = self._fetch()
+                self._expires_at = time.monotonic() + lifetime - TOKEN_EXPIRY_MARGIN_SECONDS
+            return self._token
+
+    def _fetch(self) -> tuple[str, float]:
+        response = httpx.post(
+            self.token_url,
+            auth=(self.client_id, self.client_secret),
+            data={"grant_type": "client_credentials"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        body = response.json()
+        return body["access_token"], float(body.get("expires_in") or DEFAULT_TOKEN_LIFETIME_SECONDS)
+
+
+_auth: AgentBaseAuth | None = None
+_auth_lock = threading.Lock()
+
+
+def agent_auth() -> AgentBaseAuth | None:
+    """IAM auth when AGENTBASE_CLIENT_ID/SECRET are set (agent on AgentBase), else None."""
+    global _auth
+    settings = get_settings()
+    if not (settings.agentbase_client_id and settings.agentbase_client_secret):
+        return None
+    with _auth_lock:
+        if _auth is None or _auth.client_id != settings.agentbase_client_id:
+            _auth = AgentBaseAuth(
+                settings.agentbase_client_id,
+                settings.agentbase_client_secret,
+                settings.agentbase_token_url,
+            )
+        return _auth
+
+
 def http_client() -> httpx.Client:
     """Separate function so tests can swap in an `httpx.MockTransport`."""
-    return httpx.Client(base_url=get_settings().agent_url, timeout=INVOKE_TIMEOUT_SECONDS)
+    return httpx.Client(
+        base_url=get_settings().agent_url, timeout=INVOKE_TIMEOUT_SECONDS, auth=agent_auth()
+    )
 
 
 def draft(payload: dict, session_id: str) -> dict:

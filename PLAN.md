@@ -81,13 +81,20 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [x] `docker-compose.yml`: postgres-pgvector, minio, agent (port 8080), fastapi, frontend. Langfuse dùng Cloud (không container); embedding server chờ chốt model (`MINH-01`)
   - [x] `.env.example` liệt kê đủ biến cấu hình (DB, LLM, embedding, S3, Langfuse); không commit `.env`
   - [x] Healthcheck cho từng service; README chạy 1 lệnh (`docker compose up -d --build --wait`)
-- [ ] **TAI-07** – Deploy Phase 2: chuyển sang GreenNode (khi có tài khoản)
+- [~] **TAI-07** – Deploy Phase 2: chuyển sang GreenNode (khi có tài khoản)
   - Tạm thời demo trên GCP VM (`scripts/gcp.sh`, tự deploy từ `main`, xem `AGENTS.md`); chỉ chuyển GreenNode khi có tài khoản
-  - [ ] Tạo Service Account IAM, cấp quyền AgentBase
+  - [x] Tạo Service Account IAM, cấp quyền AgentBase
   - [ ] Endpoint LLM OpenAI-compatible trên MaaS (chuyển từ `TAI-06`)
   - [ ] Script `seed` (nạp VBPL + mock) và `reindex` (re-embed toàn bộ) (chuyển từ `TAI-06`)
   - [ ] Kiểm tra catalog MaaS: có model embedding / LLM đang dùng không
-  - [ ] Wrap agent bằng `greennode-agentbase`, build image → Container Registry → Agent Runtime
+  - [~] Build image → Container Registry → Agent Runtime (docs AgentBase cho phép FastAPI không cần SDK `greennode-agentbase`; agent đã đúng hợp đồng: cổng 8080, `GET /health`)
+    - [x] Corpus demo đóng sẵn trong image (Runtime không mount file được)
+    - [x] Backend gọi Runtime qua `AGENT_URL` + IAM token (`AGENTBASE_CLIENT_ID` / `AGENTBASE_CLIENT_SECRET`), tự lấy lại token khi 401
+    - [x] Image `linux/amd64` trên vCR, Runtime `acb-delta-agent` ACTIVE (`runtime-s2-general-2x4`, 1 replica, ví thật vì tài khoản không dùng được POC); `/health`, `/invoke` (39 s), `/draft` (8 s) chạy được, AgentBase chuyển tiếp mọi path
+    - [ ] Bật inbound auth IAM cho Runtime (đang public) — làm trên console
+    - [ ] Trỏ backend trên vServer sang Runtime (`.env` trên VM), chạy thử 1 lượt phân tích đầy đủ
+    - [ ] Theo dõi timeout: 1 lần `/invoke` bị cắt ở ~270 s; nếu lặp lại thì chuyển `/invoke` sang chạy nền + poll
+    - [ ] CI/CD `deploy-agentbase.yml`: push `main` → build → cập nhật Runtime
   - [ ] vDB PostgreSQL + bật pgvector, migrate dữ liệu (`pg_dump` / `pg_restore`)
   - [ ] PDF từ MinIO → vStorage
   - [ ] vServer: frontend + FastAPI (Langfuse giữ trên Cloud)
