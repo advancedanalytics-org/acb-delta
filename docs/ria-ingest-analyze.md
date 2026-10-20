@@ -115,9 +115,11 @@ Job phân tích (`analysis.run_analysis`):
    - Các nghĩa vụ được gọi LLM song song (`LLM_CONCURRENCY`). Ngân sách `max_llm_calls` dành cho các nghĩa vụ có điểm retrieval cao nhất.
    - **Cache** (`llm_cache`): khóa là sha256 của (loại lời gọi, model, `LLM_EXTRA_BODY`, system prompt, payload). Đổi prompt, model hay nội dung điều khoản thì khóa đổi theo. Lần hỏi lại vì trích dẫn sai sẽ bỏ qua cache và ghi đè. `refresh_llm_cache: true` buộc hỏi lại; `LLM_CACHE_ENABLED=false` tắt cache.
    - Gọi LLM và reranker có retry với backoff khi gặp 429/5xx/timeout.
-4. **Finding:** một finding cho mỗi cặp (nghĩa vụ, tài liệu nội bộ), theo mô hình mục 04.
-   - Cặp đại diện chọn theo thứ tự: xung đột > đã đáp ứng > khác biệt cụ thể nhất; nếu ngang nhau thì ưu tiên điều khoản LLM chọn là khớp nhất, rồi đến điểm retrieval.
-   - `evidence_ids` và `citations` liệt kê mọi điều khoản liên quan, điều khoản chính đứng đầu.
+4. **Finding:** theo mô hình mục 04, gom theo cặp (nghĩa vụ, tài liệu nội bộ).
+   - Xung đột (`VALUE_CHANGE`, `CONTRADICTION`, `SCOPE_CHANGE`) phải sửa ở đúng chỗ nó được viết, nên **mỗi điều khoản xung đột là một finding riêng** (ví dụ 5.2 và 5.3 cùng ghi "24 tháng" → hai finding, bản sửa không để văn bản tự mâu thuẫn).
+   - Cặp không có xung đột nào: một finding, chọn theo thứ tự đã đáp ứng (`EQUIVALENT`) > `ADDITION` > `INDIRECT_IMPACT`. `ADDITION` của một điều khoản không phải là thiếu sót nếu điều khoản khác trong văn bản đã đáp ứng.
+   - Nếu ngang nhau thì ưu tiên điều khoản LLM chọn là khớp nhất, rồi đến điểm retrieval.
+   - `evidence_ids` và `citations` liệt kê mọi điều khoản liên quan của cặp, điều khoản của finding đứng đầu; `verification.other_clauses` là các điều khoản còn lại.
    - `verification.checks` gồm: `deterministic_values`, `modality`, `source_grounding`, `temporal_validity`, `scope_exceptions`, `human_approval: pending`.
    - Status `AI_PROPOSED`, hoặc `NO_ACTION_PROPOSED` khi `EQUIVALENT`. Version chuyển `AI_PROPOSED`.
 5. **`job.result`:** tham số đã dùng, phương thức retrieval, model, `llm_calls` và `llm_cache_hits`, số nghĩa vụ (kèm phân bố applicability) và coverage, xếp hạng tài liệu, số finding theo loại/ưu tiên, danh sách `uncovered_obligations`. Danh sách này nghĩa là "chưa tìm thấy bằng chứng", không phải kết luận vi phạm.

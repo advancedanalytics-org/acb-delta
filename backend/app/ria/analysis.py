@@ -39,13 +39,15 @@ ANALYZABLE = ("PARSED", "RETRIEVAL_COMPLETED", "AI_PROPOSED")
 log = logging.getLogger(__name__)
 
 
-# Which pair represents a finding: a conflict anywhere wins (fail closed); otherwise a clause
-# that already satisfies the obligation; otherwise the most specific difference.
+# A conflict has to be fixed where it is written, so every conflicting clause of a document gets
+# its own finding (fail closed). Without one, a single finding per (obligation, document): a
+# clause that already satisfies the obligation, otherwise the most specific difference.
+_CONFLICTS = ("VALUE_CHANGE", "CONTRADICTION", "SCOPE_CHANGE")
 _CATEGORY_RANK = {
     "VALUE_CHANGE": 0,
     "CONTRADICTION": 1,
-    "EQUIVALENT": 2,
-    "SCOPE_CHANGE": 3,
+    "SCOPE_CHANGE": 2,
+    "EQUIVALENT": 3,
     "ADDITION": 4,
     "INDIRECT_IMPACT": 5,
 }
@@ -568,64 +570,8 @@ def run_analysis(job_id: str) -> dict:
 
     finding_rows = []
     for pairs in pairs_by_group.values():
-        # Most severe category first; among equals, the clause the LLM picked as best match,
-        # then the strongest retrieval score.
-        pairs.sort(
-            key=lambda p: (
-                _CATEGORY_RANK[p[1]["category"]],
-                not p[1].get("llm_best"),
-                -p[0]["candidate"]["score"],
-            )
-        )
-        ev, result = pairs[0]
-        o, clause = ev["obligation"], ev["clause"]
-        checks = [*result["checks"], temporal]
-        if o.get("condition") or o.get("exception"):
-            checks.append(
-                {
-                    "check": "scope_exceptions",
-                    "status": "needs_review",
-                    "detail": {"condition": o.get("condition"), "exception": o.get("exception")},
-                }
-            )
-        checks.append({"check": "human_approval", "status": "pending"})
-        grounded = all(c["status"] != "fail" for c in checks if c["check"] == "source_grounding")
-        category = result["category"]
-        finding_rows.append(
-            {
-                "id": f"RIA-{uuid.uuid4().hex[:10]}",
-                "job": job_id,
-                "reg": version_id,
-                "doc": clause["document_id"],
-                "cid": clause["clause_id"],
-                "obl": o["obligation_id"],
-                "ev": ev["evidence_id"],
-                "evs": [p[0]["evidence_id"] for p in pairs],
-                "category": category,
-                "rationale": result["rationale"],
-                "status": "NO_ACTION_PROPOSED" if category == "EQUIVALENT" else "AI_PROPOSED",
-                "priority": PRIORITY[category],
-                "confidence": result["confidence"],
-                "src": json.dumps(result["source_span"], ensure_ascii=False),
-                "tgt": json.dumps(result["target_span"], ensure_ascii=False),
-                "verification": json.dumps(
-                    {
-                        "status": "NEEDS_HUMAN_REVIEW" if grounded else "BLOCKED",
-                        "checks": checks,
-                        "conditions_to_verify": result.get("conditions_to_verify", []),
-                        "llm_best_clause": result.get("llm_best", False),
-                        "other_clauses": [
-                            {"clause_id": p[0]["clause"]["clause_id"], "category": p[1]["category"]}
-                            for p in pairs[1:]
-                        ],
-                    },
-                    ensure_ascii=False,
-                    default=str,
-                ),
-                "citations": [o["clause_id"], *[p[0]["clause"]["clause_id"] for p in pairs]],
-                "method": result["method"],
-            }
-        )
+        for head, others in _finding_heads(pairs):
+            finding_rows.append(_finding_row(head, others, job_id, version_id, temporal))
 
     finding_rows += _graph_findings(
         linked, corpus, job_id, version_id, job["document_id"], temporal
@@ -697,6 +643,72 @@ def run_analysis(job_id: str) -> dict:
         ],
         "graph": graph_info,
         "warnings": warnings,
+    }
+
+
+def _finding_heads(pairs: list[tuple[dict, dict]]) -> list[tuple[tuple, list[tuple]]]:
+    """(head pair, other pairs) for each finding of one (obligation, document) group: one per
+    conflicting clause, else the single best pair. Most severe category first; among equals, the
+    clause the LLM picked as best match, then the strongest retrieval score."""
+    pairs = sorted(
+        pairs,
+        key=lambda p: (
+            _CATEGORY_RANK[p[1]["category"]],
+            not p[1].get("llm_best"),
+            -p[0]["candidate"]["score"],
+        ),
+    )
+    heads = [p for p in pairs if p[1]["category"] in _CONFLICTS] or pairs[:1]
+    return [(head, [p for p in pairs if p is not head]) for head in heads]
+
+
+def _finding_row(head: tuple, others: list[tuple], job_id, version_id, temporal) -> dict:
+    ev, result = head
+    o, clause = ev["obligation"], ev["clause"]
+    checks = [*result["checks"], temporal]
+    if o.get("condition") or o.get("exception"):
+        checks.append(
+            {
+                "check": "scope_exceptions",
+                "status": "needs_review",
+                "detail": {"condition": o.get("condition"), "exception": o.get("exception")},
+            }
+        )
+    checks.append({"check": "human_approval", "status": "pending"})
+    grounded = all(c["status"] != "fail" for c in checks if c["check"] == "source_grounding")
+    category = result["category"]
+    return {
+        "id": f"RIA-{uuid.uuid4().hex[:10]}",
+        "job": job_id,
+        "reg": version_id,
+        "doc": clause["document_id"],
+        "cid": clause["clause_id"],
+        "obl": o["obligation_id"],
+        "ev": ev["evidence_id"],
+        "evs": [p[0]["evidence_id"] for p in (head, *others)],
+        "category": category,
+        "rationale": result["rationale"],
+        "status": "NO_ACTION_PROPOSED" if category == "EQUIVALENT" else "AI_PROPOSED",
+        "priority": PRIORITY[category],
+        "confidence": result["confidence"],
+        "src": json.dumps(result["source_span"], ensure_ascii=False),
+        "tgt": json.dumps(result["target_span"], ensure_ascii=False),
+        "verification": json.dumps(
+            {
+                "status": "NEEDS_HUMAN_REVIEW" if grounded else "BLOCKED",
+                "checks": checks,
+                "conditions_to_verify": result.get("conditions_to_verify", []),
+                "llm_best_clause": result.get("llm_best", False),
+                "other_clauses": [
+                    {"clause_id": p[0]["clause"]["clause_id"], "category": p[1]["category"]}
+                    for p in others
+                ],
+            },
+            ensure_ascii=False,
+            default=str,
+        ),
+        "citations": [o["clause_id"], *[p[0]["clause"]["clause_id"] for p in (head, *others)]],
+        "method": result["method"],
     }
 
 
