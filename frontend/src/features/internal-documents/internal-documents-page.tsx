@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { DocumentClause, DocumentObligation, InternalDocument } from '@/api/types'
+import type { DocumentClause, InternalDocument } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -97,18 +97,6 @@ export function InternalDocumentsPage() {
     () => (clauseData?.clauses ? groupClauses(clauseData.clauses) : { articleGroups: [], chapters: [] }),
     [clauseData],
   )
-
-  // Obligations indexed by source clause ID
-  const obligationsByClause = useMemo(() => {
-    const map = new Map<string, DocumentObligation[]>()
-    if (!clauseData?.obligations) return map
-    for (const obl of clauseData.obligations) {
-      const list = map.get(obl.source_clause_id) ?? []
-      list.push(obl)
-      map.set(obl.source_clause_id, list)
-    }
-    return map
-  }, [clauseData])
 
   // Filtered article groups based on search inside clauses
   const filteredArticleGroups = useMemo(() => {
@@ -660,7 +648,6 @@ export function InternalDocumentsPage() {
                             {isExpanded && (
                               <div className="divide-y divide-border/50 p-2 md:p-3 space-y-1">
                                 {displayClauses.map((clause: DocumentClause) => {
-                                  const obligations = obligationsByClause.get(clause.clause_id) || []
                                   const isPoint = clause.level === 'point'
                                   const isArticleHeader = clause.level === 'article'
 
@@ -670,7 +657,6 @@ export function InternalDocumentsPage() {
                                       className={cn(
                                         'py-2 px-3 rounded-md transition-colors',
                                         isPoint ? 'ml-6 border-l-2 border-primary/30 pl-3 bg-muted/20' : '',
-                                        obligations.length > 0 ? 'bg-amber-500/5' : '',
                                       )}
                                     >
                                       {/* Clause Numbering & Text */}
@@ -695,60 +681,6 @@ export function InternalDocumentsPage() {
                                           </p>
                                         </div>
                                       </div>
-
-                                      {/* Extracted Obligations */}
-                                      {obligations.length > 0 && (
-                                        <div className="mt-2.5 ml-8 space-y-2 border-t border-border/40 pt-2">
-                                          {obligations.map((obl) => {
-                                            const modalityColor =
-                                              obl.modality === 'must'
-                                                ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30'
-                                                : obl.modality === 'must_not'
-                                                  ? 'bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30'
-                                                  : 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30'
-
-                                            const modalityLabel =
-                                              obl.modality === 'must'
-                                                ? 'Bắt buộc thực hiện'
-                                                : obl.modality === 'must_not'
-                                                  ? 'Nghiêm cấm'
-                                                  : 'Được phép'
-
-                                            return (
-                                              <div
-                                                key={obl.obligation_id}
-                                                className="rounded-md border border-border/80 bg-background/80 p-2.5 text-xs space-y-1.5 shadow-2xs"
-                                              >
-                                                <div className="flex items-center justify-between gap-2">
-                                                  <Badge
-                                                    variant="outline"
-                                                    className={cn('text-[10px] font-semibold', modalityColor)}
-                                                  >
-                                                    {modalityLabel}
-                                                  </Badge>
-                                                  {obl.subject && (
-                                                    <span className="text-[11px] text-muted-foreground">
-                                                      Chủ thể:{' '}
-                                                      <strong className="text-foreground">{obl.subject}</strong>
-                                                    </span>
-                                                  )}
-                                                </div>
-
-                                                <p className="text-xs text-foreground/90 font-medium">
-                                                  {obl.text}
-                                                </p>
-
-                                                {(obl.condition || obl.deadline) && (
-                                                  <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground pt-1">
-                                                    {obl.condition && <span>Điều kiện: {obl.condition}</span>}
-                                                    {obl.deadline && <span>Thời hạn: {obl.deadline}</span>}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            )
-                                          })}
-                                        </div>
-                                      )}
                                     </div>
                                   )
                                 })}
