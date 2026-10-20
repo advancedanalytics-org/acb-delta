@@ -222,8 +222,15 @@ def _named_duty(text: str) -> tuple[str, str] | None:
     return modality, _clip_words(m.group(2), 15)
 
 
+# "a) ", "đ) ", "1. ", "2) " at the start of a point or clause: a label, not part of the subject.
+_LABEL_RE = re.compile(r"^\s*(?:[a-zđ]\)|\d+[.)])\s+", re.IGNORECASE)
+
+
 def _body(clause: ClauseInput) -> str:
-    """Article text minus its heading line; other clauses unchanged."""
+    """Article text minus its heading line; points and clauses minus their label. Always a
+    suffix of clause.text, so offsets stay valid."""
     if clause.level == "article" and clause.heading and clause.text.startswith(clause.heading):
         return clause.text[len(clause.heading) :].lstrip("\n ")
+    if clause.level in ("clause", "point") and (m := _LABEL_RE.match(clause.text)):
+        return clause.text[m.end() :]
     return clause.text

@@ -42,7 +42,13 @@ def test_obligations_inherit_lead_in_and_skip_delegation():
     )
     assert obligations["2.2.a"][0].modality == "must"
     assert obligations["2.2.a"][0].subject == "Tổ chức tín dụng"
+    # The point label "a) " is not part of the action / object / text.
+    assert obligations["2.2.a"][0].action == "lưu trữ"
+    assert obligations["2.2.a"][0].text.startswith("Lưu trữ kết quả")
     assert obligations["2.2.b"][0].modality == "must_not"
+    # "b) Không được …" states its own modality but no subject: inherit the lead-in's.
+    assert obligations["2.2.b"][0].subject == "Tổ chức tín dụng"
+    assert obligations["2.2.b"][0].action == "cung cấp"
     assert "2.3" not in obligations  # "Ngân hàng Nhà nước hướng dẫn…" delegates, binds nobody
     assert "1" not in obligations  # scope article
     clause_text = {c.numbering: c.text for c in parsed.clauses}
