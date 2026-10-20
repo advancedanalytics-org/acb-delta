@@ -132,6 +132,21 @@ export interface EvalRun {
   metrics: EvalMetrics
 }
 
+/** DPO long-loop readiness: how much reviewer feedback has been gathered (KHOA-02). */
+export interface FeedbackStatus {
+  decisionsRead: number
+  /** Decisions that contrast two texts (edit / reject with an AI draft): one DPO pair each. */
+  pairsUsable: number
+  byAction: { accept: number; edit: number; reject: number }
+  /** Drafts that failed or were skipped: no AI text, so never a preference pair. */
+  draftFailures: number
+  /** Threshold a build checks against; `ready` once `pairsUsable` reaches it. */
+  minPairs: number
+  ready: boolean
+  draftExamples: { positiveAvailable: number; negativeAvailable: number }
+  judgeExamples: { positiveAvailable: number; negativeAvailable: number }
+}
+
 export interface HealthReport {
   status: 'ok' | 'degraded'
   checks: Record<string, string>

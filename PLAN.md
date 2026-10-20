@@ -114,6 +114,8 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [~] Vòng ngắn: lấy quyết định accept / edit làm few-shot động cho `judge_impact` và `draft_amendment`; reject làm ví dụ âm — `GET /api/eval/examples?task=draft|judge` đã phục vụ ví dụ dương / âm (`edit` dạy drafter, `reject` dạy judge). Chưa được `TAI-01` / `MINH-01` nạp vào prompt: prompt thuộc hai task đó nên họ tự quyết khi nào dùng
   - [ ] Đo metric trước / sau feedback (số liệu cho demo) — cần vòng ngắn được nạp vào prompt trước
   - [x] Vòng dài: export cặp preference (chosen / rejected) dạng dataset DPO — `python -m app.evaluation.dpo`, JSONL ra ngoài repo; chỉ `edit` / `reject` có bản nháp AI mới tạo được cặp
+  - [x] Pipeline DPO "build sẵn": `app.evaluation.dpo_pipeline` theo dõi readiness (số cặp dùng được vs ngưỡng `DPO_MIN_PAIRS`), đủ ngưỡng (hoặc `--force`) thì xuất dataset versioned + manifest ra ngoài repo (`DPO_OUT_DIR`); CLI `status | build`. Bước train thật để lại hook roadmap `dpo_pipeline.train()` (chưa dựng — xem `TAI-04`). Endpoint `GET /api/eval/feedback-status` phục vụ số liệu readiness (`test_dpo_pipeline.py`)
+  - [x] Hiển thị RLHF trên UI: mục "Học từ phản hồi" trong trang `/evaluation` (tiến trình tới ngưỡng DPO, phân rã accept/edit/reject, số few-shot đang phục vụ). **Đụng frontend của `HUY-01`** (`api/{client,live,mock,types}`, `hooks/queries`, `features/evaluation/evaluation-page`) theo yêu cầu của Khoa — cần Huy review phần giao diện
 
 ## Huy
 

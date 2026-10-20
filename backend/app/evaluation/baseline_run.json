@@ -1,7 +1,7 @@
 {
   "label": "Baseline",
   "datasetSize": 7,
-  "note": "Baseline đo thật trên VM demo (KHOA-01)",
+  "note": "",
   "createdAt": "2026-10-19T06:34:30.122349Z",
   "metrics": {
     "extraction": {

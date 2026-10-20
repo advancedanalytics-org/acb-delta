@@ -4,6 +4,7 @@ import type {
   AuditEntry,
   Decision,
   DocumentDetailResponse,
+  FeedbackStatus,
   Impact,
   ImpactStatus,
   IngestDocumentResult,
@@ -274,6 +275,20 @@ export const mockApi: ApiClient = {
       status: 'idle',
       message: null,
       error: null,
+    }),
+
+  // Illustrative: gathering is under way (6 pairs toward a threshold of 20), so the section shows
+  // the "đang gom" state rather than "ready".
+  getFeedbackStatus: (): Promise<FeedbackStatus> =>
+    delay({
+      decisionsRead: 11,
+      pairsUsable: 6,
+      byAction: { accept: 5, edit: 4, reject: 2 },
+      draftFailures: 1,
+      minPairs: 20,
+      ready: false,
+      draftExamples: { positiveAvailable: 9, negativeAvailable: 4 },
+      judgeExamples: { positiveAvailable: 9, negativeAvailable: 2 },
     }),
 
   decide(input) {

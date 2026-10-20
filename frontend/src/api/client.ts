@@ -5,6 +5,7 @@ import type {
   DecisionInput,
   DocumentDetailResponse,
   EvalRun,
+  FeedbackStatus,
   HealthReport,
   Impact,
   IngestDocumentResult,
@@ -38,6 +39,8 @@ export interface ApiClient {
   getIngestInternalStatus(): Promise<IngestInternalStatus>
   /** Ingest all internal PDFs from data/ directory. */
   ingestInternalDataDir(): Promise<IngestInternalResult[]>
+  /** DPO feedback readiness (KHOA-02); null when the backend has no data yet. */
+  getFeedbackStatus(): Promise<FeedbackStatus | null>
   /** Always the real backend. */
   getHealth(): Promise<HealthReport>
   /** Restore the seeded demo state. */

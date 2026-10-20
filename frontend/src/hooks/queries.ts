@@ -22,6 +22,7 @@ export const queryKeys = {
   auditTrail: ['audit-trail'] as const,
   reviewers: ['reviewers'] as const,
   evalRuns: ['eval-runs'] as const,
+  feedbackStatus: ['feedback-status'] as const,
   health: ['health'] as const,
 }
 
@@ -108,6 +109,9 @@ export const useReviewers = () =>
   useQuery({ queryKey: queryKeys.reviewers, queryFn: api.listReviewers, staleTime: Infinity })
 
 export const useEvalRuns = () => useQuery({ queryKey: queryKeys.evalRuns, queryFn: api.listEvalRuns })
+
+export const useFeedbackStatus = () =>
+  useQuery({ queryKey: queryKeys.feedbackStatus, queryFn: api.getFeedbackStatus })
 
 export const useHealth = () =>
   useQuery({ queryKey: queryKeys.health, queryFn: api.getHealth, refetchInterval: 10_000, retry: false })

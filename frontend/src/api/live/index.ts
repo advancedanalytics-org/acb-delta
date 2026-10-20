@@ -5,6 +5,7 @@ import type {
   DecisionInput,
   DocumentDetailResponse,
   EvalRun,
+  FeedbackStatus,
   HealthReport,
   Impact,
   IngestDocumentResult,
@@ -345,6 +346,18 @@ export const liveApi: ApiClient = {
       throw new Error(err.detail || `Lỗi quét dữ liệu data/ (HTTP ${res.status})`)
     }
     return (await res.json()) as IngestInternalResult[]
+  },
+
+  getFeedbackStatus: async (): Promise<FeedbackStatus | null> => {
+    try {
+      const res = await fetch('/api/eval/feedback-status')
+      if (res.ok) {
+        return (await res.json()) as FeedbackStatus
+      }
+    } catch {
+      // Backend unreachable; the section renders an empty state.
+    }
+    return null
   },
 
   getHealth: fetchHealth,

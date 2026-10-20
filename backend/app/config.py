@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     rerank_api_key: str = ""
     rerank_concurrency: int = 8
 
+    # DPO long loop (KHOA-02). How many preference pairs before a dataset is worth building, and
+    # where built datasets go (kept out of git). Lower DPO_MIN_PAIRS for a small demo.
+    dpo_min_pairs: int = 20
+    dpo_out_dir: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
