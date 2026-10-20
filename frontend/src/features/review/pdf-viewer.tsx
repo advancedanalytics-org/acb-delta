@@ -1,4 +1,4 @@
-import { Check, FileText, Loader2, PencilLine, Scale, X } from 'lucide-react'
+import { Check, FileText, Info, Loader2, PencilLine, Scale, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 
@@ -6,7 +6,7 @@ import type { Impact, InternalDocument } from '@/api/types'
 import { ImpactStatusBadge, ImpactTypeLabel, SeverityBadge } from '@/components/status-badges'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { reasonTags } from '@/lib/labels'
+import { categoryMeaning, reasonTags } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { DecisionRequest } from './impact-detail'
@@ -1448,6 +1448,14 @@ function HoverLegalCard({
           </Button>
         </div>
       </div>
+
+      {/* Category meaning — short plain-language explanation of the impact type (highlighted) */}
+      {impact.category && categoryMeaning[impact.category] && (
+        <div className="mt-2 flex items-start gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary ring-1 ring-primary/20">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span title={impact.category}>{categoryMeaning[impact.category]}</span>
+        </div>
+      )}
 
       {/* Main Block: Điều khoản VBPL mới */}
       <div className="mt-3 space-y-1.5">

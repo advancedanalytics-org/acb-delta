@@ -40,6 +40,14 @@ export interface InternalDocument {
 }
 
 export type ImpactType = 'conflict' | 'outdated_reference' | 'new_obligation'
+/** RIA's finer taxonomy, sent on review-package impacts; `ImpactType` is its 3-value collapse. */
+export type ImpactCategory =
+  | 'VALUE_CHANGE'
+  | 'CONTRADICTION'
+  | 'ADDITION'
+  | 'SCOPE_CHANGE'
+  | 'INDIRECT_IMPACT'
+  | 'EQUIVALENT'
 export type Severity = 'high' | 'medium' | 'low'
 export type ImpactStatus = 'pending' | 'accepted' | 'rejected'
 
@@ -60,6 +68,8 @@ export interface Impact {
   page: number | null
   bboxes: BBox[]
   type: ImpactType
+  /** Finer RIA category behind `type`; present only on RIA review packages. */
+  category?: ImpactCategory
   severity: Severity
   reasoning: string
   suggestedText: string

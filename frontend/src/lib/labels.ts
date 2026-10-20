@@ -1,4 +1,4 @@
-import type { DecisionAction, ImpactStatus, ImpactType, Severity, VbplStatus } from '@/api/types'
+import type { DecisionAction, ImpactCategory, ImpactStatus, ImpactType, Severity, VbplStatus } from '@/api/types'
 
 export const vbplStatusLabel: Record<VbplStatus, string> = {
   processing: 'Đang xử lý',
@@ -18,6 +18,16 @@ export const impactTypeLabel: Record<ImpactType, string> = {
   conflict: 'Mâu thuẫn',
   outdated_reference: 'Tham chiếu lỗi thời',
   new_obligation: 'Nghĩa vụ mới',
+}
+
+/** Short plain-language meaning of RIA's category, shown beside the impact type in review. */
+export const categoryMeaning: Record<ImpactCategory, string> = {
+  VALUE_CHANGE: 'Khác số liệu, hạn mức, thời hạn, số tiền',
+  CONTRADICTION: 'Yêu cầu xung đột trong cùng phạm vi',
+  ADDITION: 'Thêm yêu cầu mới nội bộ chưa có',
+  SCOPE_CHANGE: 'Khác đối tượng, điều kiện hoặc ngoại lệ',
+  INDIRECT_IMPACT: 'Liên quan gián tiếp, cần chuyên gia xác minh',
+  EQUIVALENT: 'Nội bộ đã đáp ứng, không cần sửa',
 }
 
 export const severityLabel: Record<Severity, string> = {
