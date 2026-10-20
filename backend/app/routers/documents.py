@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
@@ -453,6 +454,19 @@ def get_document(
     )
 
 
+def pdf_content_disposition(doc_id: str) -> str:
+    """Build an inline Content-Disposition header for a document PDF.
+
+    HTTP headers must be latin-1, but doc ids can hold Vietnamese text. Send an
+    ASCII-only ``filename`` for old clients plus the full UTF-8 name in
+    ``filename*`` (RFC 6266 / RFC 5987).
+    """
+    fallback = doc_id.encode("ascii", "ignore").decode().replace('"', "").strip() or "document"
+    return (
+        f"inline; filename=\"{fallback}.pdf\"; filename*=UTF-8''{quote(doc_id + '.pdf', safe='')}"
+    )
+
+
 @router.get("/{doc_id}/pdf")
 def get_document_pdf(
     doc_id: str,
@@ -660,7 +674,7 @@ def get_document_pdf(
         content=data,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="{doc_id}.pdf"',
+            "Content-Disposition": pdf_content_disposition(doc_id),
             "Content-Type": "application/pdf",
         },
     )
