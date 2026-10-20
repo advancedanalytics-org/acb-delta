@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  Info,
   Layers,
   Loader2,
   Scale,
@@ -59,10 +60,14 @@ export function InternalDocumentsPage() {
   // Auto-refresh document list when a background ingest completes
   const prevProcessingRef = useRef(false)
   useEffect(() => {
-    if (prevProcessingRef.current && !ingestStatus?.is_processing && ingestStatus?.status === 'completed') {
-      refetchDocs()
-      if (ingestStatus.result?.document_id) {
-        setSelectedDocId(ingestStatus.result.document_id)
+    if (prevProcessingRef.current && !ingestStatus?.is_processing) {
+      setIngestSuccessMessage(null)
+      setIngestErrorMessage(null)
+      if (ingestStatus?.status === 'completed') {
+        refetchDocs()
+        if (ingestStatus.result?.document_id) {
+          setSelectedDocId(ingestStatus.result.document_id)
+        }
       }
     }
     prevProcessingRef.current = Boolean(ingestStatus?.is_processing)
@@ -310,10 +315,17 @@ export function InternalDocumentsPage() {
               </div>
             )}
             {!ingestStatus?.is_processing && ingestStatus?.status === 'completed' && ingestStatus.message && !ingestSuccessMessage && (
-              <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-2 text-[11px] text-emerald-700 dark:text-emerald-300 flex items-start gap-1.5">
-                <CheckCircle2 className="size-3.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
-                <span>{ingestStatus.message}</span>
-              </div>
+              ingestStatus.result?.unchanged ? (
+                <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-300 flex items-start gap-1.5">
+                  <Info className="size-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <span>{ingestStatus.message}</span>
+                </div>
+              ) : (
+                <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-2 text-[11px] text-emerald-700 dark:text-emerald-300 flex items-start gap-1.5">
+                  <CheckCircle2 className="size-3.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>{ingestStatus.message}</span>
+                </div>
+              )
             )}
             {!ingestStatus?.is_processing && ingestStatus?.status === 'failed' && ingestStatus.message && !ingestErrorMessage && (
               <div className="rounded border border-destructive/30 bg-destructive/10 p-2 text-[11px] text-destructive flex items-start gap-1.5">

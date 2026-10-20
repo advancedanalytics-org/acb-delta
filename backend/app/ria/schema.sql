@@ -34,20 +34,7 @@ CREATE TABLE IF NOT EXISTS document_version (
   created_at         timestamptz NOT NULL DEFAULT now(),
   UNIQUE (document_id, version_label)
 );
--- Non-unique lookup index for checksum. Uniqueness is governed by (document_id, version_label)
--- and version_id PK. Drop previous unique index if present.
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_index i
-    JOIN pg_class c ON c.oid = i.indexrelid
-    WHERE c.relname = 'document_version_checksum' AND i.indisunique
-  ) THEN
-    ALTER TABLE document_version DROP CONSTRAINT IF EXISTS document_version_checksum;
-    DROP INDEX IF EXISTS document_version_checksum;
-  END IF;
-END $$;
-CREATE INDEX IF NOT EXISTS document_version_checksum ON document_version (checksum);
+CREATE UNIQUE INDEX IF NOT EXISTS document_version_checksum ON document_version (checksum);
 
 CREATE TABLE IF NOT EXISTS clause (
   clause_id    text PRIMARY KEY,       -- REG-001@v1#A.5.2

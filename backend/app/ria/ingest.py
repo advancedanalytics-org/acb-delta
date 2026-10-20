@@ -101,7 +101,7 @@ def create_regulation(
                 text(
                     "SELECT v.version_id, v.document_id, v.processing_status, d.doc_type "
                     "FROM document_version v JOIN document d USING (document_id) "
-                    "WHERE v.checksum = :c AND d.doc_type = 'regulation'"
+                    "WHERE v.checksum = :c"
                 ),
                 {"c": f"sha256:{checksum}"},
             )
