@@ -26,7 +26,6 @@ export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
   const { reviewer } = useCurrentUser()
   const failed = vbpl.status === 'failed'
   const decidedCount = vbpl.impactCount - vbpl.pendingCount
-  // The API refuses to delete a VBPL with reviewer decisions: they are the audit trail.
   const hasDecisions = !failed && decidedCount > 0
   const deleteMutation = useDeleteVbpl()
 
@@ -72,8 +71,7 @@ export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
         {vbpl.error && <p className="text-sm text-destructive">Lỗi: {vbpl.error}</p>}
         {hasDecisions && (
           <p className="text-sm text-destructive">
-            {decidedCount}/{vbpl.impactCount} tác động đã được duyệt. Không thể xóa vì các quyết định duyệt là
-            nhật ký kiểm toán.
+            {decidedCount}/{vbpl.impactCount} tác động đã được duyệt. Các quyết định duyệt này cũng sẽ bị xóa.
           </p>
         )}
         <DialogFooter>
@@ -82,7 +80,7 @@ export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
               Hủy
             </Button>
           </DialogClose>
-          <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending || hasDecisions}>
+          <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
             Xóa văn bản
           </Button>

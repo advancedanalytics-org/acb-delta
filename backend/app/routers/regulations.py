@@ -3,7 +3,7 @@
 POST /api/regulations               upload a VBPL PDF → document version + parse job (202)
 POST /api/regulations/{id}/analyze  start impact analysis on a PARSED version → job (202)
 GET  /api/regulations/{id}          document, versions and processing state
-DELETE /api/regulations/{version_id} delete a version that is not processing and has no decisions;
+DELETE /api/regulations/{version_id} delete a version that is not processing, decisions included;
                                     department heads only (X-Reviewer-Id header)
 """
 
@@ -211,10 +211,9 @@ def delete_version(
     version_id: str,
     reviewer_id: Annotated[str | None, Header(alias="X-Reviewer-Id")] = None,
 ) -> dict:
-    """Delete a regulation version that is not processing and has no reviewer decisions (failed,
-    nothing found, or not reviewed yet), with its analysis results, review package and stored
-    original, so the file can be uploaded again. Reviewer decisions are the audit trail, so a
-    version with any of them answers 409. `{version_id}` is the explicit version id
+    """Delete a regulation version that is not processing (failed, awaiting review, reviewed or
+    nothing found), with its analysis results, review package, reviewer decisions and stored
+    original, so the file can be uploaded again. `{version_id}` is the explicit version id
     (REG-…@v1). Only a department head may delete: `X-Reviewer-Id` names the acting reviewer,
     anyone else gets 403."""
     if not reviewer_id:
