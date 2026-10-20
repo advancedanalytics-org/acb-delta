@@ -6,6 +6,10 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PATH="/app/.venv/bin:$PATH"
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY agent ./agent
+# Demo corpus baked in: an AgentBase Runtime is created from the image alone, with no file mounts.
+# Build with the named context `corpus` (docker compose sets it; see AGENTS.md for a manual build).
+COPY --from=corpus demo-documents.json /app/data/corpus.json
+ENV CORPUS_PATH=/app/data/corpus.json
 # AgentBase Runtime requires port 8080 (not configurable).
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \

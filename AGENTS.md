@@ -68,6 +68,7 @@ The script wraps these; they always work too.
 | Agent test + lint | `cd agent && uv run pytest && uv run ruff check . && uv run ruff format --check .` |
 | Frontend lint + build | `cd frontend && npm ci && npm run lint && npm run build` |
 | Frontend dev server | `cd frontend && npm run dev` (port 5173, proxies `/api` to `localhost:8000`) |
+| Build + push the agent image for GreenNode AgentBase | `docker buildx build --platform linux/amd64 --build-context corpus=frontend/src/api/mock/fixtures -t vcr.vngcloud.vn/<repo>/acb-delta-agent:<tag> --push agent` (after `docker login vcr.vngcloud.vn`). Then point the api at the Runtime: `AGENT_URL` = its endpoint URL, `AGENTBASE_CLIENT_ID` / `AGENTBASE_CLIENT_SECRET` = an IAM Service Account allowed to invoke it |
 | Regenerate demo PDFs | `uv run --with pymupdf python scripts/demo-data/generate_demo_pdfs.py` |
 
 Ports: UI 3000, API 8000, agent 8080 (fixed by AgentBase), Postgres 5432, FalkorDB 6379 and MinIO 9000/9001 on `127.0.0.1` only; override with the `*_PORT` values in `.env`.

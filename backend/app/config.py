@@ -31,7 +31,13 @@ class Settings(BaseSettings):
             self.s3_secret_key = self.minio_root_password
         return self
 
+    # Local container, or the AgentBase Runtime endpoint URL when the agent runs on GreenNode.
     agent_url: str = "http://localhost:8080"
+    # GreenNode IAM Service Account for an AgentBase Runtime with "IAM Permissions" inbound auth.
+    # Empty = no Authorization header (local agent, or a Runtime with "No authorization").
+    agentbase_client_id: str = ""
+    agentbase_client_secret: str = ""
+    agentbase_token_url: str = "https://iam.api.vngcloud.vn/accounts-api/v2/auth/token"
     s3_endpoint: str = "http://localhost:9000"
     s3_bucket: str = "documents"
     s3_access_key: str = "acb"
