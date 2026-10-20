@@ -1,7 +1,6 @@
 import {
   ArrowDownRight,
   ArrowUpRight,
-  BarChart3,
   BookOpenCheck,
   FlaskConical,
   GraduationCap,
@@ -378,7 +377,7 @@ export function EvaluationPage() {
       </section>
 
       {data.length >= 3 && <TrendChart runs={data} />}
-      {baseline ? <ComparisonChart run={run} baseline={baseline} /> : <ComparisonPlaceholder run={run} />}
+      {baseline && <ComparisonChart run={run} baseline={baseline} />}
 
       <FeedbackLearningSection />
       <ExamplesSection />
@@ -794,23 +793,6 @@ function ComparisonChart({ run, baseline }: { run: EvalRun; baseline: EvalRun })
   )
 }
 
-/** Shown in place of the before/after chart when only one run exists, so the slot is never blank. */
-function ComparisonPlaceholder({ run }: { run: EvalRun }) {
-  return (
-    <section className="rounded-lg border border-dashed bg-card/50 p-6 text-center">
-      <BarChart3 className="mx-auto size-6 text-muted-foreground/60" aria-hidden />
-      <h2 className="mt-2 text-sm font-semibold">So sánh trước/sau &amp; xu hướng</h2>
-      <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
-        Hiện mới có 1 lượt đánh giá ({run.label}). Chạy thêm experiment KHOA-01 — ví dụ sau khi gom phản hồi HITL — để
-        thấy biểu đồ so sánh trước/sau và đường xu hướng qua các lượt.
-      </p>
-      <code className="mt-3 inline-block rounded bg-muted px-2 py-1 text-[11px]">
-        uv run python -m app.evaluation.ria_runner … --save
-      </code>
-    </section>
-  )
-}
-
 /** KHOA-02: makes the feedback loop visible — how much HITL feedback has been gathered toward a
  *  DPO dataset, and the few-shot examples being served. Read-only; building is a CLI. */
 function FeedbackLearningSection() {
@@ -942,9 +924,10 @@ function FeedbackLearningBody({ status }: { status: FeedbackStatus }) {
       </div>
 
       <p className="text-xs text-muted-foreground lg:col-span-2">
-        {ready ? 'Đủ ngưỡng — xuất dataset bằng ' : `Khi đủ ${minPairs} cặp, xuất dataset bằng `}
-        <code className="rounded bg-muted px-1 py-0.5 text-[11px]">python -m app.evaluation.dpo_pipeline build</code>
-        {draftFailures > 0 && ` · ${draftFailures} bản nháp lỗi/bỏ qua không tạo được cặp.`}
+        {ready
+          ? 'Đã đủ dữ liệu phản hồi để tạo bộ huấn luyện cải thiện mô hình.'
+          : `Cần thêm ${Math.max(0, minPairs - pairsUsable)} cặp phản hồi nữa để đủ dữ liệu cải thiện mô hình.`}
+        {draftFailures > 0 && ` ${draftFailures} bản nháp lỗi/bỏ qua không tạo được cặp.`}
       </p>
     </div>
   )
