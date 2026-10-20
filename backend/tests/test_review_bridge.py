@@ -709,7 +709,7 @@ def test_inbox_and_review_while_analysis_runs_or_fails(ria_client):
 
 
 @needs_db
-def test_delete_regulation_with_decisions_is_refused_and_keeps_audit_trail(ria_client, drafter):
+def test_head_of_department_deletes_reviewed_regulation_with_its_decisions(ria_client, drafter):
     from app.db import get_engine
 
     job_id = _analyze(ria_client)
@@ -725,17 +725,24 @@ def test_delete_regulation_with_decisions_is_refused_and_keeps_audit_trail(ria_c
     assert row["status"] in ("awaiting_review", "done")
 
     response = ria_client.delete(
+        f"/api/regulations/{row['version_id']}", headers={"X-Reviewer-Id": "rv-anh"}
+    )
+    assert response.status_code == 403, response.text
+
+    response = ria_client.delete(
         f"/api/regulations/{row['version_id']}", headers=HEAD_OF_DEPARTMENT
     )
-    assert response.status_code == 409, response.text
+    assert response.status_code == 200, response.text
     with get_engine().connect() as conn:
         left = conn.execute(
             text(
                 "SELECT (SELECT count(*) FROM vbpls WHERE id = :v), "
+                "(SELECT count(*) FROM impacts WHERE vbpl_id = :v), "
                 "(SELECT count(*) FROM decisions WHERE id = :d)"
             ),
             {"v": body["vbpl_id"], "d": decided.json()["id"]},
         ).one()
-    assert tuple(left) == (1, 1)
-    audit_ids = [e["id"] for e in ria_client.get("/api/audit").json()]
-    assert decided.json()["id"] in audit_ids
+    assert tuple(left) == (0, 0, 0)
+    assert all(
+        r["version_id"] != row["version_id"] for r in ria_client.get("/api/regulations").json()
+    )
