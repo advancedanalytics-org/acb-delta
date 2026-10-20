@@ -9,6 +9,7 @@ import {
   FileText,
   Keyboard,
   Loader2,
+  Network,
 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
@@ -277,7 +278,23 @@ export function ReviewPage() {
             {vbpl.title}
           </h1>
         </div>
-        <VbplStatusBadge status={vbpl.status} />
+        <div className="flex items-center gap-2">
+          <VbplStatusBadge status={vbpl.status} />
+          {!selectedDoc && (
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="h-8 gap-1.5 text-xs font-semibold cursor-pointer text-primary border-primary/35 hover:bg-primary/10 transition-colors shadow-2xs"
+              title="Xem sơ đồ cây liên kết văn bản pháp luật và văn bản nội bộ"
+            >
+              <Link to={`/review/${vbpl.id}/visualize`}>
+                <Network className="size-3.5" />
+                <span>Visualize</span>
+              </Link>
+            </Button>
+          )}
+        </div>
         <div className="w-48">
           <div className="mb-1 flex justify-between text-xs">
             <span className="text-muted-foreground">
@@ -379,18 +396,31 @@ export function ReviewPage() {
         /* STEP 1: SELECT DOCUMENT STEP */
         <div className="flex-1 overflow-y-auto bg-muted/20 p-6 md:p-10">
           <div className="mx-auto max-w-4xl space-y-6">
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
-                <Files className="size-4" />
-                <span>Bước 1: Lựa chọn văn bản nội bộ</span>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                  <Files className="size-4" />
+                  <span>Bước 1: Lựa chọn văn bản nội bộ</span>
+                </div>
+                <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                  Chọn văn bản nội bộ cần duyệt
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Văn bản quy phạm pháp luật <strong className="font-semibold text-foreground">{vbpl.number}</strong> ảnh hưởng đến{' '}
+                  <strong className="font-semibold text-foreground">{affectedDocs.length}</strong> văn bản nội bộ dưới đây. Vui lòng chọn văn bản để bắt đầu kiểm tra và phê duyệt các đề xuất chỉnh sửa của AI.
+                </p>
               </div>
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                Chọn văn bản nội bộ cần duyệt
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Văn bản quy phạm pháp luật <strong className="font-semibold text-foreground">{vbpl.number}</strong> ảnh hưởng đến{' '}
-                <strong className="font-semibold text-foreground">{affectedDocs.length}</strong> văn bản nội bộ dưới đây. Vui lòng chọn văn bản để bắt đầu kiểm tra và phê duyệt các đề xuất chỉnh sửa của AI.
-              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="gap-2 text-xs font-semibold cursor-pointer border-primary/40 text-primary hover:bg-primary/10 h-9 shrink-0 shadow-2xs self-start"
+              >
+                <Link to={`/review/${vbpl.id}/visualize`}>
+                  <Network className="size-4" />
+                  <span>Xem sơ đồ cây (Visualize)</span>
+                </Link>
+              </Button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

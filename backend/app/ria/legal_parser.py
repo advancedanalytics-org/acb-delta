@@ -232,10 +232,16 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
     is_decision = has_attached
 
     def open_clause(numbering, level, parent, line, marker_len, heading=None):
-        start = line.start + marker_len
-        # Skip whitespace between the marker and the text so offsets point at real content.
-        while start < len(text) and text[start] in " \n":
-            start += 1
+        # Do not strip or replace "Điều", "Chương", "Điểm", "Phụ lục", "Mục" at start of clause
+        if level in ("article", "chapter", "section", "appendix", "point") or re.match(
+            r"^(Điều|Chương|Điểm|Phụ lục|Mục|Mục lục)\b", line.text, re.IGNORECASE
+        ):
+            start = line.start
+        else:
+            start = line.start + marker_len
+            # Skip whitespace between the marker and the text so offsets point at real content.
+            while start < len(text) and text[start] in " \n":
+                start += 1
         node = ParsedClause(numbering, level, parent, start, heading=heading, anchor=line.start)
         clauses.append(node)
         return node

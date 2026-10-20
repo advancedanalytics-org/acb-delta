@@ -3,10 +3,13 @@ import type {
   AuditEntry,
   Decision,
   DecisionInput,
+  DocumentDetailResponse,
   EvalRun,
   HealthReport,
   Impact,
   IngestDocumentResult,
+  IngestInternalResult,
+  IngestInternalStatus,
   InternalDocument,
   Reviewer,
   UploadVbplInput,
@@ -27,6 +30,14 @@ export interface ApiClient {
   undoDecision(decisionId: string): Promise<void>
   listReviewers(): Promise<Reviewer[]>
   listEvalRuns(): Promise<EvalRun[]>
+  /** Get clauses, hierarchy, and metadata of an internal document. */
+  getDocumentClauses(docId: string): Promise<DocumentDetailResponse>
+  /** Ingest an internal document PDF using RIA legal parser and indexing. */
+  ingestInternalDocument(file: File): Promise<IngestInternalResult>
+  /** Check live status of background internal document ingest. */
+  getIngestInternalStatus(): Promise<IngestInternalStatus>
+  /** Ingest all internal PDFs from data/ directory. */
+  ingestInternalDataDir(): Promise<IngestInternalResult[]>
   /** Always the real backend. */
   getHealth(): Promise<HealthReport>
   /** Restore the seeded demo state. */

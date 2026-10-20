@@ -17,6 +17,8 @@ export const queryKeys = {
   vbpls: ['vbpls'] as const,
   impacts: (vbplId: string) => ['impacts', vbplId] as const,
   documents: ['documents'] as const,
+  documentClauses: (docId: string) => ['document-clauses', docId] as const,
+  ingestInternalStatus: ['ingest-internal-status'] as const,
   auditTrail: ['audit-trail'] as const,
   reviewers: ['reviewers'] as const,
   evalRuns: ['eval-runs'] as const,
@@ -51,7 +53,54 @@ export const useImpacts = (vbplId: string | undefined) => {
 }
 
 export const useDocuments = () =>
-  useQuery({ queryKey: queryKeys.documents, queryFn: api.listDocuments, staleTime: 30_000 })
+  useQuery({
+    queryKey: queryKeys.documents,
+    queryFn: api.listDocuments,
+    staleTime: 5_000,
+    refetchInterval: (query) => {
+      // Auto-poll every 3s while documents are being ingested into the database
+      const count = query.state.data?.length ?? 0
+      return count < 36 ? 3_000 : false
+    },
+  })
+
+export const useDocumentClauses = (docId: string | undefined) =>
+  useQuery({
+    queryKey: queryKeys.documentClauses(docId ?? ''),
+    queryFn: () => api.getDocumentClauses(docId!),
+    enabled: Boolean(docId),
+  })
+
+export const useIngestInternalDocument = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => api.ingestInternalDocument(file),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: queryKeys.documents })
+      if (data?.document_id) {
+        qc.invalidateQueries({ queryKey: queryKeys.documentClauses(data.document_id) })
+      }
+    },
+  })
+}
+
+export const useIngestInternalDataDir = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.ingestInternalDataDir(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.documents })
+      qc.invalidateQueries({ queryKey: queryKeys.ingestInternalStatus })
+    },
+  })
+}
+
+export const useIngestInternalStatus = () =>
+  useQuery({
+    queryKey: queryKeys.ingestInternalStatus,
+    queryFn: api.getIngestInternalStatus,
+    refetchInterval: (query) => (query.state.data?.is_processing ? 1500 : 4000),
+  })
 
 export const useAuditTrail = () => useQuery({ queryKey: queryKeys.auditTrail, queryFn: api.listAuditTrail })
 

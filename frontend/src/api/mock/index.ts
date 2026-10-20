@@ -3,9 +3,11 @@ import { fetchHealth } from '@/api/live'
 import type {
   AuditEntry,
   Decision,
+  DocumentDetailResponse,
   Impact,
   ImpactStatus,
   IngestDocumentResult,
+  IngestInternalResult,
   Vbpl,
   VbplStatus,
 } from '@/api/types'
@@ -228,6 +230,51 @@ export const mockApi: ApiClient = {
   listAuditTrail: () => delay(buildAuditTrail()),
   listReviewers: () => delay(reviewers),
   listEvalRuns: () => delay(evalRuns),
+
+  getDocumentClauses: (docId: string) => {
+    const doc = documents.find((d) => d.id === docId)
+    return delay<DocumentDetailResponse>({
+      document: {
+        document_id: doc?.id || docId,
+        title: doc?.title || docId,
+        doc_type: 'internal',
+        owner: doc?.department,
+        issuer: doc?.department,
+        doc_number: doc?.code,
+        version_label: doc?.version || 'v1.0',
+        status: 'effective',
+        valid_from: doc?.effectiveDate,
+        page_count: doc?.pageCount || 1,
+      },
+      clauses: [],
+      obligations: [],
+      total_clauses: 0,
+      total_obligations: 0,
+    })
+  },
+
+  ingestInternalDocument: (file: File) =>
+    delay<IngestInternalResult>({
+      document_id: file.name.replace(/\.[^/.]+$/, '').toUpperCase(),
+      version_id: `${file.name.replace(/\.[^/.]+$/, '').toUpperCase()}@v1`,
+      title: file.name,
+      clauses: 0,
+      obligations: 0,
+      views_indexed: 0,
+      status: 'effective',
+      message: `Đã tiếp nhận ${file.name}`,
+    }),
+
+  ingestInternalDataDir: () => delay<IngestInternalResult[]>([]),
+
+  getIngestInternalStatus: () =>
+    delay({
+      is_processing: false,
+      filename: null,
+      status: 'idle',
+      message: null,
+      error: null,
+    }),
 
   decide(input) {
     const impact = getAllImpactSeeds().find((seed) => seed.id === input.impactId)

@@ -3,10 +3,13 @@ import type {
   AuditEntry,
   Decision,
   DecisionInput,
+  DocumentDetailResponse,
   EvalRun,
   HealthReport,
   Impact,
   IngestDocumentResult,
+  IngestInternalResult,
+  IngestInternalStatus,
   InternalDocument,
   Reviewer,
   UploadVbplInput,
@@ -211,6 +214,7 @@ export const liveApi: ApiClient = {
             code?: string
             title?: string
             issuer?: string
+            version_label?: string
             effective_date?: string
             page_count?: number
             pdf_url?: string
@@ -219,7 +223,7 @@ export const liveApi: ApiClient = {
             code: d.code || d.id,
             title: d.title || d.code || d.id,
             department: d.issuer || 'Khối Pháp chế & Tuân thủ',
-            version: '1.0',
+            version: d.version_label || '1.0',
             effectiveDate: d.effective_date || '',
             pdfUrl: `/api/documents/${encodeURIComponent(d.id)}/pdf`,
             pageCount: d.page_count || 1,
@@ -289,6 +293,58 @@ export const liveApi: ApiClient = {
       // Not yet implemented on backend
     }
     return []
+  },
+
+  getDocumentClauses: async (docId: string): Promise<DocumentDetailResponse> => {
+    const res = await fetch(`/api/documents/${encodeURIComponent(docId)}/clauses`)
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.detail || `Lỗi tải chi tiết văn bản (HTTP ${res.status})`)
+    }
+    return (await res.json()) as DocumentDetailResponse
+  },
+
+  ingestInternalDocument: async (file: File): Promise<IngestInternalResult> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch('/api/documents/ingest-internal', {
+      method: 'POST',
+      body: formData,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.detail || `Lỗi nạp văn bản nội bộ (HTTP ${res.status})`)
+    }
+    return (await res.json()) as IngestInternalResult
+  },
+
+  getIngestInternalStatus: async (): Promise<IngestInternalStatus> => {
+    try {
+      const res = await fetch('/api/documents/ingest-internal-status')
+      if (res.ok) {
+        return (await res.json()) as IngestInternalStatus
+      }
+    } catch {
+      // Fallback
+    }
+    return {
+      is_processing: false,
+      filename: null,
+      status: 'idle',
+      message: null,
+      error: null,
+    }
+  },
+
+  ingestInternalDataDir: async (): Promise<IngestInternalResult[]> => {
+    const res = await fetch('/api/documents/ingest-internal-data-dir', {
+      method: 'POST',
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.detail || `Lỗi quét dữ liệu data/ (HTTP ${res.status})`)
+    }
+    return (await res.json()) as IngestInternalResult[]
   },
 
   getHealth: fetchHealth,

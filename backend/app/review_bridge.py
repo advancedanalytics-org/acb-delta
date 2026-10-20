@@ -185,8 +185,10 @@ def load_findings(analyze_job_id: str) -> list[dict]:
                 "f.verification, f.citations, f.method, f.impacted_document_id, "
                 "f.internal_clause_id, o.text AS obligation_text, o.source_clause_id, "
                 "rc.numbering AS regulation_numbering, rd.doc_number AS regulation_number, "
-                "ic.numbering AS clause_numbering, ic.ordinal AS clause_ordinal, "
-                "ic.heading AS clause_heading, pc.heading AS parent_heading, "
+                "ic.numbering AS clause_numbering, ic.level AS clause_level, "
+                "ic.ordinal AS clause_ordinal, "
+                "ic.heading AS clause_heading, pc.numbering AS parent_numbering, "
+                "pc.heading AS parent_heading, "
                 "ic.text AS clause_text, ic.bbox AS clause_bbox, e.score "
                 "FROM impact_finding f "
                 "JOIN obligation o ON o.obligation_id = f.obligation_id "
@@ -499,7 +501,49 @@ def impact_row(group: list[dict], position: int, proposal: dict | None, error: s
     if page is None:
         page = f.get("clause_page") or 1
     heading = f["clause_heading"] or f["parent_heading"]
-    numbering = f["clause_numbering"] or ""
+    numbering = (f["clause_numbering"] or "").strip()
+    parent_num = (f.get("parent_numbering") or "").strip()
+    level = f.get("clause_level")
+    if level == "clause":
+        if "." in numbering:
+            parts = numbering.split(".", 1)
+            loc_num = f"Điều {parts[0]}, khoản {parts[1]}"
+        elif parent_num:
+            clean_parent = parent_num.replace("QD.", "").strip()
+            loc_num = f"Điều {clean_parent}, khoản {numbering}"
+        else:
+            loc_num = (
+                f"Khoản {numbering}" if not numbering.lower().startswith("khoản") else numbering
+            )
+    elif level == "point":
+        parts = numbering.split(".")
+        if len(parts) >= 3:
+            loc_num = f"Điều {parts[0]}, khoản {parts[1]}, điểm {parts[2]}"
+        elif len(parts) == 2 and parent_num:
+            clean_parent = parent_num.replace("QD.", "").strip()
+            loc_num = f"Điều {clean_parent}, khoản {parts[0]}, điểm {parts[1]}"
+        elif len(parts) == 2:
+            loc_num = f"Khoản {parts[0]}, điểm {parts[1]}"
+        elif parent_num:
+            clean_parent = parent_num.replace("QD.", "").strip()
+            loc_num = f"Điều {clean_parent}, điểm {numbering}"
+        else:
+            loc_num = f"Điểm {numbering}" if not numbering.lower().startswith("điểm") else numbering
+    elif level == "article" or (numbering and numbering.isdigit()):
+        clean_num = numbering.replace("QD.", "").strip()
+        loc_num = f"Điều {clean_num}" if not clean_num.lower().startswith("điều") else clean_num
+    elif level == "chapter":
+        loc_num = f"Chương {numbering}" if not numbering.lower().startswith("chương") else numbering
+    elif level == "section":
+        loc_num = f"Mục {numbering}" if not numbering.lower().startswith("mục") else numbering
+    elif level == "appendix":
+        loc_num = (
+            f"Phụ lục {numbering}" if not numbering.lower().startswith("phụ lục") else numbering
+        )
+    else:
+        loc_num = numbering
+
+    location = f"{loc_num}: {heading}" if heading else loc_num
     finding_keys = (
         "finding_id", "job_id", "obligation_id", "evidence_id", "internal_clause_id",
         "category", "rationale", "status", "priority", "confidence", "source_span",
@@ -510,7 +554,7 @@ def impact_row(group: list[dict], position: int, proposal: dict | None, error: s
         "position": position,
         "document_id": f["impacted_document_id"],
         "chunk_id": f["internal_clause_id"] or "",
-        "location": f"{numbering}. {heading}" if heading else numbering,
+        "location": location,
         # The UI shows change_clause as the new rule's wording and citation as its reference.
         "change_clause": "\n\n".join(_unique(g["obligation_text"] for g in group)),
         "citation": _citation(group),

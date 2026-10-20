@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
@@ -221,6 +222,98 @@ async def upload_document(
     )
 
 
+@router.post("/ingest-internal", status_code=status.HTTP_200_OK)
+async def ingest_internal_document(
+    file: Annotated[
+        UploadFile,
+        File(description="Tệp PDF văn bản nội bộ cần phân tích và nạp dữ liệu"),
+    ],
+) -> dict:
+    """Ingest an internal bank document in background using RIA legal parser and vector indexing."""
+    filename = file.filename or "internal_document.pdf"
+    if not (filename.lower().endswith(".pdf") or file.content_type == "application/pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tập tin tải lên phải là định dạng PDF (.pdf)",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tập tin tải lên rỗng",
+        )
+
+    import tempfile
+    import threading
+    from datetime import UTC, datetime
+
+    from app.ria.ingest_internal import set_current_ingest_job
+
+    upload_dir = Path(tempfile.gettempdir()) / "internal_uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = upload_dir / filename
+    tmp_path.write_bytes(content)
+
+    set_current_ingest_job(
+        is_processing=True,
+        filename=filename,
+        status="processing",
+        message=f"Đã nhận tệp {filename}, đang xử lý ngầm...",
+        started_at=datetime.now(UTC).isoformat(),
+        error=None,
+    )
+
+    def _bg_run():
+        try:
+            from app.ria.ingest_internal import ingest_internal_pdf
+
+            res = ingest_internal_pdf(tmp_path)
+            # Also save to data/ if dir exists for persistence
+            try:
+                for candidate_dir in [Path("data"), Path("../data"), Path("/data")]:
+                    if candidate_dir.is_dir():
+                        doc_id = res.get("document_id") or Path(filename).stem
+                        target_file = candidate_dir / f"{doc_id}.pdf"
+                        if not target_file.exists():
+                            target_file.write_bytes(content)
+            except Exception as copy_err:
+                logger.debug("Optional copy to data/ skipped: %s", copy_err)
+        except Exception as exc:
+            logger.exception("Failed to ingest internal document %s: %s", filename, exc)
+
+    threading.Thread(target=_bg_run, daemon=True).start()
+
+    return {
+        "status": "processing",
+        "filename": filename,
+        "message": f"Đã tiếp nhận tệp {filename}, hệ thống đang phân tích ngầm.",
+    }
+
+
+@router.get("/ingest-internal-status")
+def get_ingest_internal_status_endpoint() -> dict:
+    """Get the live status of the background internal document ingest."""
+    from app.ria.ingest_internal import get_current_ingest_job
+
+    return get_current_ingest_job()
+
+
+@router.post("/ingest-internal-data-dir")
+def ingest_internal_data_dir() -> list[dict]:
+    """Ingest all internal PDFs in data/ folder using ingest_internal logic."""
+    try:
+        from app.ria.ingest_internal import ingest_all
+
+        return ingest_all()
+    except Exception as exc:
+        logger.exception("Failed to ingest data dir: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi ingest thư mục data/: {exc}",
+        ) from exc
+
+
 @router.get("", response_model=list[DocumentResponse])
 def list_documents(
     vector_store: VectorStoreDep,
@@ -280,6 +373,7 @@ def list_documents(
                         title=r["title"],
                         doc_type=r["doc_type"],
                         issuer=r.get("issuer") or r.get("owner"),
+                        version_label=r.get("version_label"),
                         effective_date=vf_str,
                         page_count=r.get("page_count") or 1,
                         pdf_url=f"/api/documents/{doc_id}/pdf",
@@ -343,6 +437,7 @@ def get_document(
                     title=r["title"],
                     doc_type=r["doc_type"],
                     issuer=r.get("issuer") or r.get("owner"),
+                    version_label=r.get("version_label"),
                     effective_date=vf_str,
                     page_count=r.get("page_count") or 1,
                     pdf_url=f"/api/documents/{doc_id}/pdf",
@@ -592,6 +687,157 @@ def get_document_chunks(
         )
         for c in chunks
     ]
+
+
+@router.get("/{doc_id}/clauses")
+def get_document_clauses(doc_id: str) -> dict:
+    """Get structured clauses, hierarchy, and metadata for internal document detail view."""
+    import json
+
+    from sqlalchemy import text
+
+    from app.db import get_engine
+
+    with get_engine().connect() as conn:
+        # Get document and latest version
+        doc_row = (
+            conn.execute(
+                text(
+                    "SELECT d.document_id, d.title, d.doc_type, d.owner, d.doc_number, "
+                    "d.issuer, d.legal_form, v.version_id, v.version_label, v.status, "
+                    "v.valid_from, v.valid_to, v.page_count, v.source_uri, "
+                    "v.created_at as version_created_at "
+                    "FROM document d "
+                    "LEFT JOIN document_version v ON v.document_id = d.document_id "
+                    "WHERE d.document_id = :d "
+                    "ORDER BY v.created_at DESC LIMIT 1"
+                ),
+                {"d": doc_id},
+            )
+            .mappings()
+            .first()
+        )
+
+        doc_info: dict = {}
+        version_id = None
+        if doc_row:
+            doc_info = dict(doc_row)
+            version_id = doc_row["version_id"]
+            if doc_info.get("valid_from") and hasattr(doc_info["valid_from"], "isoformat"):
+                doc_info["valid_from"] = doc_info["valid_from"].isoformat()
+            if doc_info.get("valid_to") and hasattr(doc_info["valid_to"], "isoformat"):
+                doc_info["valid_to"] = doc_info["valid_to"].isoformat()
+            if doc_info.get("version_created_at") and hasattr(
+                doc_info["version_created_at"], "isoformat"
+            ):
+                doc_info["version_created_at"] = doc_info["version_created_at"].isoformat()
+        else:
+            # Fallback check documents table
+            doc_model = (
+                conn.execute(
+                    text("SELECT * FROM documents WHERE id = :d"),
+                    {"d": doc_id},
+                )
+                .mappings()
+                .first()
+            )
+            if not doc_model:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Tài liệu '{doc_id}' không tồn tại",
+                )
+            doc_info = dict(doc_model)
+
+        clauses: list[dict] = []
+        obligations: list[dict] = []
+
+        if version_id:
+            clause_rows = (
+                conn.execute(
+                    text(
+                        "SELECT clause_id, version_id, parent_id, numbering, level, heading, text, "
+                        "page, char_start, char_end, bbox, ordinal "
+                        "FROM clause WHERE version_id = :v ORDER BY ordinal ASC"
+                    ),
+                    {"v": version_id},
+                )
+                .mappings()
+                .all()
+            )
+            for r in clause_rows:
+                c_dict = dict(r)
+                if isinstance(c_dict.get("bbox"), str):
+                    try:
+                        c_dict["bbox"] = json.loads(c_dict["bbox"])
+                    except Exception:
+                        pass
+                clauses.append(c_dict)
+
+            obl_rows = (
+                conn.execute(
+                    text(
+                        "SELECT obligation_id, source_clause_id, subject, action, "
+                        "object, modality, condition, deadline, exception, text "
+                        "FROM obligation WHERE source_clause_id LIKE :prefix"
+                    ),
+                    {"prefix": f"{version_id}%"},
+                )
+                .mappings()
+                .all()
+            )
+            obligations = [dict(r) for r in obl_rows]
+
+        # If no RIA clauses found, fallback to document_chunks
+        if not clauses:
+            chunk_rows = (
+                conn.execute(
+                    text(
+                        "SELECT id as clause_id, article_path as numbering, page, "
+                        "bbox, text, chunk_metadata "
+                        "FROM document_chunks WHERE doc_id = :d ORDER BY id ASC"
+                    ),
+                    {"d": doc_id},
+                )
+                .mappings()
+                .all()
+            )
+            for i, r in enumerate(chunk_rows):
+                meta = r.get("chunk_metadata") or {}
+                if isinstance(meta, str):
+                    try:
+                        meta = json.loads(meta)
+                    except Exception:
+                        meta = {}
+                bbox_val = r.get("bbox")
+                if isinstance(bbox_val, str):
+                    try:
+                        bbox_val = json.loads(bbox_val)
+                    except Exception:
+                        pass
+                clauses.append(
+                    {
+                        "clause_id": r["clause_id"],
+                        "version_id": version_id or doc_id,
+                        "parent_id": None,
+                        "numbering": r["numbering"] or f"Mục {i + 1}",
+                        "level": meta.get("level", "chunk"),
+                        "heading": meta.get("heading") or r["numbering"],
+                        "text": r["text"],
+                        "page": r["page"],
+                        "char_start": 0,
+                        "char_end": len(r["text"]),
+                        "bbox": bbox_val,
+                        "ordinal": i,
+                    }
+                )
+
+        return {
+            "document": doc_info,
+            "clauses": clauses,
+            "obligations": obligations,
+            "total_clauses": len(clauses),
+            "total_obligations": len(obligations),
+        }
 
 
 @router.post("/search", response_model=list[SearchResult])

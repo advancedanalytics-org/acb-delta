@@ -27,6 +27,7 @@ class DocumentResponse(BaseModel):
     title: str | None = None
     doc_type: str
     issuer: str | None = None
+    version_label: str | None = None
     effective_date: str | None = None
     page_count: int = 0
     pdf_url: str | None = None

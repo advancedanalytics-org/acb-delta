@@ -17,7 +17,8 @@ import json
 import logging
 import re
 import sys
-from datetime import date
+import threading
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pymupdf
@@ -30,6 +31,30 @@ from app.ria.obligations import ClauseInput, extract_obligations
 from app.ria.schema import ensure_schema
 
 logger = logging.getLogger(__name__)
+
+_CURRENT_INGEST_JOB: dict = {
+    "is_processing": False,
+    "filename": None,
+    "status": "idle",
+    "message": None,
+    "error": None,
+    "progress": None,
+    "started_at": None,
+    "completed_at": None,
+    "result": None,
+}
+_JOB_LOCK = threading.Lock()
+
+
+def get_current_ingest_job() -> dict:
+    with _JOB_LOCK:
+        return dict(_CURRENT_INGEST_JOB)
+
+
+def set_current_ingest_job(**kwargs) -> dict:
+    with _JOB_LOCK:
+        _CURRENT_INGEST_JOB.update(kwargs)
+        return dict(_CURRENT_INGEST_JOB)
 
 
 def extract_internal_metadata(pdf_bytes: bytes, filename: str) -> dict:
@@ -146,20 +171,26 @@ def upload_to_minio(doc_id: str, filename: str, pdf_bytes: bytes) -> str | None:
         return None
 
 
-def ingest_internal_pdf(pdf_path: Path | str) -> dict:
-    """Parse an internal document PDF and ingest its clauses and vectors into vectorDB."""
-    path = Path(pdf_path).resolve()
-    if not path.is_file():
-        raise FileNotFoundError(f"PDF file not found: {path}")
-
+def _do_ingest_internal_pdf(path: Path) -> dict:
     pdf_bytes = path.read_bytes()
     checksum = f"sha256:{hashlib.sha256(pdf_bytes).hexdigest()}"
     meta = extract_internal_metadata(pdf_bytes, path.name)
+    logger.info(
+        "[%s] Metadata: %s, title='%s', pages=%d",
+        path.name,
+        meta["version_id"],
+        meta["title"][:60],
+        meta["page_count"],
+    )
 
     # 1. Parse document structure (exact format used by run_parse)
     parsed = parse_pdf(pdf_bytes)
     version_id = meta["version_id"]
     document_id = meta["document_id"]
+    logger.info("[%s] Parsed %d clauses from PDF", path.name, len(parsed.clauses))
+    set_current_ingest_job(
+        message=f"Đã trích xuất {len(parsed.clauses)} điều khoản ({path.name}), đang lưu dữ liệu..."
+    )
 
     # Upload to MinIO
     s3_uri = upload_to_minio(document_id, path.name, pdf_bytes)
@@ -231,8 +262,12 @@ def ingest_internal_pdf(pdf_path: Path | str) -> dict:
             text("DELETE FROM reference_edge WHERE source_clause_id LIKE :prefix"),
             {"prefix": f"{version_id}%"},
         )
+        # Avoid deleting clauses referenced by existing evidence
         conn.execute(
-            text("DELETE FROM clause WHERE version_id = :v"),
+            text(
+                "DELETE FROM clause WHERE version_id = :v "
+                "AND clause_id NOT IN (SELECT internal_clause_id FROM evidence)"
+            ),
             {"v": version_id},
         )
 
@@ -270,7 +305,13 @@ def ingest_internal_pdf(pdf_path: Path | str) -> dict:
                     "INSERT INTO clause (clause_id, version_id, parent_id, numbering, level, "
                     "heading, text, page, char_start, char_end, bbox, ordinal) "
                     "VALUES (:id, :v, :parent, :num, :level, :heading, :text, :page, :start, "
-                    ":end, CAST(:bbox AS jsonb), :ord)"
+                    ":end, CAST(:bbox AS jsonb), :ord) "
+                    "ON CONFLICT (clause_id) DO UPDATE SET "
+                    "parent_id = EXCLUDED.parent_id, numbering = EXCLUDED.numbering, "
+                    "level = EXCLUDED.level, heading = EXCLUDED.heading, text = EXCLUDED.text, "
+                    "page = COALESCE(EXCLUDED.page, clause.page), "
+                    "char_start = EXCLUDED.char_start, char_end = EXCLUDED.char_end, "
+                    "bbox = COALESCE(EXCLUDED.bbox, clause.bbox), ordinal = EXCLUDED.ordinal"
                 ),
                 clause_rows,
             )
@@ -347,7 +388,26 @@ def ingest_internal_pdf(pdf_path: Path | str) -> dict:
             )
 
         # 8. Multi-view index and vector embeddings (raw / context / keywords + pgvector)
+        logger.info(
+            "[%s] Generating vector embeddings for %s...",
+            path.name,
+            version_id,
+        )
         stats = build_index_views(conn, version_id, with_embeddings=True)
+        logger.info(
+            "[%s] FINISHED: %s -> %s (%d clauses, %d obligations, %d vectors)",
+            path.name,
+            path.name,
+            document_id,
+            len(clause_rows),
+            len(obl_rows),
+            stats.get("views", 0),
+        )
+        print(
+            f">>> [INGEST FINISHED] {path.name} -> {document_id} "
+            f"({len(clause_rows)} clauses, {stats.get('views', 0)} vectors)",
+            flush=True,
+        )
 
         # 9. Sync into LangChain PGVector tables (documents & document_chunks)
         try:
@@ -416,20 +476,63 @@ def ingest_internal_pdf(pdf_path: Path | str) -> dict:
         except Exception as exc:
             logger.debug("LangChain PGVector tables sync optional: %s", exc)
 
-    return {
-        "document_id": document_id,
-        "version_id": version_id,
-        "title": meta["title"],
-        "clauses": len(clause_rows),
-        "obligations": len(obl_rows),
-        "views_indexed": stats.get("views", 0),
-        "status": "effective",
-    }
+        return {
+            "document_id": document_id,
+            "version_id": version_id,
+            "title": meta["title"],
+            "clauses": len(clause_rows),
+            "obligations": len(obl_rows),
+            "views_indexed": stats.get("views", 0),
+            "status": "effective",
+        }
+
+
+def ingest_internal_pdf(pdf_path: Path | str) -> dict:
+    """Parse an internal document PDF and ingest its clauses and vectors into vectorDB."""
+    path = Path(pdf_path).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"PDF file not found: {path}")
+
+    logger.info(">>> [INGESTING] Processing file: %s (%d bytes)", path.name, path.stat().st_size)
+    print(f"\n>>> [INGEST] Processing file: {path.name}", flush=True)
+
+    set_current_ingest_job(
+        is_processing=True,
+        filename=path.name,
+        status="processing",
+        message=f"Đang đọc và phân tích cấu trúc: {path.name}",
+        started_at=datetime.now(UTC).isoformat(),
+        error=None,
+    )
+    try:
+        res = _do_ingest_internal_pdf(path)
+        set_current_ingest_job(
+            is_processing=False,
+            status="completed",
+            completed_at=datetime.now(UTC).isoformat(),
+            message=(
+                f"Nạp thành công {res['document_id']} ({res['clauses']} điều khoản, "
+                f"{res['views_indexed']} vector index)"
+            ),
+            result=res,
+            error=None,
+        )
+        return res
+    except Exception as exc:
+        set_current_ingest_job(
+            is_processing=False,
+            status="failed",
+            completed_at=datetime.now(UTC).isoformat(),
+            message=f"Lỗi nạp {path.name}: {exc}",
+            error=str(exc),
+        )
+        raise
 
 
 def find_data_dir() -> Path:
     """Locate the internal documents data directory."""
     candidates = (
+        Path("/data"),
         Path("../data"),
         Path("./data"),
         Path("data"),
@@ -456,23 +559,69 @@ def ingest_all(targets: list[str] | None = None) -> list[dict]:
         files = sorted(data_dir.glob("*.pdf"))
 
     if not files:
-        print("No internal PDF documents found to ingest.")
+        logger.warning("No internal PDF documents found to ingest.")
         return []
 
-    print(f"Found {len(files)} internal document(s) to ingest into VectorDB...")
+    total = len(files)
+    set_current_ingest_job(
+        is_processing=True,
+        filename=files[0].name if files else None,
+        status="processing",
+        progress=f"0/{total}",
+        message=f"Đang tự động nạp {total} tài liệu nội bộ...",
+        started_at=datetime.now(UTC).isoformat(),
+        error=None,
+    )
+    logger.info("Found %d internal document(s) to ingest into VectorDB...", total)
+    print(
+        f"\n=======================================================\n"
+        f"Found {total} internal document(s) to ingest into VectorDB\n"
+        f"=======================================================\n",
+        flush=True,
+    )
     results = []
-    for f in files:
-        print(f"  → Ingesting {f.name}...", end=" ", flush=True)
+    for idx, f in enumerate(files, 1):
+        set_current_ingest_job(
+            filename=f.name,
+            progress=f"{idx}/{total}",
+            message=f"[{idx}/{total}] Đang nạp: {f.name}",
+        )
+        logger.info("[%d/%d] Starting ingest for internal document: %s", idx, total, f.name)
+        print(f">>> [{idx}/{total}] Starting ingest: {f.name}", flush=True)
         try:
             res = ingest_internal_pdf(f)
             results.append(res)
             d_id, n_c, n_v = res["document_id"], res["clauses"], res["views_indexed"]
-            print(f"OK ({d_id}, {n_c} clauses, {n_v} views indexed)")
+            logger.info(
+                "[%d/%d] Successfully ingested %s: %s (%d clauses, %d views indexed)",
+                idx,
+                total,
+                f.name,
+                d_id,
+                n_c,
+                n_v,
+            )
+            print(
+                f">>> [{idx}/{total}] COMPLETED: {f.name} -> {d_id} "
+                f"({n_c} clauses, {n_v} vectors)\n",
+                flush=True,
+            )
         except Exception as exc:
-            print(f"FAILED: {exc}")
-            logger.exception("Failed to ingest %s: %s", f, exc)
+            logger.exception("[%d/%d] Failed to ingest %s: %s", idx, total, f, exc)
+            print(f"!!! [{idx}/{total}] FAILED: {f.name} - error: {exc}\n", flush=True)
 
-    print(f"\nSuccessfully ingested {len(results)}/{len(files)} document(s) into VectorDB.")
+    set_current_ingest_job(
+        is_processing=False,
+        status="completed",
+        completed_at=datetime.now(UTC).isoformat(),
+        message=f"Đã hoàn thành nạp {len(results)}/{total} tài liệu nội bộ",
+        progress=f"{total}/{total}",
+    )
+    logger.info("Successfully ingested %d/%d document(s) into VectorDB.", len(results), total)
+    print(
+        f"=== [INGEST DONE] Successfully ingested {len(results)}/{total} documents ===\n",
+        flush=True,
+    )
     return results
 
 
