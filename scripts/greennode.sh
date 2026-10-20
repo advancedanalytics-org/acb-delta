@@ -106,7 +106,7 @@ cmd_deploy() {
     sudo $COMPOSE_CMD down -v || true
 
     # Build and start all services (frontend listens on 80/443; other services are internal)
-    sudo $COMPOSE_CMD up -d --build --wait
+    # sudo $COMPOSE_CMD up -d --build --wait
 
     # Seed baseline evaluation run so the dashboard is populated
     sudo $COMPOSE_CMD exec -T api python -m app.evaluation.seed || true
