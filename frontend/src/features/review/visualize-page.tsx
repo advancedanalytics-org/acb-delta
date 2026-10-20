@@ -101,15 +101,62 @@ export function extractArticleInfo(
 ): { articleKey: string; articleTitle: string } {
   const trimmed = location.trim()
 
-  // 1. Trường hợp dạng "Điều X, khoản Y" hoặc "Điều X. Tiêu đề..."
+  // 1. Trường hợp có dấu hai chấm ":", tách phần định danh vị trí và phần nội dung tiêu đề
+  if (trimmed.includes(':')) {
+    const colonIdx = trimmed.indexOf(':')
+    const locPrefix = trimmed.slice(0, colonIdx).trim()
+    const contentTitle = trimmed.slice(colonIdx + 1).trim()
+
+    // Tìm số Điều từ phần tiền tố (e.g. "Điều 5, khoản 1" -> 5, "Điều 14" -> 14)
+    const dieuMatch = locPrefix.match(/^Điều\s+(\d+)/i)
+    if (dieuMatch) {
+      const num = dieuMatch[1]
+      const articleKey = `Điều ${num}`
+      const articleTitle = contentTitle ? `Điều ${num}: ${contentTitle}` : `Điều ${num}`
+      return { articleKey, articleTitle }
+    }
+
+    // Trường hợp dạng "2.2" hoặc "14.5" trước dấu hai chấm
+    const numDotMatch = locPrefix.match(/^(\d+)(?:\.[\w.]+)?$/)
+    if (numDotMatch) {
+      const num = numDotMatch[1]
+      const articleKey = `Điều ${num}`
+      const articleTitle = contentTitle ? `Điều ${num}: ${contentTitle}` : `Điều ${num}`
+      return { articleKey, articleTitle }
+    }
+
+    // Trường hợp "Khoản 14.5" hoặc "Khoản 5"
+    const khoanMatch = locPrefix.match(/khoản\s*(\d+)(?:\.(\d+))?/i)
+    if (khoanMatch) {
+      const num = khoanMatch[1]
+      const articleKey = `Điều ${num}`
+      const articleTitle = contentTitle ? `Điều ${num}: ${contentTitle}` : `Điều ${num}`
+      return { articleKey, articleTitle }
+    }
+
+    if (/^qd\b/i.test(locPrefix)) {
+      return {
+        articleKey: 'Quyết định',
+        articleTitle: contentTitle ? `Quyết định: ${contentTitle}` : 'Quyết định ban hành',
+      }
+    }
+  }
+
+  // 2. Trường hợp dạng "Điều X, khoản Y" hoặc "Điều X. Tiêu đề..." không có dấu ":"
   const dieuMatch = trimmed.match(/^Điều\s+(\d+)(?:[.,\s:]+(.+))?/i)
   if (dieuMatch) {
     const num = dieuMatch[1]
     let title = dieuMatch[2]?.trim()
 
-    // Bỏ qua nếu phần sau chỉ là "khoản Y"
+    // Xử lý nếu phần sau chứa khoản, ví dụ "khoản 1. Tiêu đề", "khoản 1: Tiêu đề" hoặc chỉ "khoản 1"
     if (title && /^khoản\b/i.test(title)) {
-      title = ''
+      if (title.includes(':')) {
+        title = title.split(':').slice(1).join(':').trim()
+      } else if (/^khoản\s*[\d.]+\s*[-–.]\s*(.+)/i.test(title)) {
+        title = title.replace(/^khoản\s*[\d.]+\s*[-–.]\s*/i, '').trim()
+      } else {
+        title = ''
+      }
     }
 
     // Tra cứu tiêu đề Điều chính thức nếu chưa có
@@ -122,12 +169,22 @@ export function extractArticleInfo(
     return { articleKey, articleTitle }
   }
 
-  // 2. Trường hợp dạng "2.2. Đối tượng áp dụng" hoặc "5.6.d"
+  // 3. Trường hợp dạng "2.2. Đối tượng áp dụng" hoặc "5.6.d"
   const numberDotMatch = trimmed.match(/^(\d+)(?:\.[\w.]+)?(?:\s*[-–.:]\s*(.+))?$/)
   if (numberDotMatch) {
     const num = numberDotMatch[1]
     let title = numberDotMatch[2]?.trim()
 
+    if (title && /^khoản\b/i.test(title)) {
+      if (title.includes(':')) {
+        title = title.split(':').slice(1).join(':').trim()
+      } else if (/^khoản\s*[\d.]+\s*[-–.]\s*(.+)/i.test(title)) {
+        title = title.replace(/^khoản\s*[\d.]+\s*[-–.]\s*/i, '').trim()
+      } else {
+        title = ''
+      }
+    }
+
     // Tra cứu tiêu đề Điều chính thức nếu chưa có
     if (!title && docId && KNOWN_ARTICLE_TITLES[docId]?.[num]) {
       title = KNOWN_ARTICLE_TITLES[docId][num]
@@ -138,7 +195,7 @@ export function extractArticleInfo(
     return { articleKey, articleTitle }
   }
 
-  // 3. Trường hợp dạng "QD.1" hoặc "QD.2"
+  // 4. Trường hợp dạng "QD.1" hoặc "QD.2"
   if (/^qd\b/i.test(trimmed)) {
     return {
       articleKey: 'Quyết định',
