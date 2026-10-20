@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
@@ -27,6 +28,34 @@ from app.services.vector_store import LangChainPGVectorStore
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+def safe_name(name: str, fallback: str) -> str:
+    """One path segment from a client-supplied name: no directories, no `..`, no odd characters."""
+    base = name.replace("\\", "/").rsplit("/", 1)[-1]
+    cleaned = re.sub(r"[^\w.\-]+", "_", base).strip("._")
+    return cleaned or fallback
+
+
+async def read_pdf_upload(file: UploadFile, fallback_name: str) -> tuple[bytes, str]:
+    """Read an uploaded PDF with a size cap and a PDF header check; return it with a safe name."""
+    filename = safe_name(file.filename or "", fallback_name)
+    if not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+    limit = get_settings().max_upload_mb * 1024 * 1024
+    content = await file.read(limit + 1)
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Uploaded file is empty")
+    if len(content) > limit:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            f"File larger than {get_settings().max_upload_mb} MB",
+        )
+    if not content.startswith(b"%PDF-"):
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "File must be a PDF document (missing %PDF-)"
+        )
+    return content, filename
 
 
 def get_storage_service() -> StorageService:
@@ -84,19 +113,7 @@ async def upload_document(
     effective_date: Annotated[str | None, Form(description="Optional effective date")] = None,
 ) -> IngestResponse:
     """Upload a PDF, chunk into legal structural units, and ingest into pgvector."""
-    filename = file.filename or "uploaded_document.pdf"
-    if not (filename.lower().endswith(".pdf") or file.content_type == "application/pdf"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be a PDF document (.pdf)",
-        )
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file is empty",
-        )
+    content, filename = await read_pdf_upload(file, "uploaded_document.pdf")
 
     # Normalize optional form fields
     clean_code = code.strip() if code and code.strip() else None
@@ -124,8 +141,6 @@ async def upload_document(
             detail=f"Failed to parse and chunk PDF: {exc}",
         ) from exc
 
-    import re
-
     final_code = clean_code or inferred_meta.code or "VBPL-01"
     if clean_doc_id:
         final_doc_id = clean_doc_id
@@ -145,7 +160,7 @@ async def upload_document(
     final_date = clean_effective_date or inferred_meta.effective_date
 
     # Upload raw PDF to object storage (MinIO / vStorage / local fallback)
-    storage_key = f"{final_doc_id}/{filename}"
+    storage_key = f"{safe_name(final_doc_id, 'doc-unknown')}/{filename}"
     pdf_url = storage.upload_file(content=content, key=storage_key)
 
     # Generate embeddings for each chunk via LangChain Embeddings
@@ -231,19 +246,7 @@ async def ingest_internal_document(
     ],
 ) -> dict:
     """Ingest an internal bank document in background using RIA legal parser and vector indexing."""
-    filename = file.filename or "internal_document.pdf"
-    if not (filename.lower().endswith(".pdf") or file.content_type == "application/pdf"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tập tin tải lên phải là định dạng PDF (.pdf)",
-        )
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tập tin tải lên rỗng",
-        )
+    content, filename = await read_pdf_upload(file, "internal_document.pdf")
 
     import tempfile
     import threading
@@ -276,7 +279,7 @@ async def ingest_internal_document(
                     for candidate_dir in [Path("data"), Path("../data"), Path("/data")]:
                         if candidate_dir.is_dir():
                             doc_id = res.get("document_id") or Path(filename).stem
-                            target_file = candidate_dir / f"{doc_id}.pdf"
+                            target_file = candidate_dir / f"{safe_name(doc_id, 'document')}.pdf"
                             if not target_file.exists():
                                 target_file.write_bytes(content)
                 except Exception as copy_err:

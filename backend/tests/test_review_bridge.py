@@ -706,7 +706,7 @@ def test_inbox_and_review_while_analysis_runs_or_fails(ria_client):
 
 
 @needs_db
-def test_delete_reviewed_regulation_removes_package_and_decisions(ria_client, drafter):
+def test_delete_regulation_with_decisions_is_refused_and_keeps_audit_trail(ria_client, drafter):
     from app.db import get_engine
 
     job_id = _analyze(ria_client)
@@ -722,17 +722,15 @@ def test_delete_reviewed_regulation_removes_package_and_decisions(ria_client, dr
     assert row["status"] in ("awaiting_review", "done")
 
     response = ria_client.delete(f"/api/regulations/{row['version_id']}")
-    assert response.status_code == 200, response.text
+    assert response.status_code == 409, response.text
     with get_engine().connect() as conn:
         left = conn.execute(
             text(
                 "SELECT (SELECT count(*) FROM vbpls WHERE id = :v), "
-                "(SELECT count(*) FROM impacts WHERE vbpl_id = :v), "
                 "(SELECT count(*) FROM decisions WHERE id = :d)"
             ),
             {"v": body["vbpl_id"], "d": decided.json()["id"]},
         ).one()
-    assert tuple(left) == (0, 0, 0)
-    assert all(
-        r["version_id"] != row["version_id"] for r in ria_client.get("/api/regulations").json()
-    )
+    assert tuple(left) == (1, 1)
+    audit_ids = [e["id"] for e in ria_client.get("/api/audit").json()]
+    assert decided.json()["id"] in audit_ids

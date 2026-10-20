@@ -15,6 +15,10 @@ def _omit_none(value: object) -> bool:
     return value is None
 
 
+# Longest VBPL text the agent is asked to analyse (a long circular is ~150k characters).
+MAX_VBPL_TEXT_CHARS = 300_000
+
+
 class CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
 
@@ -26,7 +30,7 @@ class VbplCreate(CamelModel):
     issued_date: date
     effective_date: date
     summary: str
-    text: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=MAX_VBPL_TEXT_CHARS)
 
 
 class VbplOut(CamelModel):

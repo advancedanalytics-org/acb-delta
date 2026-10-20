@@ -2,9 +2,11 @@
 
 import logging
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.routers import (
@@ -78,11 +80,44 @@ async def lifespan(app: FastAPI):
     yield
 
 
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def is_cross_site_write(request: Request, allowed_origins: list[str]) -> bool:
+    """True for a state-changing request a browser sent from another site.
+
+    Browsers resend basic-auth credentials automatically, so without this check any page the
+    reviewer opens could submit forms (uploads, decisions, deletes) to the API. Requests without
+    browser headers (curl, scripts, the api's own clients) are not affected.
+    """
+    if request.method in SAFE_METHODS:
+        return False
+    origin = request.headers.get("origin")
+    if origin and origin in allowed_origins:
+        return False
+    fetch_site = request.headers.get("sec-fetch-site")
+    if fetch_site:
+        return fetch_site not in ("same-origin", "none")
+    # Older browsers: no Sec-Fetch-Site, so compare the Origin host with the Host header.
+    if not origin or origin == "null":
+        return origin == "null"
+    host = (request.headers.get("host") or "").split(":")[0]
+    return urlsplit(origin).hostname != host
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="acb-delta API", version="0.1.0", lifespan=lifespan)
+    allowed_origins = get_settings().cors_origins
+
+    @app.middleware("http")
+    async def reject_cross_site_writes(request: Request, call_next):
+        if is_cross_site_write(request, allowed_origins):
+            return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
+        return await call_next(request)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=get_settings().cors_origins,
+        allow_origins=allowed_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
