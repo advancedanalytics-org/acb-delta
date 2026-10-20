@@ -160,4 +160,18 @@ export const evalRuns: EvalRun[] = [
       system: { latencySeconds: 51.2, costUsdPerDocument: 0.238 },
     },
   },
+  {
+    id: 'run-feedback-2',
+    label: 'Sau phản hồi vòng 2',
+    createdAt: '2026-10-19T21:40:00+07:00',
+    datasetSize: 73,
+    note: 'DPO vòng 2 + few-shot mở rộng; thêm 24 quyết định sửa / từ chối.',
+    metrics: {
+      extraction: { precision: 0.903, recall: 0.858 },
+      retrieval: { recallAtK: 0.832, k: 5, mrr: 0.701 },
+      impact: { precision: 0.821, recall: 0.915, f1: 0.865 },
+      amendment: { judgeScore: 4.12, hitlAcceptRate: 0.742 },
+      system: { latencySeconds: 49.5, costUsdPerDocument: 0.231 },
+    },
+  },
 ]
