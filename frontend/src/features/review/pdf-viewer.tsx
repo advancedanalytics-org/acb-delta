@@ -68,6 +68,7 @@ interface PdfViewerProps {
   document: InternalDocument
   impacts: Impact[]
   selectedId: string | undefined
+  selectionTrigger?: number
   onSelect: (impactId: string) => void
   onDecide?: (impact: Impact, request: DecisionRequest) => void
   disabled?: boolean
@@ -1013,6 +1014,7 @@ export function PdfViewer({
   document,
   impacts,
   selectedId,
+  selectionTrigger,
   onSelect,
   onDecide,
   disabled,
@@ -1145,21 +1147,40 @@ export function PdfViewer({
   const pageWidth = Math.min(Math.max(width - 2 * PAGE_GAP, 0), MAX_PAGE_WIDTH)
   const selected = impacts.find((impact) => impact.id === selectedId)
   const selectedPage = selected ? (selected.page ?? (selected.bboxes && selected.bboxes.length > 0 ? 1 : null)) : null
-  const selectedPageReady = selectedPage != null
+
+  const scrollToSelected = useCallback((smooth: boolean = true) => {
+    if (!selectedId) return false
+    const el = selectedRef.current || window.document.getElementById(`impact-highlight-${selectedId}`)
+    if (el) {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      el.scrollIntoView({ block: 'center', behavior: !smooth || reduceMotion ? 'auto' : 'smooth' })
+      return true
+    }
+    return false
+  }, [selectedId])
 
   useEffect(() => {
     if (!selectedId) {
       lastScrolledIdRef.current = null
       return
     }
-    if (!selectedPageReady) return
-    if (lastScrolledIdRef.current === selectedId) return
-    lastScrolledIdRef.current = selectedId
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    selectedRef.current?.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
-  }, [selectedId, selectedPageReady])
 
-  // When selection changes, anchor hover card to the selected impact
+    // Try scrolling immediately if element is already rendered
+    if (scrollToSelected()) return
+
+    // If element is not in DOM yet (e.g. PDF page canvas is still rendering), poll until it mounts
+    let attempts = 0
+    const timer = setInterval(() => {
+      attempts++
+      if (scrollToSelected() || attempts >= 30) {
+        clearInterval(timer)
+      }
+    }, 100)
+
+    return () => clearInterval(timer)
+  }, [selectedId, selectionTrigger, scrollToSelected])
+
+  // When selection changes or user clicks card, anchor hover card to the selected impact
   useEffect(() => {
     if (!selectedId || !selected || selectedPage == null) {
       if (!selectedId) {
@@ -1174,7 +1195,6 @@ export function PdfViewer({
       return
     }
     const pageNumber = selectedPage
-    if (hoveredImpactIdRef.current === selected.id) return
     const scale = getPageScale(pageNumber, pageWidth)
     if (scale > 0) {
       hoveredImpactIdRef.current = selected.id
@@ -1188,7 +1208,7 @@ export function PdfViewer({
         height: (bbox.y1 - bbox.y0) * scale,
       })
     }
-  }, [selectedId, selectedPage, pageWidth, getPageScale, selected])
+  }, [selectedId, selectedPage, pageWidth, getPageScale, selected, selectionTrigger])
 
   return (
     <div ref={ref} className="h-full overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable] bg-muted/60 py-4">

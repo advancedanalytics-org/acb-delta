@@ -245,6 +245,7 @@ export interface IngestInternalResult {
   clauses?: number
   obligations?: number
   views_indexed?: number
+  unchanged?: boolean
 }
 
 export interface IngestInternalStatus {

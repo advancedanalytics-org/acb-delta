@@ -9,6 +9,7 @@
 #   ./scripts/greennode.sh logs [service]
 #   ./scripts/greennode.sh ssh       connect to the vServer via interactive SSH
 #   ./scripts/greennode.sh check     verify LLM, embeddings, reranker, and agent connectivity
+#   ./scripts/greennode.sh down      stop and remove containers and volumes (-v)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -101,6 +102,9 @@ cmd_deploy() {
       sudo sed -i 's/CHANGEME/'\"\$(openssl rand -hex 12)\"'/g' .env || true
     fi
 
+    # Stop and remove existing containers and volumes before starting fresh
+    sudo $COMPOSE_CMD down -v || true
+
     # Build and start all services (frontend listens on 80/443; other services are internal)
     sudo $COMPOSE_CMD up -d --build --wait
 
@@ -155,6 +159,7 @@ usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
 case "${1:-}" in
   setup) cmd_setup ;;
   deploy) cmd_deploy ;;
+  down) remote "cd $REMOTE_DIR && sudo $COMPOSE_CMD down -v" ;;
   status) remote "cd $REMOTE_DIR && sudo $COMPOSE_CMD ps -a --format 'table {{.Service}}\t{{.Status}}' && curl -sk https://localhost/api/health/ready || curl -s http://localhost/api/health/ready; echo" ;;
   login) cmd_login ;;
   logs) shift; remote "cd $REMOTE_DIR && sudo $COMPOSE_CMD logs --tail 100 $*" ;;

@@ -128,7 +128,10 @@ export function ReviewPage() {
     )
   }
 
-  const select = (impactId: string) =>
+  const [selectionTrigger, setSelectionTrigger] = useState(0)
+
+  const select = (impactId: string) => {
+    setSelectionTrigger((prev) => prev + 1)
     setParams(
       (current) => {
         current.set('impact', impactId)
@@ -140,6 +143,7 @@ export function ReviewPage() {
       },
       { replace: true },
     )
+  }
 
   const step = (offset: number) => {
     if (visible.length === 0) return
@@ -530,6 +534,7 @@ export function ReviewPage() {
               document={selectedDoc}
               impacts={docImpacts}
               selectedId={requestedId ?? undefined}
+              selectionTrigger={selectionTrigger}
               onSelect={select}
               onDecide={(impact, request) => onDecide(impact, request)}
               disabled={!reviewer || decide.isPending}

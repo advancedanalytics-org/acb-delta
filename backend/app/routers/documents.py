@@ -269,16 +269,17 @@ async def ingest_internal_document(
             from app.ria.ingest_internal import ingest_internal_pdf
 
             res = ingest_internal_pdf(tmp_path)
-            # Also save to data/ if dir exists for persistence
-            try:
-                for candidate_dir in [Path("data"), Path("../data"), Path("/data")]:
-                    if candidate_dir.is_dir():
-                        doc_id = res.get("document_id") or Path(filename).stem
-                        target_file = candidate_dir / f"{doc_id}.pdf"
-                        if not target_file.exists():
-                            target_file.write_bytes(content)
-            except Exception as copy_err:
-                logger.debug("Optional copy to data/ skipped: %s", copy_err)
+            # Also save to data/ if dir exists for persistence (only if new/changed)
+            if not res.get("unchanged"):
+                try:
+                    for candidate_dir in [Path("data"), Path("../data"), Path("/data")]:
+                        if candidate_dir.is_dir():
+                            doc_id = res.get("document_id") or Path(filename).stem
+                            target_file = candidate_dir / f"{doc_id}.pdf"
+                            if not target_file.exists():
+                                target_file.write_bytes(content)
+                except Exception as copy_err:
+                    logger.debug("Optional copy to data/ skipped: %s", copy_err)
         except Exception as exc:
             logger.exception("Failed to ingest internal document %s: %s", filename, exc)
 

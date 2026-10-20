@@ -174,6 +174,57 @@ def upload_to_minio(doc_id: str, filename: str, pdf_bytes: bytes) -> str | None:
 def _do_ingest_internal_pdf(path: Path) -> dict:
     pdf_bytes = path.read_bytes()
     checksum = f"sha256:{hashlib.sha256(pdf_bytes).hexdigest()}"
+
+    ensure_schema()
+    with get_engine().connect() as conn:
+        existing = (
+            conn.execute(
+                text(
+                    "SELECT v.version_id, v.document_id, v.file_name, d.title, d.doc_type, "
+                    "(SELECT count(*) FROM clause WHERE version_id = v.version_id) AS clause_count "
+                    "FROM document_version v "
+                    "JOIN document d USING (document_id) "
+                    "WHERE v.checksum = :c"
+                ),
+                {"c": checksum},
+            )
+            .mappings()
+            .first()
+        )
+        if existing:
+            existing_doc_id = existing["document_id"]
+            existing_title = existing["title"]
+            existing_file = existing["file_name"]
+
+            if existing_file and existing_title and existing_title != existing_doc_id:
+                doc_label = f'"{existing_title}" ({existing_file})'
+            elif existing_title:
+                doc_label = f'"{existing_title}"'
+            elif existing_file:
+                doc_label = f'"{existing_file}"'
+            else:
+                doc_label = f'"{existing_doc_id}"'
+
+            msg = f"Nội dung tệp không có thay đổi so với tài liệu {doc_label}."
+            logger.info(
+                "[%s] Checksum matches existing version %s (%s). Skipping ingest.",
+                path.name,
+                existing["version_id"],
+                doc_label,
+            )
+            print(f">>> [INGEST SKIPPED] {path.name}: {msg}", flush=True)
+            return {
+                "document_id": existing_doc_id,
+                "version_id": existing["version_id"],
+                "title": existing_title or existing_doc_id,
+                "clauses": existing["clause_count"] or 0,
+                "obligations": 0,
+                "views_indexed": 0,
+                "status": "unchanged",
+                "unchanged": True,
+                "message": msg,
+            }
+
     meta = extract_internal_metadata(pdf_bytes, path.name)
     logger.info(
         "[%s] Metadata: %s, title='%s', pages=%d",
@@ -196,7 +247,6 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
     s3_uri = upload_to_minio(document_id, path.name, pdf_bytes)
     source_uri = s3_uri or str(path)
 
-    ensure_schema()
     with get_engine().begin() as conn:
         # 2. Upsert document table
         conn.execute(
@@ -230,7 +280,9 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
                 "status = 'effective', processing_status = 'PARSED', "
                 "valid_from = EXCLUDED.valid_from, page_count = EXCLUDED.page_count, "
                 "content = COALESCE(EXCLUDED.content, document_version.content), "
-                "source_uri = EXCLUDED.source_uri"
+                "source_uri = EXCLUDED.source_uri, "
+                "checksum = EXCLUDED.checksum, "
+                "file_name = EXCLUDED.file_name"
             ),
             {
                 "v": version_id,
@@ -506,14 +558,15 @@ def ingest_internal_pdf(pdf_path: Path | str) -> dict:
     )
     try:
         res = _do_ingest_internal_pdf(path)
+        message = res.get("message") or (
+            f"Nạp thành công {res['document_id']} ({res['clauses']} điều khoản, "
+            f"{res['views_indexed']} vector index)"
+        )
         set_current_ingest_job(
             is_processing=False,
             status="completed",
             completed_at=datetime.now(UTC).isoformat(),
-            message=(
-                f"Nạp thành công {res['document_id']} ({res['clauses']} điều khoản, "
-                f"{res['views_indexed']} vector index)"
-            ),
+            message=message,
             result=res,
             error=None,
         )
