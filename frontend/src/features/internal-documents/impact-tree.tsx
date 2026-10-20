@@ -1,20 +1,21 @@
 import {
+  ArrowUpRight,
   Check,
   FileText,
+  Layers,
   type LucideIcon,
   Maximize2,
   Minimize2,
   Pencil,
   Plus,
   RotateCcw,
-  Settings,
   Sparkles,
   Trash2,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import type { InternalDocument } from '@/api/types'
+import type { DocumentClause, InternalDocument } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { buildTree, suggestTree, type TreeLevel, type TreeNode } from './impact-tree-data'
@@ -22,7 +23,7 @@ import { buildTree, suggestTree, type TreeLevel, type TreeNode } from './impact-
 const LEVEL: Record<TreeLevel, { card: string; badge: string; Icon: LucideIcon }> = {
   1: { card: 'border-blue-500/50 bg-blue-500/5', badge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400', Icon: FileText },
   2: { card: 'border-emerald-500/50 bg-emerald-500/5', badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400', Icon: FileText },
-  3: { card: 'border-amber-500/50 bg-amber-500/5', badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400', Icon: Settings },
+  3: { card: 'border-amber-500/50 bg-amber-500/5', badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400', Icon: Layers },
   4: { card: 'border-rose-500/50 bg-rose-500/5', badge: 'bg-rose-500/10 text-rose-600 dark:text-rose-400', Icon: FileText },
 }
 
@@ -56,14 +57,27 @@ function removeNode(tree: TreeNode, id: string): TreeNode {
 
 const storageKey = (docId: string) => `impact-tree:${docId}`
 
-export function ImpactTree({ doc, docs }: { doc: InternalDocument; docs: InternalDocument[] }) {
+export function ImpactTree({
+  doc,
+  docs,
+  activeDocId,
+  clauses,
+  onOpenClause,
+}: {
+  doc: InternalDocument
+  docs: InternalDocument[]
+  activeDocId: string
+  clauses: DocumentClause[]
+  onOpenClause: (clauseId: string) => void
+}) {
   const [full, setFull] = useState(false)
   const [editing, setEditing] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [tree, setTree] = useState<TreeNode>(() => buildTree(doc, { full: false, docs }))
+  const [tree, setTree] = useState<TreeNode>(() => buildTree(doc, { full: false, docs, activeDocId, clauses }))
 
-  // Load the saved branch for this document (or a fresh one) when the selection changes.
+  // Load the saved (user-edited) branch for this document, else build from the real clauses.
+  // Re-runs when the clauses arrive so the tree upgrades from the fallback to the real structure.
   useEffect(() => {
     let saved: TreeNode | null = null
     try {
@@ -72,39 +86,43 @@ export function ImpactTree({ doc, docs }: { doc: InternalDocument; docs: Interna
     } catch {
       saved = null
     }
-    setTree(saved ?? buildTree(doc, { full: false, docs }))
+    setTree(saved ?? buildTree(doc, { full: false, docs, activeDocId, clauses }))
     setEditingId(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc.id])
+  }, [doc.id, clauses])
 
-  // Persist the focused branch as it is edited.
-  useEffect(() => {
+  const fullTree = useMemo(
+    () => buildTree(doc, { full: true, docs, activeDocId, clauses }),
+    [doc, docs, activeDocId, clauses],
+  )
+  const shown = full ? fullTree : tree
+
+  // Persist only deliberate edits (not the auto-built tree), so the real structure can still replace
+  // a stale fallback when clauses load, while manual edits survive a reload.
+  const persist = (next: TreeNode) => {
+    setTree(next)
     try {
-      localStorage.setItem(storageKey(doc.id), JSON.stringify(tree))
+      localStorage.setItem(storageKey(doc.id), JSON.stringify(next))
     } catch {
       // storage blocked; keep the in-memory tree
     }
-  }, [tree, doc.id])
-
-  const fullTree = useMemo(() => buildTree(doc, { full: true, docs }), [doc, docs])
-  const shown = full ? fullTree : tree
+  }
 
   const resetBranch = () => {
-    const fresh = buildTree(doc, { full: false, docs })
-    setTree(fresh)
     setEditingId(null)
     try {
       localStorage.removeItem(storageKey(doc.id))
     } catch {
       // ignore
     }
+    setTree(buildTree(doc, { full: false, docs, activeDocId, clauses }))
   }
 
   const runAiSuggest = () => {
     if (aiLoading) return
     setAiLoading(true)
     window.setTimeout(() => {
-      setTree((current) => suggestTree(current))
+      persist(suggestTree(tree))
       setAiLoading(false)
     }, 1200)
   }
@@ -113,9 +131,10 @@ export function ImpactTree({ doc, docs }: { doc: InternalDocument; docs: Interna
     editing: editing && !full,
     editingId,
     setEditingId,
-    onRename: (id: string, label: string) => setTree((t) => renameNode(t, id, label)),
-    onAdd: (id: string) => setTree((t) => addChild(t, id)),
-    onRemove: (id: string) => setTree((t) => removeNode(t, id)),
+    onRename: (id: string, label: string) => persist(renameNode(tree, id, label)),
+    onAdd: (id: string) => persist(addChild(tree, id)),
+    onRemove: (id: string) => persist(removeNode(tree, id)),
+    onOpenClause,
   }
 
   return (
@@ -177,6 +196,7 @@ interface BranchProps {
   onRename: (id: string, label: string) => void
   onAdd: (id: string) => void
   onRemove: (id: string) => void
+  onOpenClause: (clauseId: string) => void
 }
 
 function Branch({ node, ...rest }: BranchProps) {
@@ -194,7 +214,7 @@ function Branch({ node, ...rest }: BranchProps) {
   )
 }
 
-function NodeCard({ node, editing, editingId, setEditingId, onRename, onAdd, onRemove }: BranchProps) {
+function NodeCard({ node, editing, editingId, setEditingId, onRename, onAdd, onRemove, onOpenClause }: BranchProps) {
   const { card, badge, Icon } = LEVEL[node.level]
   const isEditing = editingId === node.id
   const [draft, setDraft] = useState(node.label)
@@ -209,14 +229,33 @@ function NodeCard({ node, editing, editingId, setEditingId, onRename, onAdd, onR
     setEditingId(null)
   }
 
+  const canOpen = !editing && Boolean(node.clauseId)
+  const open = () => node.clauseId && onOpenClause(node.clauseId)
+
   return (
     <div
       className={cn(
-        'relative z-10 w-44 rounded-xl border-2 p-3 text-center shadow-sm transition-colors',
+        'relative z-10 w-44 rounded-xl border-2 p-3 text-center shadow-sm transition-all',
         card,
         node.isNew && 'ring-2 ring-primary/40',
+        canOpen && 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-primary/50',
       )}
+      onClick={canOpen ? open : undefined}
+      role={canOpen ? 'button' : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      onKeyDown={
+        canOpen
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                open()
+              }
+            }
+          : undefined
+      }
+      title={canOpen ? 'Mở trong Nội dung chi tiết' : undefined}
     >
+      {canOpen && <ArrowUpRight className="absolute right-1.5 top-1.5 size-3.5 text-muted-foreground" aria-hidden />}
       <div className="flex items-center justify-center gap-2">
         <span className={cn('flex size-6 shrink-0 items-center justify-center rounded-md', badge)}>
           <Icon className="size-3.5" aria-hidden />

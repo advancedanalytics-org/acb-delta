@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { ImpactTree } from './impact-tree'
+import { groupClauses } from './impact-tree-data'
 import {
   useDocumentClauses,
   useDocuments,
@@ -34,16 +35,6 @@ import {
 } from '@/hooks/queries'
 import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
-
-interface ArticleGroup {
-  id: string
-  numbering: string
-  heading?: string | null
-  page?: number | null
-  chapterHeading?: string | null
-  clauses: DocumentClause[]
-  matchingClauses?: DocumentClause[]
-}
 
 export function InternalDocumentsPage() {
   const { data: documents, isLoading: isLoadingDocs, refetch: refetchDocs } = useDocuments()
@@ -55,6 +46,8 @@ export function InternalDocumentsPage() {
   const [ingestSuccessMessage, setIngestSuccessMessage] = useState<string | null>(null)
   const [ingestErrorMessage, setIngestErrorMessage] = useState<string | null>(null)
   const [expandedArticles, setExpandedArticles] = useState<Record<string, boolean>>({})
+  const [activeTab, setActiveTab] = useState('details')
+  const [pendingClauseId, setPendingClauseId] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const ingestDocMutation = useIngestInternalDocument()
@@ -99,47 +92,11 @@ export function InternalDocumentsPage() {
   // Query clauses for active document
   const { data: clauseData, isLoading: isLoadingClauses } = useDocumentClauses(activeDoc?.id)
 
-  // Organize clauses into Chapters & Articles
-  const { articleGroups, chapters } = useMemo(() => {
-    if (!clauseData?.clauses) return { articleGroups: [], chapters: [] }
-
-    const groups: ArticleGroup[] = []
-    const chapterList: { numbering: string; heading: string }[] = []
-    let currentChapter: string | null = null
-    let currentArticle: ArticleGroup | null = null
-
-    for (const c of clauseData.clauses) {
-      if (c.level === 'chapter') {
-        currentChapter = c.heading || `Chương ${c.numbering}`
-        chapterList.push({ numbering: c.numbering, heading: currentChapter })
-      } else if (c.level === 'article' || (!currentArticle && c.level !== 'part')) {
-        currentArticle = {
-          id: c.clause_id,
-          numbering: c.numbering,
-          heading: c.heading || (c.text.length < 80 ? c.text : `Điều ${c.numbering}`),
-          page: c.page,
-          chapterHeading: currentChapter,
-          clauses: [c],
-        }
-        groups.push(currentArticle)
-      } else if (currentArticle) {
-        currentArticle.clauses.push(c)
-      } else {
-        // Fallback article container for orphaned clauses
-        currentArticle = {
-          id: c.clause_id,
-          numbering: c.numbering,
-          heading: c.heading || `Mục ${c.numbering}`,
-          page: c.page,
-          chapterHeading: currentChapter,
-          clauses: [c],
-        }
-        groups.push(currentArticle)
-      }
-    }
-
-    return { articleGroups: groups, chapters: chapterList }
-  }, [clauseData])
+  // Organize clauses into Chapters & Articles (shared with the impact tree so node ids line up)
+  const { articleGroups, chapters } = useMemo(
+    () => (clauseData?.clauses ? groupClauses(clauseData.clauses) : { articleGroups: [], chapters: [] }),
+    [clauseData],
+  )
 
   // Obligations indexed by source clause ID
   const obligationsByClause = useMemo(() => {
@@ -196,6 +153,24 @@ export function InternalDocumentsPage() {
     for (const ag of articleGroups) next[ag.id] = false
     setExpandedArticles(next)
   }
+
+  // Open a clause from the impact tree: switch to the detail tab, expand it, then scroll to it.
+  const openClause = (clauseId: string) => {
+    setSearchClauseQuery('')
+    setExpandedArticles((prev) => ({ ...prev, [clauseId]: true }))
+    setActiveTab('details')
+    setPendingClauseId(clauseId)
+  }
+
+  useEffect(() => {
+    if (!pendingClauseId || activeTab !== 'details' || isLoadingClauses) return
+    const id = pendingClauseId
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(`article-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setPendingClauseId(null)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [pendingClauseId, activeTab, isLoadingClauses])
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -475,7 +450,7 @@ export function InternalDocumentsPage() {
             </div>
 
             {/* TABS CONTAINER */}
-            <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0 h-full overflow-hidden gap-0">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 h-full overflow-hidden gap-0">
               <div className="border-b border-border px-4 md:px-6 bg-muted/20 flex items-center justify-between shrink-0">
                 <TabsList className="bg-transparent h-11 p-0 gap-4">
                   <TabsTrigger
@@ -636,7 +611,8 @@ export function InternalDocumentsPage() {
                         return (
                           <div
                             key={group.id}
-                            className="rounded-xl border border-border bg-card shadow-xs overflow-hidden transition-all"
+                            id={`article-${group.id}`}
+                            className="rounded-xl border border-border bg-card shadow-xs overflow-hidden transition-all scroll-mt-4"
                           >
                             {/* Article Header */}
                             <div
@@ -817,7 +793,13 @@ export function InternalDocumentsPage() {
                 value="impact-tree"
                 className="flex-1 flex flex-col min-h-0 h-full overflow-hidden p-0 m-0 border-0 data-[state=active]:flex data-[state=inactive]:hidden"
               >
-                <ImpactTree doc={activeDoc} docs={documents ?? []} />
+                <ImpactTree
+                  doc={activeDoc}
+                  docs={documents ?? []}
+                  activeDocId={activeDoc.id}
+                  clauses={clauseData?.clauses ?? []}
+                  onOpenClause={openClause}
+                />
               </TabsContent>
             </Tabs>
           </>
