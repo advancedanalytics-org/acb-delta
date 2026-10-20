@@ -16,9 +16,11 @@ import {
 } from '@/components/ui/dialog'
 import { useDeleteVbpl } from '@/hooks/queries'
 
-/** Trash button + confirmation for a VBPL whose processing failed. */
+/** Trash button + confirmation for a VBPL that is not processing (failed or reviewable). */
 export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
   const [open, setOpen] = useState(false)
+  const failed = vbpl.status === 'failed'
+  const decidedCount = vbpl.impactCount - vbpl.pendingCount
   const deleteMutation = useDeleteVbpl()
 
   const handleDelete = () => {
@@ -40,7 +42,7 @@ export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
           aria-label={`Xóa ${vbpl.number}`}
-          title="Xóa văn bản bị lỗi"
+          title={failed ? 'Xóa văn bản bị lỗi' : 'Xóa văn bản'}
           className="text-muted-foreground hover:text-destructive"
         >
           <Trash2 />
@@ -50,15 +52,20 @@ export function DeleteVbplDialog({ vbpl }: { vbpl: Vbpl }) {
           whose click / Enter opens the review page. */}
       <DialogContent onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
         <DialogHeader>
-          <DialogTitle>Xóa văn bản bị lỗi?</DialogTitle>
+          <DialogTitle>{failed ? 'Xóa văn bản bị lỗi?' : 'Xóa văn bản?'}</DialogTitle>
           <DialogDescription>
             <span className="font-medium text-foreground">{vbpl.number}</span> — {vbpl.title}
             <br />
-            File gốc và toàn bộ kết quả xử lý của văn bản này sẽ bị xóa vĩnh viễn. Sau đó có thể tải lại
-            đúng file này.
+            File gốc, toàn bộ kết quả phân tích và các đề xuất chỉnh sửa của văn bản này sẽ bị xóa vĩnh viễn. Sau
+            đó có thể tải lại đúng file này.
           </DialogDescription>
         </DialogHeader>
         {vbpl.error && <p className="text-sm text-destructive">Lỗi: {vbpl.error}</p>}
+        {!failed && decidedCount > 0 && (
+          <p className="text-sm text-destructive">
+            {decidedCount}/{vbpl.impactCount} tác động đã được duyệt. Các quyết định duyệt này cũng sẽ bị xóa.
+          </p>
+        )}
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline" disabled={deleteMutation.isPending}>

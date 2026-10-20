@@ -1,8 +1,8 @@
-"""Delete a regulation version whose processing failed, so the same PDF can be uploaded again.
+"""Delete a regulation version that is not processing, so the same PDF can be uploaded again.
 
-Postgres is cleaned in one transaction (HITL package, findings, obligations, clauses, jobs, the
-version, and the document once it has no versions left). The stored original and the knowledge
-graph nodes are derived copies, removed best-effort after the commit.
+Postgres is cleaned in one transaction (HITL package with its decisions, findings, obligations,
+clauses, jobs, the version, and the document once it has no versions left). The stored original
+and the knowledge graph nodes are derived copies, removed best-effort after the commit.
 """
 
 import logging
@@ -36,7 +36,8 @@ _FINDINGS = (
 
 # Children before parents, so no foreign key is ever left dangling.
 _DELETES = [
-    f"DELETE FROM vbpls WHERE ria_job_id IN ({_JOBS})",  # impacts cascade with it
+    # Impacts and their reviewer decisions cascade with it.
+    f"DELETE FROM vbpls WHERE ria_job_id IN ({_JOBS})",
     f"DELETE FROM amendment WHERE finding_id IN ({_FINDINGS}) OR clause_id IN ({_CLAUSES})",
     f"DELETE FROM impact_finding WHERE finding_id IN ({_FINDINGS})",
     f"DELETE FROM evidence WHERE job_id IN ({_JOBS}) OR obligation_id IN ({_OBLIGATIONS}) "
@@ -55,8 +56,8 @@ _DELETES = [
 
 
 def delete_regulation_version(version_id: str) -> dict:
-    """Removes one regulation version. The caller checks that its processing failed; this
-    function refuses while a job still runs on it or a reviewer already decided on its impacts."""
+    """Removes one regulation version, reviewer decisions included. The caller checks that it
+    is not processing; this function refuses while a job still runs on it."""
     ensure_schema()
     with get_engine().begin() as conn:
         row = (
@@ -86,17 +87,6 @@ def delete_regulation_version(version_id: str) -> dict:
         ).scalar()
         if active:
             raise RemovalError(409, f"{version_id} still has a job running; wait for it to finish")
-        # Decisions are the audit trail: never delete them silently.
-        decided = conn.execute(
-            text(
-                "SELECT count(*) FROM decisions dec JOIN impacts i ON i.id = dec.impact_id "
-                f"JOIN vbpls vb ON vb.id = i.vbpl_id WHERE vb.ria_job_id IN ({_JOBS})"
-            ),
-            {"v": version_id},
-        ).scalar()
-        if decided:
-            raise RemovalError(409, f"{version_id} already has review decisions; cannot delete")
-
         for statement in _DELETES:
             conn.execute(text(statement), {"v": version_id})
         document_removed = bool(
