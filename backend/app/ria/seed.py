@@ -12,6 +12,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from app.db import get_engine
+from app.ria import graph
 from app.ria.indexing import build_index_views
 from app.ria.schema import ensure_schema
 
@@ -250,6 +251,8 @@ def seed_file(path: Path) -> dict:
             rows,
         )
         stats = build_index_views(conn, ver["version_id"], with_embeddings=True)
+        if graph.enabled():
+            stats["graph"] = graph.sync_version(conn, ver["version_id"])
     return {
         "document_id": doc["document_id"],
         "version_id": ver["version_id"],

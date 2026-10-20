@@ -295,6 +295,11 @@ export const mockApi: ApiClient = {
     return delay(decision)
   },
 
+  deleteVbpl(vbpl) {
+    store.removeVbpl(vbpl.id)
+    return delay(undefined)
+  },
+
   undoDecision(decisionId) {
     store.remove(decisionId)
     return delay(undefined)

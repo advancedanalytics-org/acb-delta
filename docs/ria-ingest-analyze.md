@@ -10,6 +10,8 @@ upload ──► DRAFT ──parse job──► PARSED ──analyze job──�
              └─ parse lỗi: version giữ DRAFT, job failed, upload lại đúng file = chạy lại parse
 ```
 
+Version lỗi (Hộp thư hiện `failed`) có thể xóa bằng `DELETE /api/regulations/{version_id}`, xem mục 4.
+
 `document_version.status` là hiệu lực pháp lý: `effective`, `pending` (chưa tới `valid_from`), `superseded` hoặc `unknown`. `processing_status` là bước workflow. Job lưu ở bảng `job` và chạy trên thread pool trong process API, vì Phase 1 không có queue. Theo dõi job qua `GET /api/jobs/{job_id}`: `status`, `stage`, `progress`, `result`, `error`.
 
 ## 1. `POST /api/regulations`: tạo văn bản pháp quy và job parse
@@ -62,6 +64,7 @@ Job parse (`ingest.run_parse`) chạy trong một transaction, lỗi ở bước
 | `dense_min_score`, `dense_strong_score` | `0.55`, `0.7` | gate dense (khi không có reranker): dưới mức strong phải có thêm ≥ 1 thuật ngữ đặc trưng chung |
 | `relative_cutoff` | `0.6` | bỏ đuôi candidate yếu |
 | `evidence_per_obligation`, `max_documents`, `alpha` | `5`, `20`, `0.7` | evidence và aggregation |
+| `article_candidates` | `3` | số Điều khớp theo vector gộp (DICE) cho mỗi truy vấn dense; `0` = tắt |
 
 Phần đồng bộ (`analysis.start_analysis`):
 
@@ -83,8 +86,12 @@ Job phân tích (`analysis.run_analysis`):
 2. **Engine 1, mục 07–09** (`retrieval.py`):
    - Mỗi nghĩa vụ sinh 3–4 query view: nguyên văn, mệnh đề chuẩn hóa, chủ đề (tên Điều), giá trị/điều kiện.
    - Chạy sparse search (Postgres FTS trên bigram âm tiết) và dense search (pgvector, nếu có `EMBEDDING_*`).
+   - **Khớp cấp Điều (DICE, Document Inference via Chunk Evidence):** text của một Điều không gồm các khoản con, nên trước đây không có vector nào đại diện cho cả Điều. Lúc index, mỗi Điều có từ 2 khoản/điểm đã index trở lên được thêm view `article` = trung bình các vector `context` của chúng (chuẩn hóa lại để dùng cosine; không gọi thêm embedding). Dense search lấy `article_candidates` Điều gần nhất, rồi đưa các khoản của chúng vào RRF thành list `article:<view>`: xếp theo hạng Điều, trong cùng Điều theo độ tương đồng riêng của từng khoản. Điểm này được tính là bằng chứng dense. Corpus index trước khi có view này được bổ sung ở đầu lần phân tích, từ vector đã lưu. Evidence ghi `article` (điểm của Điều) trong `details`, và `retrieval_method` có `article`.
    - Gộp bằng RRF `Σ 1/(k + rank)`.
    - **Reranker** (mục 05.6, nếu có `RERANK_*`): chấm 20 ứng viên đầu theo cặp (nghĩa vụ, điều khoản kèm ngữ cảnh), song song theo `RERANK_CONCURRENCY`. Điểm rerank thay cho gate và là điểm của ứng viên. Reranker lỗi với một nghĩa vụ thì nghĩa vụ đó quay về gate.
+   - **Đồ thị tri thức** (FalkorDB, nếu có `FALKORDB_URL`), xem mục "Đồ thị tri thức" bên dưới:
+     - Tài liệu nội bộ có liên kết pháp lý với văn bản đang phân tích được nới ngưỡng (`graph_relax` = 0,6 × ngưỡng thường) và luôn được giữ trong shortlist.
+     - Điều khoản dẫn chiếu tới một điều khoản evidence (hoặc tới Điều chứa nó) được thêm làm evidence `graph:refers_to`, tối đa `graph_neighbors` = 3 mỗi nghĩa vụ; Engine 2 phán quyết như mọi evidence khác.
    - Không có reranker thì dùng lexical gate: IDF tính trên toàn corpus đã index, nên từ chủ đề phủ khắp văn bản như "dữ liệu cá nhân" không được tính là bằng chứng.
    - Aggregation cấp tài liệu `S(D,Q) = α·max + (1−α)·mean(TopK)`, kèm coverage và số section trúng.
    - Mở rộng ngữ cảnh: điều khoản cha và điều khoản anh em chứa ngoại lệ.
@@ -92,8 +99,18 @@ Job phân tích (`analysis.run_analysis`):
 3. **Engine 2, mục 10–11, 14** (`compare.py`). Rule xét từng cặp; LLM xét **mỗi nghĩa vụ một lần** cùng mọi điều khoản ứng viên của nó, và chọn điều khoản khớp nhất (`best`, mục 06.1):
    - Rule giá trị: tách số/thời hạn tiếng Việt ("tối đa 12 tháng", "mười lăm ngày làm việc", "năm năm") và so theo cận max/min. Vượt cận → `VALUE_CHANGE`, nằm trong cận → `EQUIVALENT`.
    - Rule mức bắt buộc: nguồn "phải"/"không được" nhưng nội bộ "có thể"/"được phép" cho cùng hành động → `CONTRADICTION`.
+   - **Span detection** (`spans.py`): tách từ và gán từ loại bằng model CRF của `underthesea`, gán nhãn span ACTOR / ACTION / OBJECT / MODALITY / NEGATION / VALUE (thời hạn, tiền, %) / FREQUENCY / CONDITION / EXCEPTION, rồi căn chỉnh nghĩa vụ với câu gần nhất của điều khoản nội bộ theo từng từ (difflib). Kết quả:
+     - check `span_diff` trong finding (độ tương đồng, span chỉ có ở một bên, các vùng khác nhau kèm loại);
+     - rule `SCOPE_CHANGE`: hai câu tương đồng ≥ 0,5 nhưng điều kiện/ngoại lệ chỉ có ở một bên;
+     - gợi ý `khac_biet_span` gửi kèm cho LLM judge;
+     - thu hẹp trích dẫn rộng của LLM về đúng span khác biệt (ví dụ "24"), để `target_span` của finding đủ hẹp cho patch tối thiểu.
+     - Tắt bằng `SPAN_DETECTION_ENABLED=false`. Model không tải được thì tách theo âm tiết.
    - Còn lại → `INDIRECT_IMPACT`.
    - LLM judge (tùy chọn) trả nhãn kèm trích dẫn. Trích dẫn phải có nguyên văn trong nguồn (source grounding). Không khớp thì hỏi lại một lần; vẫn không khớp thì giữ kết quả rule và gắn `BLOCKED`, chi tiết check lưu câu trả lời của LLM.
+   - **Căn span (SLeDoC / LegDiff, Rykov et al., ACL SRW và SIGIR 2026):** với mỗi điều khoản, LLM còn trả `alignments`: các cặp đoạn nguyên văn (nghĩa vụ ↔ nội bộ) gán `equivalent` / `contradiction` / `addition`. Đoạn mâu thuẫn được trích ở mức tối thiểu ("12 tháng" ↔ "24 tháng"). Đoạn `addition` chỉ có ở nguồn kèm `anchor`, là cụm trong điều khoản nội bộ mà yêu cầu mới gắn vào. Kết quả nằm trong check `span_alignment`:
+     - Mỗi đoạn phải tìm thấy nguyên văn như trích dẫn; đoạn không khớp bị bỏ (`dropped`, status `warn`).
+     - **Kiểm tra độ phủ trước khi nhận `EQUIVALENT`:** `EQUIVALENT` chỉ được giữ khi các đoạn `equivalent` phủ ≥ 50% từng phần hành động / đối tượng / thời hạn / điều kiện / ngoại lệ của nghĩa vụ (chủ thể không xét, vì nội bộ hay viết "Đơn vị …"). Có cặp mâu thuẫn → `CONTRADICTION` (hoặc `VALUE_CHANGE` nếu hai bên đều có số liệu); có đoạn chỉ ở nguồn → `ADDITION`; còn phần chưa được phủ (kể cả khi LLM không trả `alignments`) → `INDIRECT_IMPACT`. Status `fail`, confidence ≤ 0,5.
+     - `target_span`: với `CONTRADICTION` / `VALUE_CHANGE` / `SCOPE_CHANGE` là đoạn mâu thuẫn tối thiểu; với `ADDITION` là `anchor`, đúng chỗ agent `INSERT` (sau `target_span`, `docs/amendment-review-contract.md`). Khi LLM đồng ý với xung đột rule tìm ra, vẫn giữ span của rule.
    - LLM không được hạ một xung đột mà rule đã phát hiện xuống `EQUIVALENT`/`INDIRECT_IMPACT` (fail closed, chống false-safe). Khi LLM đồng ý với rule thì giữ span chính xác của rule ("24 tháng") để làm patch tối thiểu.
    - Các nghĩa vụ được gọi LLM song song (`LLM_CONCURRENCY`). Ngân sách `max_llm_calls` dành cho các nghĩa vụ có điểm retrieval cao nhất.
    - **Cache** (`llm_cache`): khóa là sha256 của (loại lời gọi, model, `LLM_EXTRA_BODY`, system prompt, payload). Đổi prompt, model hay nội dung điều khoản thì khóa đổi theo. Lần hỏi lại vì trích dẫn sai sẽ bỏ qua cache và ghi đè. `refresh_llm_cache: true` buộc hỏi lại; `LLM_CACHE_ENABLED=false` tắt cache.
@@ -115,7 +132,43 @@ Ví dụ finding với thông tư giả định trong `backend/tests/ria_fixture
  "citations": ["REG-99-2026-TT-NHNN@v1#2.1", "DOC-102@v4#5.2", "…"]}
 ```
 
-Không có bước nào sửa tài liệu nội bộ. Bản sửa (`amendment`) do `/api/findings/{id}/amendments` sinh ở bước sau.
+Không có bước nào sửa tài liệu nội bộ. Bản sửa do agent soạn từ finding (`docs/amendment-review-contract.md`).
+
+Finding cấp văn bản từ đồ thị (`method = "graph"`, `obligation_id = null`): tài liệu nội bộ dẫn chiếu chính văn bản đang phân tích, hoặc văn bản bị nó thay thế (ưu tiên cao), hoặc cùng căn cứ pháp lý với một điều khoản của nó (ưu tiên thấp). `job.result.graph` liệt kê các liên kết, số điều khoản phụ thuộc đã thêm và số finding đồ thị.
+
+## 3. Đọc finding (đầu ra M03)
+
+| API | Phương thức | Mục đích |
+|---|---|---|
+| `/api/findings` | GET | Danh sách finding, nghiêm trọng trước; lọc theo `job_id`, `regulation_id`, `regulation_version_id`, `impacted_document_id`, `category`, `status`, `priority`, `method`; phân trang `limit`/`offset` |
+| `/api/findings/{id}` | GET | Một finding |
+| `/api/findings/{id}/evidence` | GET | Evidence pack: nghĩa vụ nguồn, điều khoản nội bộ, mọi evidence kèm trace truy hồi (rank, truy vấn, ngữ cảnh cha) |
+
+## 4. `DELETE /api/regulations/{version_id}`: xóa văn bản bị lỗi
+
+`{version_id}` là id version đầy đủ (`REG-…@v1`). Chỉ xóa được version mà Hộp thư (`GET /api/regulations`) đang hiện `failed`: parse lỗi (`Đọc văn bản thất bại`), phân tích lỗi, hoặc soạn gói review lỗi. Mã trả về:
+
+- **200** `{regulation_id, version_id, document_removed, warnings}`.
+- **409** khi version chưa ở trạng thái lỗi, còn job `queued`/`running`, hoặc đã có quyết định duyệt (audit trail không bị xóa).
+- **404** khi không tìm thấy version.
+
+Code ở `backend/app/ria/removal.py`. Một transaction xóa gói review HITL (cùng `impacts`), `amendment`, `impact_finding`, `evidence`, nghĩa vụ, `index_view`, dẫn chiếu, `clause`, `job` và `document_version`. Khi document không còn version nào, transaction xóa luôn `document`. Dẫn chiếu từ văn bản khác tới điều khoản bị xóa vẫn được giữ, nhưng `target_clause_id` đặt về `null`. Sau khi commit, API xóa thêm file gốc trong storage và các node trong đồ thị tri thức. Hai bước này không chặn việc xóa: nếu lỗi, chúng được ghi vào `warnings`. Xóa xong thì checksum được giải phóng, nên upload lại đúng file sẽ tạo version mới thay vì trả `duplicate`.
+
+Soạn patch và duyệt (M04/M05) không thuộc RIA: agent `POST /draft` (TAI-01) và gói review HITL (TAI-02), theo `docs/amendment-review-contract.md`.
+
+## Đồ thị tri thức (FalkorDB)
+
+Postgres vẫn là nguồn dữ liệu gốc; FalkorDB (`graph.py`) là chỉ mục dẫn xuất để duyệt quan hệ, được đồng bộ sau khi parse văn bản pháp quy, sau seed tài liệu nội bộ, và đầu mỗi lần phân tích cho phiên bản chưa đồng bộ.
+
+```
+(:Doc)<-[:OF]-(:Version)<-[:IN]-(:Clause)-[:PART_OF]->(:Clause)
+(:Clause)-[:REFERS_TO]->(:Clause)          "khoản 6 Điều 5 Quy định này", "tại Điều 5"
+(:Clause|:Doc)-[:CITES]->(:LegalRef)       số hiệu "no:14/2022/QH15" hoặc tên "title:luật phòng chống rửa tiền"
+(:Doc)-[:IDENTIFIED_BY|SUPERSEDES]->(:LegalRef)
+(:Obligation)-[:FROM]->(:Clause)
+```
+
+Phần "Căn cứ …" của quyết định nội bộ thường không thuộc điều khoản nào, nên trích dẫn cũng được đọc từ phần văn bản nằm ngoài các điều khoản. Đồ thị lỗi không làm hỏng parse hay phân tích: kết quả ghi cảnh báo và chạy tiếp như không có đồ thị.
 
 ## Cấu hình model
 
@@ -133,7 +186,22 @@ RERANK_MODEL=qwen/qwen3-reranker-8b                   # họ Qwen3-Reranker, m�
 RERANK_API_KEY=<cùng key OpenRouter>
 ```
 
-Ngưỡng `rerank_min_score = 0.2` được chọn sau khi đo trên dữ liệu thật:
+Reranker mặc định là TypeSafe Jev (`RERANK_BACKEND=jev`), gọi qua OpenRouter Decisions API:
+
+```sh
+JEV_BASE_URL=https://openrouter.ai/api/alpha        # POST {base}/decisions
+JEV_MODEL=typesafe/jev-1.14
+JEV_API_KEY=<cùng key OpenRouter>
+RERANK_BACKEND=jev
+FALKORDB_URL=redis://falkordb:6379                  # compose tự đặt cho api
+```
+
+Jev không có endpoint `/rerank` hay `/chat/completions`; mỗi lần gọi chấm 20 ứng viên bằng 20 câu hỏi `choice` (cùng hoạt động / chỉ cùng lĩnh vực / không liên quan), điểm là P(cùng hoạt động); ~1–2 giây, ~$0,00004 mỗi lần. Hiệu chỉnh trên 39 cặp đã gán nhãn (thông tư giả định ↔ DOC-102 đúng; Luật 91/Nghị định 13 ↔ điều khoản KYC sai):
+- Câu hỏi đúng/sai ("có liên quan không") quá dễ dãi: cặp sai lên tới 0,95, cao hơn cặp đúng thấp nhất (0,94).
+- Câu hỏi 3 lựa chọn, gửi điều khoản không kèm tên tài liệu: cặp đúng ≥ 0,75, cặp sai ≤ 0,74.
+- Ngưỡng mặc định 0,5 ưu tiên không bỏ sót: các cặp 0,5–0,74 phần lớn là tác động gián tiếp thật (ví dụ "thu thập phải được sự đồng ý" ↔ Điều 4.1).
+
+Với cross-encoder (`RERANK_BACKEND=rerank`), ngưỡng `rerank_min_score = 0.2` được chọn sau khi đo trên dữ liệu thật:
 - Cặp đúng cùng lĩnh vực (thông tư KYC giả định ↔ DOC-102): mọi ứng viên ≥ 0,38.
 - Luật 91 và Nghị định 13 ↔ DOC-102 (khác lĩnh vực): 90% nghĩa vụ có điểm tốt nhất < 0,17–0,27.
 - Các tác động gián tiếp thật của Luật 91, như "thu thập phải được sự đồng ý trước khi thu thập" ↔ Điều 4.1, nằm quanh 0,22. Ngưỡng 0,3 sẽ loại các cặp này.

@@ -1,0 +1,37 @@
+name: Deploy to GreenNode
+
+# Deploys main to the GreenNode vServer (scripts/greennode.sh deploy).
+# Uses SSH key stored in repo secrets: GREENNODE_SSH_KEY, GREENNODE_HOST, GREENNODE_USER.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; newer push waits rather than interrupting a running build.
+concurrency:
+  group: deploy-greennode
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy main to GreenNode vServer
+    if: github.ref == 'refs/heads/main' && vars.GREENNODE_HOST != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GREENNODE_SSH_KEY }}
+
+      - name: Deploy to GreenNode
+        env:
+          GREENNODE_HOST: ${{ secrets.GREENNODE_HOST || vars.GREENNODE_HOST }}
+          GREENNODE_USER: ${{ secrets.GREENNODE_USER || vars.GREENNODE_USER }}
+          GREENNODE_REF: ${{ github.sha }}
+        run: ./scripts/greennode.sh deploy

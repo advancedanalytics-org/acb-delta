@@ -13,6 +13,7 @@ from app.routers import (
     decisions,
     documents,
     evaluation,
+    findings,
     health,
     jobs,
     regulations,
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
     # MINH-01: regulation ingest + impact analysis (RIA), and their async jobs
     app.include_router(regulations.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
+    app.include_router(findings.router, prefix="/api")
 
     # KHOA-01: evaluation runs for the dashboard
     app.include_router(evaluation.router, prefix="/api")

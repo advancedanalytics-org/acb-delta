@@ -1,7 +1,8 @@
 """RIA findings → HITL review package (docs/amendment-review-contract.md).
 
-One finished RIA analyze job becomes one `vbpls` row; each reviewable finding becomes one
-`impacts` row carrying the agent's patch. Runs as a RIA job of type `review`. RIA tables are only
+One finished RIA analyze job becomes one `vbpls` row; the reviewable findings on each internal
+clause become one `impacts` row carrying one agent patch (RIA finds per obligation, so several
+obligations can hit the same clause). Runs as a RIA job of type `review`. RIA tables are only
 read; the job row is written through `app.ria.jobs`.
 
 With REVIEW_AUTO_START the package is started as soon as an analyze job finishes: the `analyze`
@@ -17,7 +18,7 @@ from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import exists, select, text
+from sqlalchemy import exists, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 from app import agent_client
@@ -185,6 +186,7 @@ def load_findings(analyze_job_id: str) -> list[dict]:
                 "f.internal_clause_id, o.text AS obligation_text, o.source_clause_id, "
                 "rc.numbering AS regulation_numbering, rd.doc_number AS regulation_number, "
                 "ic.numbering AS clause_numbering, ic.level AS clause_level, "
+                "ic.ordinal AS clause_ordinal, "
                 "ic.heading AS clause_heading, pc.numbering AS parent_numbering, "
                 "pc.heading AS parent_heading, "
                 "ic.text AS clause_text, ic.bbox AS clause_bbox, e.score "
@@ -201,27 +203,94 @@ def load_findings(analyze_job_id: str) -> list[dict]:
             {"j": analyze_job_id},
         ).mappings()
         findings = [dict(r) for r in rows]
-    findings.sort(
-        key=lambda f: (PRIORITY_RANK.get(f["priority"], 9), -(f["score"] or 0), f["finding_id"])
-    )
+    findings.sort(key=review_order)
     return findings
 
 
-def draft_request(f: dict) -> dict:
+def review_order(f: dict) -> tuple:
+    """Sort key: document, then clause order in it (Điều 6 before Điều 9), then rank.
+
+    Inside one clause the highest-ranked finding comes first, so it leads the clause's group.
+    Findings without an internal clause go after the clauses of their document.
+    """
+    ordinal = f.get("clause_ordinal")
+    return (
+        f.get("impacted_document_id") or "",
+        ordinal is None,
+        ordinal or 0,
+        PRIORITY_RANK.get(f["priority"], 9),
+        -(f["score"] or 0),
+        f["finding_id"],
+    )
+
+
+def group_by_clause(findings: list[dict]) -> list[list[dict]]:
+    """Findings on the same internal clause, in review order; each group's first one leads.
+
+    One clause gets one impact and one patch: separate patches on the same text would each be
+    drafted against the original clause, so accepting both would keep only one of them.
+    """
+    groups: dict[str, list[dict]] = {}
+    for f in findings:
+        groups.setdefault(f["internal_clause_id"] or f["finding_id"], []).append(f)
+    return list(groups.values())
+
+
+def merged_span(group: list[dict]) -> dict | None:
+    """The clause text from the first to the last `target_span` of the group, or None."""
+    spans = [f["target_span"] for f in group if f["target_span"]]
+    if not spans:
+        return None
+    if len(spans) == 1:
+        return spans[0]
+    start, end = min(s["start"] for s in spans), max(s["end"] for s in spans)
+    return {"text": group[0]["clause_text"][start:end], "start": start, "end": end}
+
+
+def _unique(values) -> list:
+    return list(dict.fromkeys(v for v in values if v))
+
+
+def _obligation(f: dict) -> dict:
+    return {"clause_id": f["source_clause_id"], "text": f["obligation_text"]}
+
+
+def draft_request(group: list[dict]) -> dict:
+    f = group[0]
     return {
         "finding_id": f["finding_id"],
         "category": f["category"],
         "rationale": f["rationale"],
-        "obligation": {"clause_id": f["source_clause_id"], "text": f["obligation_text"]},
+        "obligation": _obligation(f),
         "source_span": f["source_span"],
         "clause": {
             "clause_id": f["internal_clause_id"],
             "numbering": f["clause_numbering"],
             "text": f["clause_text"],
         },
-        "target_span": f["target_span"],
-        "citations": list(f["citations"] or []),
+        "target_span": merged_span(group),
+        "citations": _unique(c for g in group for c in g["citations"] or []),
+        "related_findings": [
+            {
+                "finding_id": g["finding_id"],
+                "category": g["category"],
+                "rationale": g["rationale"],
+                "obligation": _obligation(g),
+            }
+            for g in group[1:]
+        ],
     }
+
+
+def _citation(group: list[dict]) -> str:
+    """`"<số VBPL>, điều khoản 2.1, 3.4"`: the regulation clauses behind the group."""
+    by_number: dict[str | None, list[str]] = {}
+    for f in group:
+        by_number.setdefault(f["regulation_number"], []).append(f["regulation_numbering"])
+    return "; ".join(
+        ", ".join(filter(None, [number, f"điều khoản {', '.join(_unique(numberings))}"]))
+        for number, numberings in by_number.items()
+    )
 
 
 def page_and_boxes(
@@ -396,8 +465,13 @@ def _locate_in_document(
     return None
 
 
-def impact_row(f: dict, position: int, proposal: dict | None, error: str | None) -> dict:
-    """`Impact` column values for one finding. `proposal` is the agent's AmendmentProposal."""
+def impact_row(group: list[dict], position: int, proposal: dict | None, error: str | None) -> dict:
+    """`Impact` column values for the findings on one clause (`group_by_clause`).
+
+    `proposal` is the agent's AmendmentProposal. The first finding gives the identity, type and
+    severity (it ranks highest); every finding's obligation and rationale are shown.
+    """
+    f = group[0]
     clause_text = f["clause_text"] or ""
     verification = (proposal or {}).get("verification") or {}
     patch = None
@@ -470,34 +544,34 @@ def impact_row(f: dict, position: int, proposal: dict | None, error: str | None)
         loc_num = numbering
 
     location = f"{loc_num}: {heading}" if heading else loc_num
-    finding = {
-        k: f[k]
-        for k in (
-            "finding_id", "job_id", "obligation_id", "evidence_id", "internal_clause_id",
-            "category", "rationale", "status", "priority", "confidence", "source_span",
-            "target_span", "verification", "citations", "method",
-        )
-    }  # fmt: skip
+    finding_keys = (
+        "finding_id", "job_id", "obligation_id", "evidence_id", "internal_clause_id",
+        "category", "rationale", "status", "priority", "confidence", "source_span",
+        "target_span", "verification", "citations", "method",
+    )  # fmt: skip
+    finding, *related = ({k: g[k] for k in finding_keys} for g in group)
     return {
         "position": position,
         "document_id": f["impacted_document_id"],
         "chunk_id": f["internal_clause_id"] or "",
         "location": location,
         # The UI shows change_clause as the new rule's wording and citation as its reference.
-        "change_clause": f["obligation_text"],
-        "citation": ", ".join(
-            filter(None, [f["regulation_number"], f"điều khoản {f['regulation_numbering']}"])
-        ),
+        "change_clause": "\n\n".join(_unique(g["obligation_text"] for g in group)),
+        "citation": _citation(group),
         "affected_text": clause_text,
         "page": page,
         "bboxes": boxes,
         "type": TYPE_BY_CATEGORY.get(f["category"], "conflict"),
         "severity": f["priority"],
-        "reasoning": f["rationale"],
+        "reasoning": "\n\n".join(_unique(g["rationale"] for g in group)),
         "suggested_text": apply_patch(clause_text, patch) if patch else "",
         # json round trip: the finding row holds Decimal / list types JSONB cannot take as-is.
         "model_output": json.loads(
-            json.dumps({"finding": finding, "draft": proposal}, ensure_ascii=False, default=str)
+            json.dumps(
+                {"finding": finding, "related_findings": related, "draft": proposal},
+                ensure_ascii=False,
+                default=str,
+            )
         ),
         "finding_id": f["finding_id"],
         "category": f["category"],
@@ -507,14 +581,15 @@ def impact_row(f: dict, position: int, proposal: dict | None, error: str | None)
     }
 
 
-def _draft_one(f: dict, vbpl_id: str) -> tuple[dict | None, str | None]:
-    """Agent call for one finding. Errors stay on this finding: (proposal, error)."""
+def _draft_one(group: list[dict], vbpl_id: str) -> tuple[dict | None, str | None]:
+    """Agent call for one clause's findings. Errors stay on this impact: (proposal, error)."""
+    f = group[0]
     if not f["internal_clause_id"] or not f["clause_text"]:
         return None, SKIPPED + "finding has no internal clause"
-    if not f["target_span"]:
+    if merged_span(group) is None:
         return None, SKIPPED + "finding has no target_span"
     try:
-        proposal = agent_client.draft(draft_request(f), session_id=f"review-{vbpl_id}")
+        proposal = agent_client.draft(draft_request(group), session_id=f"review-{vbpl_id}")
     except Exception as exc:
         log.warning("draft failed for finding %s: %s", f["finding_id"], exc)
         return None, agent_client.describe(exc)
@@ -556,6 +631,21 @@ def _imported(vbpl_id: str) -> tuple[set[str], dict[str, str]]:
     return done, redo
 
 
+def _renumber(vbpl_id: str, groups: list[list[dict]]) -> None:
+    """Give impacts stored by an earlier run the position of their group in today's order."""
+    with get_sessionmaker()() as session:
+        for position, group in enumerate(groups):
+            session.execute(
+                update(Impact)
+                .where(
+                    Impact.vbpl_id == vbpl_id,
+                    Impact.finding_id.in_([g["finding_id"] for g in group]),
+                )
+                .values(position=position)
+            )
+        session.commit()
+
+
 def _store(vbpl_id: str, row: dict, redo_impact_id: str | None) -> None:
     """Insert the impact, or overwrite a failed draft in place while nobody has decided on it.
 
@@ -575,25 +665,34 @@ def _store(vbpl_id: str, row: dict, redo_impact_id: str | None) -> None:
 
 
 def run_review(job_id: str) -> dict:
-    """`review` job handler: draft every reviewable finding and store it as a pending impact."""
+    """`review` job handler: draft each clause's findings and store them as one pending impact."""
     params = jobs.get_job(job_id)["params"]
     vbpl_id = params["vbpl_id"]
     try:
         findings = load_findings(params["analyze_job_id"])
+        groups = group_by_clause(findings)
         done, redo = _imported(vbpl_id)
-        todo = [(pos, f) for pos, f in enumerate(findings) if f["finding_id"] not in done]
+        # A group is stored under its first finding; packages made before grouping existed may
+        # hold another of its findings, so any stored member marks the group done or redoable.
+        todo = [
+            (pos, group)
+            for pos, group in enumerate(groups)
+            if not any(g["finding_id"] in done for g in group)
+        ]
+        _renumber(vbpl_id, groups)
         jobs.update_progress(job_id, "drafting", 5)
         workers = max(1, get_settings().review_draft_concurrency)
         finished = 0
         lock = threading.Lock()
 
-        def handle(item: tuple[int, dict]) -> str:
+        def handle(item: tuple[int, list[dict]]) -> str:
             nonlocal finished
-            position, f = item
-            proposal, error = _draft_one(f, vbpl_id)
-            row = impact_row(f, position, proposal, error)
-            # Own short session per finding: nothing is held open during the agent call.
-            _store(vbpl_id, row, redo.get(f["finding_id"]))
+            position, group = item
+            proposal, error = _draft_one(group, vbpl_id)
+            row = impact_row(group, position, proposal, error)
+            redo_id = next((redo[g["finding_id"]] for g in group if g["finding_id"] in redo), None)
+            # Own short session per impact: nothing is held open during the agent call.
+            _store(vbpl_id, row, redo_id)
             with lock:
                 finished += 1
                 progress = 5 + 90 * finished // len(todo)
@@ -610,7 +709,7 @@ def run_review(job_id: str) -> dict:
         counts: dict[str, int] = {}
         for status in statuses:
             counts[status] = counts.get(status, 0) + 1
-        summary = f"{len(findings)} tác động từ phân tích RIA {params['analyze_job_id']}"
+        summary = f"{len(groups)} tác động từ phân tích RIA {params['analyze_job_id']}"
         _set_vbpl(vbpl_id, status="awaiting_review", error=None, summary=summary)
     except Exception as exc:
         log.exception("review job %s failed", job_id)
@@ -621,6 +720,7 @@ def run_review(job_id: str) -> dict:
     return {
         "vbpl_id": vbpl_id,
         "findings": len(findings),
+        "impacts": len(groups),
         "drafted": len(todo),
         "draft_status": counts,
     }

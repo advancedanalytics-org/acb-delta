@@ -24,6 +24,8 @@ export interface Vbpl {
   pendingCount: number
   /** Why the analysis failed; set only when status is 'failed'. */
   error?: string
+  /** RIA document version (REG-…@v1) behind this row; the id used to delete it. */
+  versionId?: string
 }
 
 export interface InternalDocument {
@@ -112,8 +114,13 @@ export interface EvalMetrics {
   extraction: { precision: number; recall: number }
   retrieval: { recallAtK: number; k: number; mrr: number }
   impact: { precision: number; recall: number; f1: number }
-  amendment: { judgeScore: number; hitlAcceptRate: number }
-  system: { latencySeconds: number; costUsdPerDocument: number }
+  /**
+   * `null` means not measured, which is not the same as zero. `judgeScore` needs an LLM judge,
+   * `hitlAcceptRate` needs someone to have reviewed that run, and cost needs token accounting the
+   * pipeline does not record yet. Showing 0 would read as "measured and bad".
+   */
+  amendment: { judgeScore: number | null; hitlAcceptRate: number | null }
+  system: { latencySeconds: number; costUsdPerDocument: number | null }
 }
 
 export interface EvalRun {

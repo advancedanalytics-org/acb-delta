@@ -51,7 +51,9 @@ export const liveApi: ApiClient = {
             const impactCount = d.impact_count || 0
             const summary = {
               processing: 'Đang phân tích tác động và soạn đề xuất chỉnh sửa...',
-              failed: 'Không thể phân tích tác động hoặc soạn đề xuất chỉnh sửa.',
+              failed: d.error
+                ? `${d.error}. Có thể xóa và tải lại văn bản.`
+                : 'Không thể phân tích tác động hoặc soạn đề xuất chỉnh sửa.',
               not_found: 'AI không tìm thấy tác động nào đến văn bản nội bộ.',
             }[d.status as string] ?? `Đã hoàn thành phân tích tác động pháp lý (${impactCount} điểm tác động).`
             const uniqueId = d.vbpl_id || d.id || d.version_id || d.document_id
@@ -66,6 +68,7 @@ export const liveApi: ApiClient = {
               summary,
               status: d.status,
               error: d.error ?? undefined,
+              versionId: d.version_id,
               impactCount,
               pendingCount: d.pending_count ?? impactCount,
             }
@@ -90,6 +93,15 @@ export const liveApi: ApiClient = {
     }
 
     return []
+  },
+
+  deleteVbpl: async (vbpl: Vbpl): Promise<void> => {
+    const versionId = vbpl.versionId ?? vbpl.id
+    const response = await fetch(`/api/regulations/${encodeURIComponent(versionId)}`, { method: 'DELETE' })
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err.detail || `Xóa thất bại (HTTP ${response.status})`)
+    }
   },
 
   uploadVbpl: async (input: UploadVbplInput): Promise<IngestDocumentResult> => {

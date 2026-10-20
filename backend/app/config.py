@@ -65,9 +65,21 @@ class Settings(BaseSettings):
     review_auto_start: bool = False
     # Reuse identical LLM answers across runs (table llm_cache).
     llm_cache_enabled: bool = True
+    # FalkorDB knowledge graph (redis://host:6379). Empty = Engine 1 runs without graph expansion.
+    falkordb_url: str = ""
+    falkordb_graph: str = "ria"
+    # Engine 2 NLP span detection (underthesea word segmentation + POS, difflib alignment).
+    span_detection_enabled: bool = True
 
-    # Optional reranker with a Cohere/Jina-style POST {base}/rerank API (OpenRouter, vLLM, Jina).
-    # Empty = Engine 1 keeps its lexical/dense relevance gate.
+    # Optional TypeSafe Jev decisions model (OpenRouter Decisions API): the Engine 1 reranker
+    # when RERANK_BACKEND=jev. Empty = not used.
+    jev_base_url: str = ""
+    jev_model: str = ""
+    jev_api_key: str = ""
+
+    # Reranker backend: "jev" (JEV_* above) or "rerank" (Cohere/Jina-style POST {base}/rerank).
+    # Not configured = Engine 1 keeps its lexical/dense relevance gate.
+    rerank_backend: str = "rerank"
     rerank_base_url: str = ""
     rerank_model: str = ""
     rerank_api_key: str = ""

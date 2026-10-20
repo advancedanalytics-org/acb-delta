@@ -17,6 +17,8 @@ from sqlalchemy import text
 from tests.ria_fixtures import ria_001_pdf
 
 DB_URL = os.environ.get("RIA_TEST_DATABASE_URL")
+# Optional FalkorDB for the knowledge-graph tests, e.g. redis://127.0.0.1:56379.
+GRAPH_URL = os.environ.get("RIA_TEST_FALKORDB_URL", "")
 pytestmark = pytest.mark.skipif(not DB_URL, reason="RIA_TEST_DATABASE_URL not set")
 DOC_102 = Path(__file__).resolve().parents[2] / "db" / "DOC-102.parsed.json"
 
@@ -24,8 +26,9 @@ DOC_102 = Path(__file__).resolve().parents[2] / "db" / "DOC-102.parsed.json"
 def _reset_caches():
     from app.config import get_settings
     from app.db import get_engine
-    from app.ria import schema, storage
+    from app.ria import graph, schema, storage
 
+    graph.reset_client()
     get_settings.cache_clear()
     get_engine.cache_clear()
     storage.get_storage.cache_clear()
@@ -44,9 +47,22 @@ def client(tmp_path_factory):
         "LLM_MODEL",
         "RERANK_BASE_URL",
         "RERANK_MODEL",
+        "JEV_BASE_URL",
+        "JEV_MODEL",
     ):
         patch.setenv(name, "")
+    patch.setenv("RERANK_BACKEND", "rerank")
+    patch.setenv("FALKORDB_URL", GRAPH_URL)
+    patch.setenv("FALKORDB_GRAPH", "ria_test")
     _reset_caches()
+    if GRAPH_URL:
+        from app.ria import graph
+
+        try:  # the test database is fresh: so must the test graph be
+            graph._graph().delete()
+        except Exception:
+            pass
+        graph.reset_client()
     from app.main import create_app
     from app.ria.schema import ensure_schema
     from app.ria.seed import seed_file
@@ -188,6 +204,7 @@ def test_dense_retrieval_path(client, monkeypatch):
     with get_engine().begin() as conn:
         stats = build_index_views(conn, "DOC-102@v4", with_embeddings=True)
     assert stats["embedding_version"] == "fake-bow@test"
+    assert stats["article_views"] > 0  # DICE: one mean vector per multi-clause article
 
     body = _upload(client, ria_001_pdf()).json()
     assert _wait(client, body["job_id"])["status"] == "succeeded"
@@ -204,6 +221,16 @@ def test_dense_retrieval_path(client, monkeypatch):
             ).scalars()
         )
     assert any("dense" in m for m in methods)
+    assert any("article" in m for m in methods)
+    with get_engine().connect() as conn:
+        article_ranks = conn.execute(
+            text(
+                "SELECT count(*) FROM evidence WHERE job_id = :j "
+                "AND details->'ranks' ? 'article:legal_text'"
+            ),
+            {"j": job["job_id"]},
+        ).scalar()
+    assert article_ranks > 0
 
 
 def _fake_llm(system, user, timeout=120):
@@ -287,4 +314,209 @@ def test_rerank_group_llm_and_cache(client, monkeypatch):
             ).scalars()
         )
     assert stored == {"yes": 3}  # "Tổ chức tín dụng" duties: decided by rule, stored
-    assert all(m.endswith("+rerank") for m in methods)
+    # Retrieved evidence is reranked; clauses added by the knowledge graph are marked as such.
+    assert all(m.endswith("+rerank") or m == "graph:refers_to" for m in methods)
+
+
+def _analyze(client, regulation_id: str, body: dict | None = None) -> dict:
+    started = client.post(f"/api/regulations/{regulation_id}/analyze", json=body or {})
+    assert started.status_code in (200, 202), started.text
+    job = _wait(client, started.json()["job_id"])
+    assert job["status"] == "succeeded", job["error"]
+    return job
+
+
+def _regulation(client) -> dict:
+    body = _upload(client, ria_001_pdf()).json()
+    if body["job_id"]:
+        assert _wait(client, body["job_id"])["status"] == "succeeded"
+    return body
+
+
+def test_findings_list_filters_and_evidence_pack(client):
+    reg = _regulation(client)
+    job = _analyze(client, reg["regulation_id"])
+    listed = client.get("/api/findings", params={"job_id": job["job_id"]}).json()
+    assert listed["total"] == len(listed["items"]) > 0
+    assert listed["items"][0]["priority"] == "high"  # most severe first
+    value = next(f for f in listed["items"] if f["category"] == "VALUE_CHANGE")
+    only = client.get(
+        "/api/findings", params={"job_id": job["job_id"], "category": "VALUE_CHANGE"}
+    ).json()
+    assert {f["category"] for f in only["items"]} == {"VALUE_CHANGE"}
+    by_regulation = client.get(
+        "/api/findings", params={"regulation_id": reg["regulation_id"], "limit": 1}
+    ).json()
+    assert by_regulation["total"] >= listed["total"] and len(by_regulation["items"]) == 1
+
+    pack = client.get(f"/api/findings/{value['finding_id']}/evidence").json()
+    assert pack["obligation"]["text"].startswith("Tổ chức tín dụng phải rà soát")
+    assert pack["internal_clause"]["clause_id"] == "DOC-102@v4#5.2"
+    assert pack["evidence"][0]["evidence_id"] == value["evidence_id"]
+    assert (
+        client.get(f"/api/findings/{value['finding_id']}").json()["finding_id"]
+        == value["finding_id"]
+    )
+    assert client.get("/api/findings/RIA-missing").status_code == 404
+
+
+@pytest.mark.skipif(not GRAPH_URL, reason="RIA_TEST_FALKORDB_URL not set")
+def test_knowledge_graph_links_citing_documents_and_dependent_clauses(client, tmp_path):
+    import json
+
+    from app.ria.seed import seed_file
+
+    # A mock internal procedure that cites the regulation by number but shares no wording with it.
+    mock = {
+        "document": {
+            "document_id": "DOC-901",
+            "title": "Quy trình báo cáo định kỳ",
+            "doc_type": "internal",
+            "owner": "Khối Vận hành",
+        },
+        "document_version": {
+            "version_id": "DOC-901@v1",
+            "document_id": "DOC-901",
+            "version_label": "v1",
+            "status": "effective",
+            "valid_from": "2026-07-01",
+            "checksum": "sha256:test-doc-901",
+        },
+        "clause": [
+            {
+                "clause_id": "DOC-901@v1#1",
+                "version_id": "DOC-901@v1",
+                "parent_id": None,
+                "numbering": "1",
+                "text": "Căn cứ",
+                "char_start": 0,
+                "char_end": 6,
+            },
+            {
+                "clause_id": "DOC-901@v1#1.1",
+                "version_id": "DOC-901@v1",
+                "parent_id": "DOC-901@v1#1",
+                "numbering": "1.1",
+                "text": "Quy trình này thực hiện Thông tư số 99/2026/TT-NHNN.",
+                "char_start": 7,
+                "char_end": 59,
+            },
+        ],
+    }
+    path = tmp_path / "DOC-901.parsed.json"
+    path.write_text(json.dumps(mock, ensure_ascii=False), encoding="utf-8")
+    seeded = seed_file(path)
+    assert seeded["graph"]["cites"] >= 1
+
+    reg = _regulation(client)
+    job = _analyze(client, reg["regulation_id"])
+    graph_info = job["result"]["graph"]
+    assert graph_info["enabled"] and not graph_info.get("error")
+    links = {(lk["document_id"], lk["relation"]) for lk in graph_info["linked_documents"]}
+    assert ("DOC-901", "cites_regulation") in links
+    # Same law in both preambles ("Căn cứ Luật Các tổ chức tín dụng").
+    assert ("DOC-102", "shared_legal_basis") in links
+    # DOC-102 Điều 12.2 refers to Điều 5 ("thời hạn tại Điều 5"): pulled in next to 5.2.
+    assert graph_info["dependent_clauses_added"] > 0
+    graph_findings = client.get(
+        "/api/findings", params={"job_id": job["job_id"], "method": "graph"}
+    ).json()["items"]
+    doc901 = [f for f in graph_findings if f["impacted_document_id"] == "DOC-901"]
+    assert doc901 and doc901[0]["priority"] == "high" and doc901[0]["obligation_id"] is None
+    assert doc901[0]["internal_clause_id"] == "DOC-901@v1#1.1"
+
+
+def _version_rows(version_id: str) -> dict:
+    from app.db import get_engine
+
+    counts = {
+        "version": "SELECT count(*) FROM document_version WHERE version_id = :v",
+        "clause": "SELECT count(*) FROM clause WHERE version_id = :v",
+        "job": "SELECT count(*) FROM job WHERE version_id = :v",
+        "finding": "SELECT count(*) FROM impact_finding WHERE regulation_version_id = :v",
+    }
+    with get_engine().connect() as conn:
+        return {k: conn.execute(text(q), {"v": version_id}).scalar() for k, q in counts.items()}
+
+
+def test_delete_failed_regulation_removes_everything_and_allows_reupload(client):
+    from app.db import get_engine
+    from tests.ria_fixtures import RIA_001_HTML, html_pdf
+
+    # Own document number, so the other tests' regulation is untouched.
+    pdf = html_pdf(RIA_001_HTML.replace("99/2026", "98/2026"))
+    body = _upload(client, pdf).json()
+    assert body["regulation_id"] == "REG-98-2026-TT-NHNN"
+    version_id = body["version_id"]
+    assert _wait(client, body["job_id"])["status"] == "succeeded"
+
+    # A version that is still processing (parsed, not analysed yet) cannot be deleted.
+    response = client.delete(f"/api/regulations/{version_id}")
+    assert response.status_code == 409, response.text
+
+    job = _analyze(client, body["regulation_id"])
+    assert _version_rows(version_id)["finding"] > 0
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE job SET status = 'failed' WHERE job_id = :j"), {"j": job["job_id"]}
+        )
+    row = next(r for r in client.get("/api/regulations").json() if r["version_id"] == version_id)
+    assert row["status"] == "failed"
+
+    response = client.delete(f"/api/regulations/{version_id}")
+    assert response.status_code == 200, response.text
+    assert response.json()["document_removed"] is True
+    assert response.json()["warnings"] == []
+    if GRAPH_URL:
+        from app.ria import graph
+
+        left = graph.query(
+            "MATCH (n) WHERE n.id = $v OR n.version = $v OR n.id = $d RETURN count(n)",
+            {"v": version_id, "d": body["regulation_id"]},
+        )
+        assert left[0][0] == 0
+    assert _version_rows(version_id) == {"version": 0, "clause": 0, "job": 0, "finding": 0}
+    assert all(r["version_id"] != version_id for r in client.get("/api/regulations").json())
+    assert client.delete(f"/api/regulations/{version_id}").status_code == 404
+
+    # Same bytes again: a fresh upload, not a duplicate of the deleted version.
+    again = _upload(client, pdf)
+    assert again.status_code == 202 and again.json()["duplicate"] is False
+    # Let the parse finish: a job still running at shutdown is marked failed on the next start.
+    assert _wait(client, again.json()["job_id"])["status"] == "succeeded"
+
+
+def test_delete_regulation_whose_parse_failed(client):
+    from app.db import get_engine
+
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO document (document_id, title, doc_type, owner) VALUES "
+                "('REG-BROKEN-TEST', 'broken', 'regulation', 'test')"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO document_version (version_id, document_id, version_label, status, "
+                "checksum, processing_status) VALUES ('REG-BROKEN-TEST@v1', 'REG-BROKEN-TEST', "
+                "'v1', 'pending', 'sha256:broken-test', 'DRAFT')"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO job (job_id, job_type, document_id, version_id, status) VALUES "
+                "('JOB-broken-test', 'parse', 'REG-BROKEN-TEST', 'REG-BROKEN-TEST@v1', 'running')"
+            )
+        )
+    # A job still running blocks the delete; the row is not failed yet either.
+    assert client.delete("/api/regulations/REG-BROKEN-TEST@v1").status_code == 409
+    with get_engine().begin() as conn:
+        conn.execute(text("UPDATE job SET status = 'failed' WHERE job_id = 'JOB-broken-test'"))
+    row = next(
+        r for r in client.get("/api/regulations").json() if r["version_id"] == "REG-BROKEN-TEST@v1"
+    )
+    assert (row["status"], row["error"]) == ("failed", "Đọc văn bản thất bại")
+
+    assert client.delete("/api/regulations/REG-BROKEN-TEST@v1").status_code == 200
+    assert _version_rows("REG-BROKEN-TEST@v1")["version"] == 0

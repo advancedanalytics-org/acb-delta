@@ -6,6 +6,7 @@ dashboard reads every leaf unconditionally, so a missing group is a crash, not a
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -32,13 +33,17 @@ class ImpactMetrics(CamelModel):
 
 
 class AmendmentMetrics(CamelModel):
-    judge_score: float
-    hitl_accept_rate: float
+    # `None` means not measured, which is not zero: the judge needs an LLM, and the accept rate
+    # needs someone to have reviewed that run. A 0 here would read as "measured and bad".
+    judge_score: float | None = None
+    hitl_accept_rate: float | None = None
 
 
 class SystemMetrics(CamelModel):
     latency_seconds: float
-    cost_usd_per_document: float
+    # No token accounting on the RIA path yet (app/ria/llm.py calls the endpoint directly and
+    # job.result records llm_calls but no usage), so this stays unmeasured rather than guessed.
+    cost_usd_per_document: float | None = None
 
 
 class EvalMetricsOut(CamelModel):
@@ -53,9 +58,37 @@ class EvalRunCreate(CamelModel):
     label: str = Field(min_length=1)
     dataset_size: int = Field(ge=0)
     note: str = ""
+    # When the run actually happened. Scoring is a second pass over a finished job (the accept rate
+    # only exists once people have reviewed it), so the insert time is not the run time, and the
+    # dashboard orders runs by this.
+    created_at: datetime | None = None
     metrics: EvalMetricsOut
     # Settings behind these numbers, e.g. {"maxChanges": 10, "retrieveK": 5, "llmModel": "..."}.
     params: dict = Field(default_factory=dict)
+
+
+class FeedbackExample(CamelModel):
+    """One reviewer decision, shaped as a few-shot example (KHOA-02)."""
+
+    impact_id: str
+    category: str | None
+    reason_tags: list[str]
+    affected_text: str
+    # The text the reviewer wants, and the AI text they did not take. Either can be null: an
+    # accept has nothing rejected, and a failed draft has no AI text at all.
+    chosen: str | None
+    rejected: str | None
+    # Why RIA raised the finding. A negative judge example is only useful with this.
+    rationale: str | None
+
+
+class ExampleSet(CamelModel):
+    task: Literal["draft", "judge"]
+    positive: list[FeedbackExample]
+    negative: list[FeedbackExample]
+    # How many decisions were read and how many qualified, so a thin prompt is visibly thin
+    # rather than looking like there was no feedback.
+    counts: dict[str, int]
 
 
 class EvalRunOut(CamelModel):

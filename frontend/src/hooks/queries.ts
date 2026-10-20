@@ -251,6 +251,16 @@ export function useResetDemo() {
   return useMutation({ mutationFn: api.resetDemo, onSuccess: () => qc.invalidateQueries() })
 }
 
+export function useDeleteVbpl() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vbpl: Vbpl) => api.deleteVbpl(vbpl),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.vbpls })
+    },
+  })
+}
+
 export function useUploadVbpl() {
   const qc = useQueryClient()
   return useMutation({

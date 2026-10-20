@@ -20,6 +20,9 @@ class LocalStorage:
     def get(self, uri: str) -> bytes:
         return Path(uri.removeprefix("file://")).read_bytes()
 
+    def delete(self, uri: str) -> None:
+        Path(uri.removeprefix("file://")).unlink(missing_ok=True)
+
 
 class S3Storage:
     def __init__(self) -> None:
@@ -41,6 +44,10 @@ class S3Storage:
     def get(self, uri: str) -> bytes:
         bucket, key = uri.removeprefix("s3://").split("/", 1)
         return self.client.get_object(Bucket=bucket, Key=key)["Body"].read()
+
+    def delete(self, uri: str) -> None:
+        bucket, key = uri.removeprefix("s3://").split("/", 1)
+        self.client.delete_object(Bucket=bucket, Key=key)
 
 
 @lru_cache
