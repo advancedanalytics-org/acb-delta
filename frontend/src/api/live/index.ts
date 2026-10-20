@@ -5,6 +5,7 @@ import type {
   DecisionInput,
   DocumentDetailResponse,
   EvalRun,
+  ExampleSet,
   FeedbackStatus,
   HealthReport,
   Impact,
@@ -356,6 +357,18 @@ export const liveApi: ApiClient = {
       }
     } catch {
       // Backend unreachable; the section renders an empty state.
+    }
+    return null
+  },
+
+  getEvalExamples: async (task): Promise<ExampleSet | null> => {
+    try {
+      const res = await fetch(`/api/eval/examples?task=${task}`)
+      if (res.ok) {
+        return (await res.json()) as ExampleSet
+      }
+    } catch {
+      // Backend unreachable; the panel renders an empty state.
     }
     return null
   },

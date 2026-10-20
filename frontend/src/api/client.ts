@@ -5,6 +5,7 @@ import type {
   DecisionInput,
   DocumentDetailResponse,
   EvalRun,
+  ExampleSet,
   FeedbackStatus,
   HealthReport,
   Impact,
@@ -41,6 +42,8 @@ export interface ApiClient {
   ingestInternalDataDir(): Promise<IngestInternalResult[]>
   /** DPO feedback readiness (KHOA-02); null when the backend has no data yet. */
   getFeedbackStatus(): Promise<FeedbackStatus | null>
+  /** Few-shot examples built from reviewer decisions (KHOA-02); null when the backend is unreachable. */
+  getEvalExamples(task: 'draft' | 'judge'): Promise<ExampleSet | null>
   /** Always the real backend. */
   getHealth(): Promise<HealthReport>
   /** Restore the seeded demo state. */
