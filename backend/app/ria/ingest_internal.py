@@ -198,6 +198,24 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
 
     ensure_schema()
     with get_engine().begin() as conn:
+        # Migrate: ensure document_version_checksum is not an enforcing UNIQUE index
+        conn.execute(
+            text(
+                "DO $$ BEGIN "
+                "  IF EXISTS ("
+                "    SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+                "    WHERE c.relname = 'document_version_checksum' AND i.indisunique"
+                "  ) THEN "
+                "    ALTER TABLE document_version "
+                "      DROP CONSTRAINT IF EXISTS document_version_checksum; "
+                "    DROP INDEX IF EXISTS document_version_checksum; "
+                "    CREATE INDEX IF NOT EXISTS document_version_checksum "
+                "      ON document_version (checksum); "
+                "  END IF; "
+                "END $$;"
+            )
+        )
+
         # 2. Upsert document table
         conn.execute(
             text(
@@ -230,7 +248,9 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
                 "status = 'effective', processing_status = 'PARSED', "
                 "valid_from = EXCLUDED.valid_from, page_count = EXCLUDED.page_count, "
                 "content = COALESCE(EXCLUDED.content, document_version.content), "
-                "source_uri = EXCLUDED.source_uri"
+                "source_uri = EXCLUDED.source_uri, "
+                "checksum = EXCLUDED.checksum, "
+                "file_name = EXCLUDED.file_name"
             ),
             {
                 "v": version_id,
