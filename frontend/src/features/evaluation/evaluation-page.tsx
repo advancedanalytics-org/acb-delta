@@ -1,13 +1,13 @@
-import { ArrowDownRight, ArrowUpRight, FlaskConical } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, FlaskConical, GraduationCap } from 'lucide-react'
 import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { apiMode } from '@/api/client'
-import type { EvalMetrics, EvalRun } from '@/api/types'
+import type { EvalMetrics, EvalRun, FeedbackStatus } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/query-states'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useEvalRuns } from '@/hooks/queries'
+import { useEvalRuns, useFeedbackStatus } from '@/hooks/queries'
 import { formatDateTime, formatNumber, formatPercent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -72,7 +72,14 @@ export function EvaluationPage() {
 
   if (error) return <ErrorState error={error} onRetry={refetch} />
   if (isPending) return <EvaluationSkeleton />
-  if (data.length === 0) return <EmptyState title="Chưa có lượt đánh giá nào" description="Chạy experiment KHOA-01 để có số liệu." />
+  // Feedback can accumulate before any eval run is saved, so show the RLHF section even here.
+  if (data.length === 0)
+    return (
+      <div className="mx-auto max-w-6xl space-y-6 p-6">
+        <EmptyState title="Chưa có lượt đánh giá nào" description="Chạy experiment KHOA-01 để có số liệu." />
+        <FeedbackLearningSection />
+      </div>
+    )
 
   const run = data.find((r) => r.id === runId) ?? data[data.length - 1]
   const runIndex = data.indexOf(run)
@@ -130,6 +137,107 @@ export function EvaluationPage() {
       </div>
 
       {baseline && <ComparisonChart run={run} baseline={baseline} />}
+
+      <FeedbackLearningSection />
+    </div>
+  )
+}
+
+/** KHOA-02: makes the feedback loop visible — how much HITL feedback has been gathered toward a
+ *  DPO dataset, and the few-shot examples being served. Read-only; building is a CLI. */
+function FeedbackLearningSection() {
+  const { data, isPending } = useFeedbackStatus()
+
+  if (isPending) {
+    return (
+      <section className="rounded-lg border bg-card p-4">
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="mt-4 h-20" />
+      </section>
+    )
+  }
+
+  return (
+    <section className="rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <GraduationCap className="size-4 text-primary" aria-hidden />
+          Học từ phản hồi (RLHF)
+        </h2>
+        {data && <ReadyBadge status={data} />}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Mỗi lượt duyệt (chấp nhận / sửa / từ chối) thành tín hiệu học: few-shot động và cặp preference cho DPO.
+      </p>
+
+      {!data ? (
+        <p className="mt-4 text-sm text-muted-foreground">Chưa đọc được dữ liệu phản hồi.</p>
+      ) : (
+        <FeedbackLearningBody status={data} />
+      )}
+    </section>
+  )
+}
+
+function ReadyBadge({ status }: { status: FeedbackStatus }) {
+  const remaining = Math.max(0, status.minPairs - status.pairsUsable)
+  return status.ready ? (
+    <span className="rounded bg-status-accepted/15 px-2 py-0.5 text-xs font-medium text-status-accepted-fg">
+      Sẵn sàng tạo dataset DPO
+    </span>
+  ) : (
+    <span className="rounded bg-status-pending/15 px-2 py-0.5 text-xs font-medium text-status-pending-fg">
+      Đang gom — còn thiếu {remaining} cặp
+    </span>
+  )
+}
+
+function FeedbackLearningBody({ status }: { status: FeedbackStatus }) {
+  const { pairsUsable, minPairs, ready, decisionsRead, byAction, draftExamples, judgeExamples, draftFailures } = status
+  const pct = minPairs > 0 ? Math.min(100, Math.round((pairsUsable / minPairs) * 100)) : 0
+
+  return (
+    <>
+      <div className="mt-4">
+        <div className="flex items-baseline justify-between text-sm">
+          <span className="font-medium">Cặp preference cho DPO</span>
+          <span className="tabular-nums text-muted-foreground">
+            {pairsUsable} / {minPairs}
+          </span>
+        </div>
+        <div
+          className="mt-1 h-2 w-full overflow-hidden rounded-full bg-muted"
+          role="img"
+          aria-label={`${pairsUsable} trên ${minPairs} cặp preference cho DPO`}
+        >
+          <div
+            className={cn('h-full rounded-full transition-all', ready ? 'bg-status-accepted' : 'bg-primary')}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
+        <Stat label="Quyết định đã gom" value={decisionsRead} />
+        <Stat label="Chấp nhận / Sửa / Từ chối" value={`${byAction.accept} / ${byAction.edit} / ${byAction.reject}`} />
+        <Stat label="Few-shot drafter (dương / âm)" value={`${draftExamples.positiveAvailable} / ${draftExamples.negativeAvailable}`} />
+        <Stat label="Few-shot judge (dương / âm)" value={`${judgeExamples.positiveAvailable} / ${judgeExamples.negativeAvailable}`} />
+      </dl>
+
+      <p className="mt-4 text-xs text-muted-foreground">
+        {ready ? 'Đủ ngưỡng — xuất dataset bằng ' : `Khi đủ ${minPairs} cặp, xuất dataset bằng `}
+        <code className="rounded bg-muted px-1 py-0.5 text-[11px]">python -m app.evaluation.dpo_pipeline build</code>
+        {draftFailures > 0 && ` · ${draftFailures} bản nháp lỗi/bỏ qua không tạo được cặp.`}
+      </p>
+    </>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-2xl font-semibold tabular-nums">{value}</dd>
     </div>
   )
 }

@@ -53,6 +53,33 @@ def _has_ai_text(row) -> bool:
     return row.draft_status not in ("failed", "skipped")
 
 
+def split_examples(rows: list, task: str) -> tuple[list, list]:
+    """Split feedback rows (expected newest-first) into (positive, negative) for one step.
+
+    Pure over the rows, so both the few-shot endpoint and the DPO readiness status can share one
+    `list_feedback` read instead of querying twice.
+    """
+    if task not in TASKS:
+        raise ValueError(f"Unknown task {task!r}; expected one of {TASKS}")
+
+    positive, negative = [], []
+    for row in rows:
+        if task == "draft":
+            # Only rows that carry both an AI draft and a human verdict on its text.
+            if not _has_ai_text(row):
+                continue
+            if row.action in ("accept", "edit") and row.chosen:
+                positive.append(row)
+            if row.action == "edit" and row.rejected:
+                negative.append(row)
+        else:
+            if row.action in ("accept", "edit"):
+                positive.append(row)
+            elif row.action == "reject":
+                negative.append(row)
+    return positive, negative
+
+
 def example_set(
     session: Session,
     task: str,
@@ -69,21 +96,7 @@ def example_set(
         raise ValueError(f"Unknown task {task!r}; expected one of {TASKS}")
 
     rows = list(reversed(list_feedback(session, since=since, vbpl_id=vbpl_id)))
-    positive, negative = [], []
-    for row in rows:
-        if task == "draft":
-            # Only rows that carry both an AI draft and a human verdict on its text.
-            if not _has_ai_text(row):
-                continue
-            if row.action in ("accept", "edit") and row.chosen:
-                positive.append(row)
-            if row.action == "edit" and row.rejected:
-                negative.append(row)
-        else:
-            if row.action in ("accept", "edit"):
-                positive.append(row)
-            elif row.action == "reject":
-                negative.append(row)
+    positive, negative = split_examples(rows, task)
 
     return ExampleSet(
         task=task,

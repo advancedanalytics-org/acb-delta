@@ -13,6 +13,7 @@ The file goes outside the repo by default -- `AGENTS.md` keeps generated dataset
 
 import argparse
 import json
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -45,9 +46,11 @@ def to_pair(example: FeedbackExample) -> dict:
     }
 
 
-def write_jsonl(session: Session, out_path: Path, vbpl_id: str | None = None) -> int:
+def write_jsonl(
+    session: Session, out_path: Path, vbpl_id: str | None = None, since: datetime | None = None
+) -> int:
     """Write every usable pair. Returns how many lines were written."""
-    rows = preference_rows(session, vbpl_id=vbpl_id)
+    rows = preference_rows(session, vbpl_id=vbpl_id, since=since)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as handle:
         for row in rows:

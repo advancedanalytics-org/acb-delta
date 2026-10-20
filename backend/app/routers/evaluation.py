@@ -8,8 +8,9 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, status
 
+from app.config import get_settings
 from app.db import SessionDep
-from app.evaluation import feedback, schemas, store
+from app.evaluation import dpo_pipeline, feedback, schemas, store
 
 router = APIRouter(prefix="/eval", tags=["evaluation"])
 
@@ -34,6 +35,21 @@ def list_examples(
     MINH-01, so each decides when to pull these in.
     """
     return feedback.example_set(session, task, limit=limit, vbpl_id=vbpl_id, since=since)
+
+
+@router.get("/feedback-status")
+def feedback_status(
+    session: SessionDep,
+    vbpl_id: Annotated[str | None, Query(alias="vbplId")] = None,
+    since: datetime | None = None,
+) -> schemas.FeedbackStatus:
+    """DPO readiness: how much reviewer feedback is gathered vs. the build threshold (KHOA-02).
+
+    Read-only; building the dataset is the `app.evaluation.dpo_pipeline build` CLI, not an endpoint.
+    """
+    return dpo_pipeline.feedback_status(
+        session, min_pairs=get_settings().dpo_min_pairs, vbpl_id=vbpl_id, since=since
+    )
 
 
 @router.post("/runs", status_code=status.HTTP_201_CREATED)

@@ -91,6 +91,34 @@ class ExampleSet(CamelModel):
     counts: dict[str, int]
 
 
+class ExampleCounts(CamelModel):
+    """How many few-shot examples one step currently has available (KHOA-02)."""
+
+    positive_available: int
+    negative_available: int
+
+
+class FeedbackStatus(CamelModel):
+    """Readiness of the DPO long loop: how much reviewer feedback has been gathered (KHOA-02).
+
+    All counts are measured, not estimated, so plain ints (no `None`): a loop with nothing gathered
+    is honestly zeros, which the UI shows as "chưa gom được cặp nào".
+    """
+
+    decisions_read: int
+    # Decisions that contrast two texts (`edit` / `reject` with an AI draft): a DPO pair each.
+    pairs_usable: int
+    # accept / edit / reject tallies of the active decisions.
+    by_action: dict[str, int]
+    # Drafts that failed or were skipped: no AI text, so they can never be a preference pair.
+    draft_failures: int
+    # Threshold a build run checks against; `ready` once `pairs_usable` reaches it.
+    min_pairs: int
+    ready: bool
+    draft_examples: ExampleCounts
+    judge_examples: ExampleCounts
+
+
 class EvalRunOut(CamelModel):
     id: str
     label: str
