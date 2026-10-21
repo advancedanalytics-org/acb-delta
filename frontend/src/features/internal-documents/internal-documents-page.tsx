@@ -473,9 +473,6 @@ export function InternalDocumentsPage() {
                     <Badge variant="secondary" className="text-[11px] font-normal">
                       {clauseData.total_clauses} điều khoản
                     </Badge>
-                    <Badge variant="secondary" className="text-[11px] font-normal">
-                      {clauseData.total_obligations} nghĩa vụ pháp lý
-                    </Badge>
                   </div>
                 )}
               </div>
@@ -521,11 +518,11 @@ export function InternalDocumentsPage() {
                     <CardHeader>
                       <CardTitle className="text-sm font-semibold">Cấu trúc pháp lý được trích xuất (RIA Parser)</CardTitle>
                       <CardDescription className="text-xs">
-                        Tự động phân tách các tầng Chương, Điều, Khoản, Điểm và Nghĩa vụ (Obligation)
+                        Tự động phân tách các tầng Chương, Điều, Khoản, Điểm
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                      <div className="grid grid-cols-3 gap-3 text-center">
                         <div className="rounded-lg border bg-muted/40 p-3">
                           <p className="text-2xl font-bold text-primary">{chapters.length}</p>
                           <p className="text-xs text-muted-foreground mt-1">Chương</p>
@@ -537,10 +534,6 @@ export function InternalDocumentsPage() {
                         <div className="rounded-lg border bg-muted/40 p-3">
                           <p className="text-2xl font-bold text-primary">{clauseData.total_clauses}</p>
                           <p className="text-xs text-muted-foreground mt-1">Khoản & Điểm</p>
-                        </div>
-                        <div className="rounded-lg border bg-muted/40 p-3">
-                          <p className="text-2xl font-bold text-primary">{clauseData.total_obligations}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Nghĩa vụ pháp lý</p>
                         </div>
                       </div>
                     </CardContent>
