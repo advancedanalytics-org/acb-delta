@@ -93,6 +93,44 @@ def test_internal_page_footer_is_dropped(pages):
     assert sum("lưu trữ hồ sơ" in t for t in texts) == pages  # body kept
 
 
+def _decision_html(title: str) -> str:
+    """Internal decision wrapper + attached document. Điều 1 wraps onto a line that starts with
+    "Quy chế" in lower case, which is sentence text, not the attached title."""
+    return f"""
+<p>NGÂN HÀNG TMCP Á CHÂU</p>
+<p>Số: 21/2026/QĐ-TGĐ</p>
+<p>QUYẾT ĐỊNH</p>
+<p>QUYẾT ĐỊNH:</p>
+<p>Điều 1. Ban hành kèm theo Quyết định này</p>
+<p>Quy chế hoạt động Phòng thí nghiệm AI.</p>
+<p>Điều 2. Văn bản này có hiệu lực kể từ ngày 01 tháng 3 năm 2026.</p>
+<p>Điều 3. Giám đốc Khối Công nghệ chịu trách nhiệm thi hành Quyết định này.</p>
+<p>Nơi nhận:</p>
+<p>- Ban điều hành;</p>
+<p>TỔNG GIÁM ĐỐC</p>
+<p>{title}</p>
+<p>Hoạt động Phòng thí nghiệm AI</p>
+<p>Chương I</p>
+<p>QUY ĐỊNH CHUNG</p>
+<p>Điều 1. Phạm vi</p>
+<p>Văn bản này quy định hoạt động của Phòng thí nghiệm AI.</p>
+<p>Điều 2. Lưu trữ</p>
+<p>Đơn vị phải lưu nhật ký thử nghiệm tối đa 12 tháng.</p>
+"""
+
+
+@pytest.mark.parametrize("title", ["QUY CHẾ", "HƯỚNG DẪN"])
+def test_decision_wrapper_ends_at_recipients(title):
+    parsed = parse_pdf(html_pdf(_decision_html(title)), min_chars_per_page=50)
+    numbering = [c.numbering for c in parsed.clauses]
+    assert numbering == ["PREAMBLE", "QD.1", "QD.2", "QD.3", "QD.END", "I", "1", "2"]
+    by_num = {c.numbering: c for c in parsed.clauses}
+    assert by_num["QD.1"].text.endswith("Phòng thí nghiệm AI.")
+    assert by_num["QD.3"].text.endswith("thi hành Quyết định này.")
+    assert by_num["QD.END"].level == "closing"
+    assert "Nơi nhận" in by_num["QD.END"].text and title in by_num["QD.END"].text
+
+
 def test_scanned_or_empty_pdf_fails_closed():
     with pytest.raises(ParseError):
         parse_pdf(html_pdf("<p>.</p>"))
