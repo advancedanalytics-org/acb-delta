@@ -29,6 +29,20 @@ Same with plain Compose: `cp .env.example .env` (replace every `CHANGEME`), then
 | `reset` | Stop and delete all data (asks first) |
 | `test` | Lint + tests for backend, agent, frontend (no Docker needed) |
 
+## Demo login
+
+The UI opens on a branded login gate. This is a **demo-only** gate, not real authentication — the
+credentials are hardcoded and checked in the browser (`frontend/src/hooks/use-auth.tsx`), so they
+are meant to be shared with whoever runs the demo:
+
+| Field | Value |
+|---|---|
+| Tài khoản | `acb` |
+| Mật khẩu | `acb@2026` |
+
+(The username is case-insensitive.) Any HTTPS basic-auth in front of a hosted demo is separate and
+lives in that host's `.env` — never committed.
+
 ## Layout
 
 | Path | What | Owner slots |
