@@ -718,13 +718,7 @@ export function InternalDocumentsPage() {
                 value="impact-tree"
                 className="flex-1 flex flex-col min-h-0 h-full overflow-hidden p-0 m-0 border-0 data-[state=active]:flex data-[state=inactive]:hidden"
               >
-                <ImpactTree
-                  doc={activeDoc}
-                  docs={documents ?? []}
-                  activeDocId={activeDoc.id}
-                  clauses={clauseData?.clauses ?? []}
-                  onOpenClause={openClause}
-                />
+                <ImpactTree doc={activeDoc} docs={documents ?? []} onOpenClause={openClause} />
               </TabsContent>
             </Tabs>
           </>

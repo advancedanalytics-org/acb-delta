@@ -7,8 +7,6 @@ export interface TreeNode {
   label: string
   sublabel?: string
   level: TreeLevel
-  /** Marked on nodes produced by the "AI gợi ý" action, for a subtle highlight. */
-  isNew?: boolean
   /** Set on leaves that map to a real clause/article, so a click can open it in the detail tab. */
   clauseId?: string
   children?: TreeNode[]
@@ -83,126 +81,123 @@ export function groupClauses(clauses: DocumentClause[]): {
   return { articleGroups: groups, chapters: chapterList }
 }
 
-/** Build the real Chương → Điều children of a regulation from its extracted clauses. */
-function realChildren(clauses: DocumentClause[]): TreeNode[] {
-  const { articleGroups } = groupClauses(clauses)
-  if (articleGroups.length === 0) return []
+// ---- demo document-type branches (Quy trình → Biểu mẫu) ---------------------------------
+//
+// The impact graph shows how an external circular cascades through the bank's document types
+// (Thông tư → Quy định → Quy trình → Biểu mẫu), not the legal clause structure (Chương/Điều).
+// Internal documents are mock data for the hackathon, so these processes and forms are a fixed,
+// realistic demo sample keyed by the document (by id or code). Unknown documents fall back to a
+// generic two-process shape.
 
-  const out: TreeNode[] = []
-  let currentChapter: TreeNode | null = null
-  let currentChapterName: string | null = null
-
-  for (const ag of articleGroups) {
-    const headingIsArticle = (ag.heading ?? '').trim().toLowerCase().startsWith('điều')
-    const articleNode: TreeNode = {
-      id: `art-${ag.id}`,
-      label: `Điều ${ag.numbering}`,
-      sublabel: ag.heading && !headingIsArticle ? ag.heading : undefined,
-      level: 4,
-      clauseId: ag.id,
-    }
-    const chapterName = ag.chapterHeading ?? null
-    if (chapterName) {
-      if (!currentChapter || currentChapterName !== chapterName) {
-        currentChapter = { id: `chap-${out.length}-${ag.id}`, label: chapterName, level: 3, children: [] }
-        currentChapterName = chapterName
-        out.push(currentChapter)
-      }
-      currentChapter.children!.push(articleNode)
-    } else {
-      // No chapter above this article: attach it directly under the regulation (one level up).
-      out.push({ ...articleNode, level: 3 })
-      currentChapter = null
-      currentChapterName = null
-    }
-  }
-
-  return out
+interface DemoBranch {
+  process: string
+  forms: string[]
 }
 
-// ---- synthetic fallback (used when no clauses are available, e.g. mock) ------------------
+/** Curated demo branches per known document, keyed by the uppercased id (and code where it differs). */
+const DEMO_BRANCHES: Record<string, DemoBranch[]> = {
+  'DOC-CV-01': [
+    {
+      process: 'Quy trình thẩm định và phê duyệt khoản vay',
+      forms: ['Biểu mẫu đề nghị vay vốn', 'Biểu mẫu tờ trình thẩm định tín dụng'],
+    },
+    {
+      process: 'Quy trình giải ngân và quản lý khoản vay',
+      forms: ['Biểu mẫu khế ước nhận nợ', 'Biểu mẫu theo dõi thu hồi nợ'],
+    },
+  ],
+  'DOC-KYC-02': [
+    {
+      process: 'Quy trình định danh khách hàng (KYC)',
+      forms: ['Biểu mẫu thu thập thông tin khách hàng', 'Biểu mẫu đối chiếu giấy tờ định danh'],
+    },
+    {
+      process: 'Quy trình rà soát rủi ro và báo cáo',
+      forms: ['Biểu mẫu đánh giá rủi ro khách hàng', 'Biểu mẫu báo cáo giao dịch đáng ngờ'],
+    },
+  ],
+  'DOC-THE-03': [
+    {
+      process: 'Quy trình phát hành và kích hoạt thẻ',
+      forms: ['Biểu mẫu đăng ký mở thẻ tín dụng', 'Biểu mẫu xác nhận hạn mức thẻ'],
+    },
+    {
+      process: 'Quy trình thu phí và tính lãi',
+      forms: ['Biểu mẫu biểu phí dịch vụ thẻ', 'Biểu mẫu sao kê và tính lãi kỳ'],
+    },
+  ],
+  'DOC-102': [
+    {
+      process: 'Quy trình rà soát hồ sơ định kỳ',
+      forms: ['Biểu mẫu phiếu rà soát hồ sơ KH', 'Biểu mẫu báo cáo hồ sơ tồn đọng'],
+    },
+    {
+      process: 'Quy trình cập nhật thông tin khách hàng',
+      forms: ['Biểu mẫu đề nghị cập nhật thông tin', 'Biểu mẫu xử lý thông tin không phù hợp'],
+    },
+  ],
+}
 
-/** Three business processes, each carrying two document templates. */
-function syntheticChildren(doc: DocLike): TreeNode[] {
+/** Fallback for a document without a curated sample: two generic processes, two forms each. */
+const GENERIC_BRANCHES: DemoBranch[] = [
+  {
+    process: 'Quy trình nghiệp vụ chính',
+    forms: ['Biểu mẫu hồ sơ đề nghị', 'Biểu mẫu phiếu kiểm soát'],
+  },
+  {
+    process: 'Quy trình kiểm soát tuân thủ',
+    forms: ['Biểu mẫu báo cáo rà soát', 'Biểu mẫu biên bản xử lý'],
+  },
+]
+
+function branchesFor(doc: DocLike): DemoBranch[] {
+  const keys = [doc.id, doc.code].filter(Boolean).map((k) => k!.toUpperCase())
+  for (const key of keys) {
+    if (DEMO_BRANCHES[key]) return DEMO_BRANCHES[key]
+  }
+  return GENERIC_BRANCHES
+}
+
+/** The Quy trình (level 3) → Biểu mẫu (level 4) children of a regulation, from its demo sample. */
+function demoChildren(doc: DocLike): TreeNode[] {
   const code = codeOf(doc)
-  return [1, 2, 3].map((p) => ({
-    id: `${code}-qt-${p}`,
-    label: `Quy trình ${code}-${p}`,
+  return branchesFor(doc).map((branch, p) => ({
+    id: `${code}-qt-${p + 1}`,
+    label: branch.process,
     sublabel: 'Quy trình nghiệp vụ',
     level: 3,
-    children: [1, 2].map((b) => ({
-      id: `${code}-qt-${p}-bm-${b}`,
-      label: `Biểu mẫu ${code}-${p}-0${b}`,
+    children: branch.forms.map((form, b) => ({
+      id: `${code}-qt-${p + 1}-bm-${b + 1}`,
+      label: form,
       sublabel: 'Biểu mẫu tài liệu',
       level: 4,
     })),
   }))
 }
 
-/** A regulation (level 2) with its real Chương/Điều, or the synthetic fallback when none exist. */
-function regulationNode(doc: DocLike, clauses?: DocumentClause[]): TreeNode {
-  let children = clauses && clauses.length > 0 ? realChildren(clauses) : []
-  if (children.length === 0) children = syntheticChildren(doc)
+/** A regulation (level 2: the internal document) with its demo Quy trình/Biểu mẫu branches. */
+function regulationNode(doc: DocLike): TreeNode {
   return {
     id: `qd-${codeOf(doc)}`,
     label: doc.code || doc.id,
     sublabel: doc.title,
     level: 2,
-    children,
+    children: demoChildren(doc),
   }
 }
 
 /**
- * The impact tree: Thông tư → Quy định → Chương → Điều.
- * The active document expands to its real clause structure (`clauses`); in `full` mode every other
- * document is listed at level 2 without children (their clauses are not loaded here).
+ * The impact tree by document type: Thông tư → Quy định → Quy trình → Biểu mẫu.
+ * Single-branch mode shows only the active document; `full` mode lists every internal document under
+ * the circular, each with its own processes and forms, to show one circular's full reach.
  */
-export function buildTree(
-  doc: DocLike,
-  options: { full: boolean; docs: DocLike[]; activeDocId?: string; clauses: DocumentClause[] },
-): TreeNode {
-  const activeId = options.activeDocId ?? doc.id
+export function buildTree(doc: DocLike, options: { full: boolean; docs: DocLike[] }): TreeNode {
   const regulations = options.full && options.docs.length > 0 ? options.docs : [doc]
   return {
     id: 'root-thong-tu',
     label: ROOT_LABEL,
     sublabel: ROOT_SUBLABEL,
     level: 1,
-    children: regulations.map((reg) =>
-      reg.id === activeId
-        ? regulationNode(reg, options.clauses)
-        : { id: `qd-${codeOf(reg)}`, label: reg.code || reg.id, sublabel: reg.title, level: 2 as TreeLevel },
-    ),
+    children: regulations.map((reg) => regulationNode(reg)),
   }
-}
-
-/**
- * Produce a restructured ("optimized") variant of the tree. Each regulation's children are
- * consolidated into two streamlined processes, each with two forms, all flagged `isNew`.
- * Pure and client-side — no network, no model call.
- */
-export function suggestTree(tree: TreeNode): TreeNode {
-  const optimizeRegulation = (reg: TreeNode): TreeNode => {
-    const code = reg.label.toUpperCase()
-    const streams: { label: string; sublabel: string }[] = [
-      { label: `Quy trình ${code}-Hợp nhất`, sublabel: 'Quy trình nghiệp vụ hợp nhất' },
-      { label: `Quy trình ${code}-Kiểm soát`, sublabel: 'Quy trình kiểm soát tuân thủ' },
-    ]
-    const processes: TreeNode[] = streams.map((s, i) => ({
-      id: `${reg.id}-ai-qt-${i + 1}`,
-      label: s.label,
-      sublabel: s.sublabel,
-      level: 3,
-      isNew: true,
-      children: [1, 2].map((b) => ({
-        id: `${reg.id}-ai-qt-${i + 1}-bm-${b}`,
-        label: `Biểu mẫu ${code}-A${i + 1}-0${b}`,
-        sublabel: 'Biểu mẫu tài liệu',
-        level: 4,
-        isNew: true,
-      })),
-    }))
-    return { ...reg, children: processes }
-  }
-  return { ...tree, children: (tree.children ?? []).map(optimizeRegulation) }
 }
