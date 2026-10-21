@@ -296,6 +296,7 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
                 # QD article here, so it does not swallow the recipients, the signature and the
                 # attached regulation's title page up to "Chương I".
                 if article and mode != "closing":
+                    article = None
                     mode = "closing"
                     open_clause("QD.END", "closing", None, line, 0)
                 continue

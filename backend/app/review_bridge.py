@@ -498,10 +498,16 @@ def _locate_in_document(
                 all_rects = []
                 for line in lines:
                     l_norm = " ".join(line.split())
-                    if len(l_norm) < 4:
+                    if len(l_norm) < 12 or len(l_norm.split()) < 3:
                         continue
                     r_list = page.search_for(l_norm)
-                    if r_list:
+                    if not r_list:
+                        continue
+                    if all_rects and len(r_list) > 1:
+                        prev_y = all_rects[-1].y1
+                        best = min(r_list, key=lambda r: abs(r.y0 - prev_y))
+                        all_rects.append(best)
+                    else:
                         all_rects.extend(r_list)
                 if all_rects:
                     m_lines = []
@@ -615,7 +621,11 @@ def impact_row(group: list[dict], position: int, proposal: dict | None, error: s
     else:
         loc_num = numbering
 
-    location = f"{loc_num}: {heading}" if heading else loc_num
+    if heading:
+        sep = ": " if level else ". "
+        location = f"{loc_num}{sep}{heading}"
+    else:
+        location = loc_num
     finding_keys = (
         "finding_id", "job_id", "obligation_id", "evidence_id", "internal_clause_id",
         "category", "rationale", "status", "priority", "confidence", "source_span",

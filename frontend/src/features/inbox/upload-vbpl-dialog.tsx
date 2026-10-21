@@ -1,5 +1,5 @@
 import { useState, useRef, type ChangeEvent, type DragEvent } from 'react'
-import { FileText, Loader2, Upload, X } from 'lucide-react'
+import { AlertCircle, FileText, Loader2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,7 @@ export function UploadVbplDialog() {
   const [code, setCode] = useState('')
   const [title, setTitle] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const uploadMutation = useUploadVbpl()
@@ -36,6 +37,7 @@ export function UploadVbplDialog() {
     setCode('')
     setTitle('')
     setIsDragging(false)
+    setErrorMsg(null)
   }
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -45,14 +47,33 @@ export function UploadVbplDialog() {
     }
   }
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const validatePdfPages = async (selectedFile: File) => {
+    try {
+      const buffer = await selectedFile.arrayBuffer()
+      const text = new TextDecoder('latin1').decode(buffer)
+      const pageMatches = text.match(/\/Type\s*\/Page\b/g)
+      if (pageMatches && pageMatches.length > 20) {
+        const msg = `Tài liệu có ${pageMatches.length} trang. Hệ thống giới hạn tối đa 20 trang cho văn bản pháp luật.`
+        setErrorMsg(msg)
+        toast.error('Vượt quá giới hạn số trang', { description: msg })
+        return false
+      }
+    } catch {
+      // Let the backend validate
+    }
+    return true
+  }
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0]
     if (selected) {
       if (!selected.name.toLowerCase().endsWith('.pdf') && selected.type !== 'application/pdf') {
         toast.error('Chỉ hỗ trợ file định dạng PDF')
         return
       }
+      setErrorMsg(null)
       setFile(selected)
+      await validatePdfPages(selected)
     }
   }
 
@@ -65,7 +86,7 @@ export function UploadVbplDialog() {
     setIsDragging(false)
   }
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     setIsDragging(false)
     const dropped = e.dataTransfer.files?.[0]
@@ -74,12 +95,19 @@ export function UploadVbplDialog() {
         toast.error('Chỉ hỗ trợ file định dạng PDF')
         return
       }
+      setErrorMsg(null)
       setFile(dropped)
+      await validatePdfPages(dropped)
     }
   }
 
   const handleSubmit = async () => {
     if (!file) return
+
+    if (errorMsg && errorMsg.includes('20 trang')) {
+      toast.error('Vượt quá giới hạn số trang', { description: errorMsg })
+      return
+    }
 
     try {
       await uploadMutation.mutateAsync({
@@ -94,8 +122,10 @@ export function UploadVbplDialog() {
       setOpen(false)
       resetState()
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Có lỗi xảy ra khi xử lý file'
+      setErrorMsg(msg)
       toast.error('Tải lên thất bại', {
-        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi xử lý file',
+        description: msg,
       })
     }
   }
@@ -112,11 +142,18 @@ export function UploadVbplDialog() {
         <DialogHeader>
           <DialogTitle>Tải lên Văn bản Pháp luật (VBPL)</DialogTitle>
           <DialogDescription>
-            Tải lên file PDF từ NHNN để hệ thống tự động bóc tách (PyMuPDF), chunking theo Điều/Khoản và ingest vào Vector DB.
+            Tải lên file PDF từ NHNN để hệ thống tự động bóc tách (Tối đa 20 trang).
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {errorMsg && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20 flex items-start gap-2">
+              <AlertCircle className="size-4 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           {/* Dropzone */}
           <div
             onDragOver={handleDragOver}
@@ -154,6 +191,7 @@ export function UploadVbplDialog() {
                   onClick={(e) => {
                     e.stopPropagation()
                     setFile(null)
+                    setErrorMsg(null)
                   }}
                   disabled={uploadMutation.isPending}
                 >
@@ -169,7 +207,7 @@ export function UploadVbplDialog() {
                 <div className="text-sm">
                   <span className="font-semibold text-primary">Bấm để chọn file PDF</span> hoặc kéo thả vào đây
                 </div>
-                <p className="text-xs text-muted-foreground">Hỗ trợ các văn bản Thông tư, Quyết định dạng PDF</p>
+                <p className="text-xs text-muted-foreground">Hỗ trợ các văn bản Thông tư, Quyết định dạng PDF (Tối đa 20 trang)</p>
               </div>
             )}
           </div>
@@ -217,7 +255,7 @@ export function UploadVbplDialog() {
           <Button
             type="button"
             onClick={handleSubmit}
-            disabled={!file || uploadMutation.isPending}
+            disabled={!file || uploadMutation.isPending || !!(errorMsg && errorMsg.includes('20 trang'))}
           >
             {uploadMutation.isPending ? (
               <>
