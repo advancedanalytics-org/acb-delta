@@ -1,66 +1,61 @@
-# acb-delta
-Document Evaluation for Legal Transformation Analysis - AI Hackathon - Bank summit
+# acb-delta — Hướng dẫn sử dụng
 
-When a new legal document (VBPL) is issued, AI finds the internal bank documents it affects, suggests edits, and a human reviews them. Tasks and owners: [`PLAN.md`](PLAN.md).
+Khi một văn bản pháp luật (VBPL) mới được ban hành, hệ thống tự động tìm những văn bản nội bộ của ngân hàng bị ảnh hưởng, đề xuất nội dung chỉnh sửa, để cán bộ thẩm định phê duyệt (có người trong vòng lặp), và theo dõi chất lượng theo thời gian.
 
-## Quick start
+Tài liệu này hướng dẫn sử dụng bản demo từ đầu đến cuối.
 
-Needs Docker (Compose v2).
+## 1. Mở bản demo và đăng nhập
 
-```sh
-./scripts/run.sh up           # first run creates .env with generated passwords, then starts everything
-```
+- Bản demo trực tuyến: **https://59.153.246.193/** (hoặc địa chỉ do đội cung cấp).
+- Thông tin đăng nhập:
 
-Same with plain Compose: `cp .env.example .env` (replace every `CHANGEME`), then `docker compose up -d --build --wait`.
-
-| Service | URL |
-|---|---|
-| UI | http://localhost:3000 |
-| API | http://localhost:8000/health · readiness: http://localhost:8000/api/health/ready |
-| Agent (AgentBase contract) | http://localhost:8080/health · `POST /invoke` |
-| MinIO console | http://127.0.0.1:9001 |
-
-| `./scripts/run.sh …` | Does |
-|---|---|
-| `up` | Create `.env` if missing, build, start, wait until healthy, print URLs |
-| `status` | Service health + readiness |
-| `logs [service]` | Follow logs |
-| `down` | Stop (keeps data) |
-| `reset` | Stop and delete all data (asks first) |
-| `test` | Lint + tests for backend, agent, frontend (no Docker needed) |
-
-## Demo login
-
-The UI opens on a branded login gate. This is a **demo-only** gate, not real authentication — the
-credentials are hardcoded and checked in the browser (`frontend/src/hooks/use-auth.tsx`), so they
-are meant to be shared with whoever runs the demo:
-
-| Field | Value |
+| Trường | Giá trị |
 |---|---|
 | Tài khoản | `acb` |
 | Mật khẩu | `acb@2026` |
 
-(The username is case-insensitive.) Any HTTPS basic-auth in front of a hosted demo is separate and
-lives in that host's `.env` — never committed.
+> Nếu trình duyệt hiển thị cảnh báo chứng chỉ, hãy chọn tiếp tục. Nếu hạ tầng hỏi xác thực trước khi vào, dùng thông tin do đội cung cấp.
 
-## Layout
+Sau khi đăng nhập, thanh điều hướng bên trái gồm 5 mục: **Hộp thư VBPL**, **Văn bản nội bộ**, **Đánh giá**, **Nhật ký kiểm toán**, **Trạng thái hệ thống**.
 
-| Path | What | Owner slots |
+## 2. Các bước sử dụng
+
+Ví dụ dưới đây dùng **Luật 91/2025/QH15 — Bảo vệ dữ liệu cá nhân** trong mục [Văn bản pháp luật đi kèm](#3-văn-bản-pháp-luật-đi-kèm).
+
+### Bước 1 — Tải lên văn bản pháp luật mới
+1. Vào **Hộp thư VBPL**.
+2. Bấm **Tải lên VBPL**.
+3. Kéo‑thả hoặc chọn tệp PDF `luat-91-2025-qh15-bao-ve-du-lieu-ca-nhan.pdf`. Có thể nhập Số hiệu / Tiêu đề, hoặc để trống cho hệ thống tự nhận diện.
+4. Bấm **Tải lên & Xử lý**. Hệ thống bóc tách văn bản, tách theo Chương/Điều/Khoản và phân tích tác động tới các văn bản nội bộ.
+
+### Bước 2 — Thẩm định đề xuất (có người phê duyệt)
+1. Trong **Hộp thư VBPL**, theo dõi trạng thái xử lý của văn bản vừa tải lên.
+2. Khi phân tích xong, mở văn bản để vào màn **Thẩm định**.
+3. Với mỗi điểm tác động, hệ thống nêu rõ: văn bản nội bộ bị ảnh hưởng, vị trí (Điều/Khoản), lý do, và nội dung chỉnh sửa đề xuất.
+4. Chọn **Chấp nhận**, **Sửa** (chỉnh lại nội dung) hoặc **Từ chối** cho từng đề xuất.
+
+### Bước 3 — Xem đồ thị tác động của văn bản nội bộ
+1. Vào **Văn bản nội bộ**, chọn một quy định ở danh sách bên trái.
+2. Mở tab **Đồ thị tác động**: cây 4 cấp Thông tư → Quy định → Chương → Điều.
+3. Bấm vào một **Điều** để mở tab **Nội dung chi tiết** ngay tại điều khoản đó. Tab **Tài liệu gốc** hiển thị bản PDF.
+
+### Bước 4 — Theo dõi chất lượng
+- **Đánh giá**: bảng điều khiển chất lượng — độ chính xác trích xuất, truy xuất, phát hiện tác động, điểm đánh giá của mô hình giám khảo, và xu hướng cải thiện qua các lượt.
+- **Nhật ký kiểm toán**: lịch sử các quyết định thẩm định.
+- **Trạng thái hệ thống**: tình trạng các dịch vụ.
+
+## 3. Văn bản pháp luật đi kèm
+
+Có thể dùng ngay các văn bản trong thư mục [`docs/van-ban-phap-luat/`](docs/van-ban-phap-luat/):
+
+| Văn bản | Nội dung | Tệp |
 |---|---|---|
-| `backend/` | FastAPI: health probes, regulation ingest + impact analysis (`/api/regulations`, `/api/jobs`, see [`docs/ria-ingest-analyze.md`](docs/ria-ingest-analyze.md)); HITL router goes here | TAI-02 |
-| `agent/` | LangGraph graph on port 8080 (AgentBase Runtime contract), 4 stub nodes | TAI-01, MINH-01 (`retrieve`) |
-| `frontend/` | Vite + React UI prototype, all HUY-01 screens | HUY-01 (live API wiring) |
-| `db/init/` | Postgres init SQL (enables pgvector) | |
-| `docs/` | Longer-lived notes; data contracts shared across tasks | |
-| `research/` | Reference code RIA borrows ideas from (DICE, SLeDoC submodule); not built or tested, see [`research/README.md`](research/README.md) | MINH-01 |
-| `scripts/run.sh` | Run / stop / test the stack | |
-| `scripts/demo-data/` | Generates the demo PDFs and highlight positions | |
+| Luật 91/2025/QH15 | Bảo vệ dữ liệu cá nhân | [luat-91-2025-qh15-bao-ve-du-lieu-ca-nhan.pdf](docs/van-ban-phap-luat/luat-91-2025-qh15-bao-ve-du-lieu-ca-nhan.pdf) |
+| Nghị định 13/2023/NĐ-CP | Bảo vệ dữ liệu cá nhân | [nghi-dinh-13-2023-nd-cp-bao-ve-du-lieu-ca-nhan.pdf](docs/van-ban-phap-luat/nghi-dinh-13-2023-nd-cp-bao-ve-du-lieu-ca-nhan.pdf) |
+| Luật 134/2025/QH15 | Trí tuệ nhân tạo | [luat-134-2025-qh15-tri-tue-nhan-tao.pdf](docs/van-ban-phap-luat/luat-134-2025-qh15-tri-tue-nhan-tao.pdf) |
 
-## UI prototype runs on demo data
+Gợi ý: bắt đầu với **Luật 91/2025/QH15** để xem nhanh luồng từ tải lên đến thẩm định.
 
-The frontend ships with a mock API layer (`VITE_API_MODE=mock`, the default) so every screen is usable before the backend APIs exist. All VBPL, internal documents, impacts, decisions and evaluation numbers are **fictional** and the UI shows a "Dữ liệu demo" badge. Only the System status screen calls the real backend.
+## Tài liệu kỹ thuật
 
-- Contracts the screens expect: [`frontend/src/api/types.ts`](frontend/src/api/types.ts) (proposed; TAI-02 / MINH-01 / KHOA-01 own the final shapes).
-- Switch to real APIs: set `VITE_API_MODE=live` and rebuild. Endpoints not built yet show "Chưa có API (owner)".
-- Demo data lives in [`frontend/src/api/mock/fixtures/`](frontend/src/api/mock/fixtures/). After editing the document or impact JSON, regenerate the PDFs and highlights:
-  `uv run --with pymupdf python scripts/demo-data/generate_demo_pdfs.py`
+Hướng dẫn chạy và phát triển hệ thống: xem [`AGENTS.md`](AGENTS.md).
