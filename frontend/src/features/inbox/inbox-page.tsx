@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Check, FileText, Search } from 'lucide-react'
+import { ArrowRight, Check, FileText, Info, Search } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 
@@ -60,6 +60,10 @@ export function InboxPage() {
             {data ? `${data.length} văn bản mới từ NHNN · ${pendingTotal} tác động chờ duyệt` : 'Đang tải văn bản'}
           </p>
         </div>
+        <p className="inline-flex max-w-sm items-start gap-1.5 self-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>Hạn chế tải lên tài liệu dung lượng lớn do hệ thống đang trong giai đoạn POC (thử nghiệm).</span>
+        </p>
         <UploadVbplDialog />
       </div>
 
