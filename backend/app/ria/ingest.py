@@ -89,6 +89,13 @@ def create_regulation(
     checksum = hashlib.sha256(data).hexdigest()
     doc_number = overrides.get("doc_number")
     peeked, page_count = _peek_doc_number(data)
+    if page_count > settings.max_regulation_pages:
+        raise IngestError(
+            400,
+            f"Văn bản pháp luật vượt quá giới hạn {settings.max_regulation_pages} trang "
+            f"(tài liệu hiện tại có {page_count} trang). Vui lòng chỉ tải lên tài liệu tối đa "
+            f"{settings.max_regulation_pages} trang.",
+        )
     doc_number = doc_number or peeked
     document_id = document_id_for(doc_number, checksum)
 

@@ -124,6 +124,24 @@ async def upload_document(
     )
     clean_doc_id = doc_id.strip() if doc_id and doc_id.strip() else None
 
+    if doc_type == "vbpl":
+        try:
+            import pymupdf
+
+            pdf_doc = pymupdf.open(stream=content, filetype="pdf")
+            max_pages = get_settings().max_regulation_pages
+            if len(pdf_doc) > max_pages:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"Văn bản pháp luật vượt quá giới hạn {max_pages} trang "
+                    f"(tài liệu hiện tại có {len(pdf_doc)} trang). Vui lòng chỉ tải lên "
+                    f"tài liệu tối đa {max_pages} trang.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
     try:
         inferred_meta, chunks = chunk_pdf(
             source=content,

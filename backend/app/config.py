@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     # Where uploaded originals live: "s3" (MinIO / vStorage) or "local" (dev and tests).
     storage_backend: str = "local"
     max_upload_mb: int = 50
+    max_regulation_pages: int = 20
     # Background workers for parse / analyze jobs (in-process; no queue in Phase 1).
     job_workers: int = 2
 
