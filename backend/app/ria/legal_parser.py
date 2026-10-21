@@ -38,6 +38,10 @@ RE_ARTICLE = re.compile(
 RE_CLAUSE = re.compile(r"^(?:Khoản\s+)?(\d{1,3})[\.)]\s+(\S.*)$", re.IGNORECASE)
 RE_POINT = re.compile(r"^(?:Điểm\s+)?([a-zđ])[\.)]\s+(\S.*)$", re.IGNORECASE)
 RE_APPENDIX = re.compile(r"^(PHỤ LỤC|Phụ lục)(\s+[IVXLC\d]+)?\s*$")
+# Title line of the document a decision attaches ("Ban hành kèm theo Quyết định này …"): an
+# upper-case line on its own. Case-sensitive, so a wrapped sentence starting "Quy chế hoạt động…"
+# or the chapter title "QUY ĐỊNH CHUNG" is not mistaken for it.
+RE_ATTACHED_TITLE = re.compile(r"^(QUY ĐỊNH|QUY CHẾ|QUY TRÌNH|HƯỚNG DẪN|CHÍNH SÁCH)$")
 RE_CLOSING = re.compile(
     r"^(Nơi nhận\s*:|TM\.\s|KT\.\s|CHỦ TỊCH QUỐC HỘI$|(Luật|Nghị quyết) này (đã )?được Quốc hội)"
 )
@@ -239,9 +243,7 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
     appendix_count = 0
     mode = "body"  # body | appendix | closing
 
-    has_attached = any(
-        re.search(r"^(QUY ĐỊNH|QUY CHẾ|QUY TRÌNH)\b", ln.text, re.IGNORECASE) for ln in lines
-    )
+    has_attached = any(RE_ATTACHED_TITLE.match(ln.text) for ln in lines)
     is_decision = has_attached
 
     def open_clause(numbering, level, parent, line, marker_len, heading=None):
@@ -266,9 +268,7 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
         t = line.text
 
         if is_decision:
-            if re.match(r"^(QUY ĐỊNH|QUY CHẾ|QUY TRÌNH)\b", t, re.IGNORECASE) or (
-                article and RE_CHAPTER.match(t)
-            ):
+            if RE_ATTACHED_TITLE.match(t) or (article and RE_CHAPTER.match(t)):
                 is_decision = False
                 chapter = section = article = khoan = None
                 last_article = 0
@@ -292,6 +292,12 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
                     )
                     continue
             elif RE_CLOSING.match(t):
+                # "Nơi nhận" / signature of the decision wrapper: a closing node ends the last
+                # QD article here, so it does not swallow the recipients, the signature and the
+                # attached regulation's title page up to "Chương I".
+                if article and mode != "closing":
+                    mode = "closing"
+                    open_clause("QD.END", "closing", None, line, 0)
                 continue
 
         if mode != "appendix" and article and RE_APPENDIX.match(t):
@@ -315,7 +321,7 @@ def parse_structure(lines: list[Line], text: str) -> tuple[list[ParsedClause], l
             continue
         if mode == "closing":
             if (
-                re.match(r"^(QUY ĐỊNH|QUY CHẾ|QUY TRÌNH)\b", t, re.IGNORECASE)
+                RE_ATTACHED_TITLE.match(t)
                 or RE_CHAPTER.match(t)
                 or (RE_ARTICLE.match(t) and int(RE_ARTICLE.match(t).group(1)) == 1)
             ):

@@ -159,6 +159,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [x] Engine 1: khớp cấp Điều bằng vector gộp từ khoản/điểm (ý tưởng DICE); Engine 2: LLM căn span `equivalent` / `contradiction` / `addition` + `anchor` cho `INSERT`, kiểm tra độ phủ trước khi nhận `EQUIVALENT` (ý tưởng SLeDoC / LegDiff) — xem `docs/ria-ingest-analyze.md`. Chưa đo trên gold set (`KHOA-01`)
   - [x] Tách nghĩa vụ rule + LLM (blueprint RIA 4.0 "LLM + Pydantic"): rule bỏ nhãn điểm/khoản (hết chủ thể "b)", hành động "a lưu"); bước lọc áp dụng gọi LLM tách lại chủ thể / hành động / đối tượng / điều kiện / thời hạn / ngoại lệ, validate Pydantic + kiểm nguyên văn, lưu theo nghĩa vụ (`rule_fields` giữ bản rule) — tham số `refine_obligations`, xem `docs/ria-ingest-analyze.md`
   - [x] Parse PDF bỏ footer văn bản nội bộ `DOC-259 · Phiên bản 1.0 · Trang 2` (trước đây dính vào cuối khoản/điều): so header/footer lặp sau khi che chữ số + pattern riêng cho văn bản 1–2 trang — `legal_parser.extract_lines`
+  - [x] Parse Quyết định ban hành kèm văn bản: điều cuối (`QD.3`) dừng ở "Nơi nhận" thay vì nuốt nơi nhận, chữ ký và trang bìa văn bản đính kèm (phần này thành `QD.END`, không index); tiêu đề văn bản đính kèm phải là dòng in hoa đứng riêng, thêm HƯỚNG DẪN / CHÍNH SÁCH — hết trùng số hiệu ở DOC-234/247 và hết `QD.1` ở Luật 91, Nghị định 13
 - [x] **MINH-02** – Làm việc với Tài để thống nhất document format cho tài liệu mock — mẫu `db/DOC-102.md` / `db/DOC-102.parsed.json`, mô hình dữ liệu `db/data-model.md`
 
 ---
