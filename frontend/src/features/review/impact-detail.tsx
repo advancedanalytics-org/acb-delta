@@ -85,24 +85,26 @@ export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDet
         </header>
 
         <Section title="Điều khoản VBPL mới">
-          <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground whitespace-pre-line">{impact.changeClause}</p>
-          <p className="mt-2 text-xs text-muted-foreground">Trích dẫn: {impact.citation}</p>
-          {vbplClauses && vbplClauses.length > 0 && (
-            <ul className="mt-1 space-y-1">
-              {vbplClauses.map((group) => {
-                const subClauses = group.clauses.filter((c) => c !== group.articleNumbering)
-                return (
-                  <li key={group.articleNumbering} className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">
+          <div className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">
+            {vbplClauses && vbplClauses.length > 0 && (
+              <div className="mb-1.5 space-y-0.5 border-b border-accent-foreground/15 pb-1.5">
+                {vbplClauses.map((group) => {
+                  const subClauses = group.clauses.filter((c) => c !== group.articleNumbering)
+                  return (
+                    <p key={group.articleNumbering} className="font-semibold">
                       Điều {group.articleNumbering}
                       {group.articleTitle ? ` — ${group.articleTitle}` : ''}
-                    </span>
-                    {subClauses.length > 0 && <> (khoản {subClauses.join(', ')})</>}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+                      {subClauses.length > 0 && (
+                        <span className="font-normal text-accent-foreground/70"> (khoản {subClauses.join(', ')})</span>
+                      )}
+                    </p>
+                  )
+                })}
+              </div>
+            )}
+            <p className="whitespace-pre-line">{impact.changeClause}</p>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Trích dẫn: {impact.citation}</p>
         </Section>
 
         <Section title="Đoạn hiện hành bị ảnh hưởng">
@@ -114,6 +116,7 @@ export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDet
         </Section>
 
         <Section title={impact.decision?.action === 'edit' ? 'Nội dung đã sửa' : 'Đề xuất chỉnh sửa'}>
+          {impact.location && <p className="text-sm font-semibold text-foreground">{impact.location}</p>}
           {editing ? (
             <div className="space-y-2">
               <Textarea
