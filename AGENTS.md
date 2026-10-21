@@ -21,7 +21,7 @@ Glossary:
 ## Source of truth
 
 - **`PLAN.md`** — task list, owners, dependencies, and agreed decisions. Always read it before starting work.
-- **`README.md`** — project summary, quick start, repo layout.
+- **`README.md`** — end-user demo usage guide (Vietnamese). Running the stack, commands, and repo layout live in this file (see **Commands** below), not in the README.
 - When you add or change a command, update **Commands** below in the same PR. Do not guess commands that are not in the repo.
 
 ## Commands
