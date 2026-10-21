@@ -123,6 +123,7 @@ Thư viện dùng chung: PDF parser **PyMuPDF** (bắt buộc giữ `page` + `bb
   - [x] Vòng dài: export cặp preference (chosen / rejected) dạng dataset DPO — `python -m app.evaluation.dpo`, JSONL ra ngoài repo; chỉ `edit` / `reject` có bản nháp AI mới tạo được cặp
   - [x] Pipeline DPO "build sẵn": `app.evaluation.dpo_pipeline` theo dõi readiness (số cặp dùng được vs ngưỡng `DPO_MIN_PAIRS`), đủ ngưỡng (hoặc `--force`) thì xuất dataset versioned + manifest ra ngoài repo (`DPO_OUT_DIR`); CLI `status | build`. Bước train thật để lại hook roadmap `dpo_pipeline.train()` (chưa dựng — xem `TAI-04`). Endpoint `GET /api/eval/feedback-status` phục vụ số liệu readiness (`test_dpo_pipeline.py`)
   - [x] Hiển thị RLHF trên UI: mục "Học từ phản hồi" trong trang `/evaluation` (tiến trình tới ngưỡng DPO, phân rã accept/edit/reject, số few-shot đang phục vụ). **Đụng frontend của `HUY-01`** (`api/{client,live,mock,types}`, `hooks/queries`, `features/evaluation/evaluation-page`) theo yêu cầu của Khoa — cần Huy review phần giao diện
+  - [x] Seed dữ liệu **demo** cho mục RLHF: `app.evaluation.demo_feedback_seed` nạp corpus `app/evaluation/demo_feedback/` (VBPL → impact đã duyệt accept/edit/reject, tiền tố id `demofb-`) để panel RLHF không trống trên bản demo. Chèn-khi-vắng, hook deploy gọi; không đụng quyết định thật. Cùng ngoại lệ "demo có nhãn" như `demo_seed`
 
 ## Huy
 

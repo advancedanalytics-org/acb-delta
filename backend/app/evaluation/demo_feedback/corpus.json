@@ -1,0 +1,607 @@
+{
+  "vbpls": [
+    {
+      "id": "demofb-vbpl-ndcp13",
+      "number": "13/2023/NĐ-CP",
+      "title": "Nghị định về bảo vệ dữ liệu cá nhân",
+      "issuer": "Chính phủ",
+      "issued_date": "2023-04-17",
+      "effective_date": "2023-07-01",
+      "summary": "Quy định về xử lý, bảo vệ dữ liệu cá nhân và trách nhiệm của bên kiểm soát, bên xử lý dữ liệu.",
+      "text": "Nghị định 13/2023/NĐ-CP quy định nguyên tắc xử lý dữ liệu cá nhân, quyền của chủ thể dữ liệu, điều kiện về sự đồng ý, chuyển dữ liệu ra nước ngoài và nghĩa vụ thông báo vi phạm.",
+      "status": "done",
+      "impacts": [
+        {
+          "id": "demofb-imp-001",
+          "finding_id": "demofb-f-001",
+          "document_id": "QT.DONGY-2022",
+          "location": "Điều 5 khoản 1: Thu thập sự đồng ý",
+          "change_clause": "Sự đồng ý phải rõ ràng, tách theo từng mục đích và có thể rút lại bất kỳ lúc nào.",
+          "citation": "13/2023/NĐ-CP, Điều 11",
+          "affected_text": "Khách hàng xác nhận đồng ý cho ngân hàng sử dụng thông tin cá nhân khi ký hợp đồng mở tài khoản.",
+          "suggested_text": "Khách hàng đồng ý cho ngân hàng xử lý dữ liệu cá nhân theo từng mục đích cụ thể; sự đồng ý được thể hiện bằng hình thức có thể kiểm chứng và khách hàng có quyền rút lại bất kỳ lúc nào.",
+          "category": "new_obligation",
+          "severity": "high",
+          "reasoning": "Điều khoản nội bộ gộp chung một lần đồng ý cho mọi mục đích, chưa đáp ứng yêu cầu đồng ý theo từng mục đích và quyền rút lại.",
+          "rationale": "Nghị định yêu cầu sự đồng ý phải rõ ràng, tách bạch theo từng mục đích xử lý và có thể rút lại bất kỳ lúc nào.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-anh",
+            "days_ago": 18,
+            "reason_tags": ["Dẫn chiếu phụ lục mục đích", "Làm rõ quyền rút lại"],
+            "edited_text": "Khách hàng đồng ý cho ngân hàng xử lý dữ liệu cá nhân theo từng mục đích liệt kê tại Phụ lục 01; sự đồng ý thể hiện bằng hình thức có thể kiểm chứng và khách hàng có quyền rút lại đối với từng mục đích bất kỳ lúc nào mà không ảnh hưởng tới dịch vụ đã cung cấp."
+          }
+        },
+        {
+          "id": "demofb-imp-002",
+          "finding_id": "demofb-f-002",
+          "document_id": "QC.BM-KH-2021",
+          "location": "Điều 3 khoản 2: Phân loại thông tin",
+          "change_clause": "Dữ liệu cá nhân nhạy cảm phải được xác định và bảo vệ ở mức cao hơn.",
+          "citation": "13/2023/NĐ-CP, Điều 2 khoản 4",
+          "affected_text": "Thông tin mật của khách hàng gồm số tài khoản, số dư và lịch sử giao dịch.",
+          "suggested_text": "Thông tin mật của khách hàng gồm dữ liệu tài khoản và dữ liệu cá nhân nhạy cảm (tình trạng sức khỏe, dữ liệu sinh trắc học, quan điểm chính trị, dữ liệu về tội phạm) được bảo vệ theo chế độ nghiêm ngặt hơn.",
+          "category": "conflict",
+          "severity": "high",
+          "reasoning": "Định nghĩa thông tin mật nội bộ hẹp hơn phạm vi dữ liệu nhạy cảm của Nghị định, dẫn tới thiếu biện pháp bảo vệ bắt buộc.",
+          "rationale": "Nghị định liệt kê nhóm dữ liệu cá nhân nhạy cảm phải áp dụng biện pháp bảo vệ ở mức cao hơn, rộng hơn định nghĩa hiện hành.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 17,
+            "reason_tags": ["Liệt kê đúng nhóm nhạy cảm", "Bỏ ví dụ thừa"],
+            "edited_text": "Thông tin mật của khách hàng gồm dữ liệu tài khoản và dữ liệu cá nhân nhạy cảm theo Điều 2 khoản 4 Nghị định 13/2023/NĐ-CP, được áp dụng biện pháp bảo vệ ở mức cao hơn so với dữ liệu cá nhân cơ bản."
+          }
+        },
+        {
+          "id": "demofb-imp-003",
+          "finding_id": "demofb-f-003",
+          "document_id": "QT.QUYENCTDL-2022",
+          "location": "Điều 4: Yêu cầu tra cứu, chỉnh sửa",
+          "change_clause": "Chủ thể dữ liệu có quyền truy cập và yêu cầu chỉnh sửa dữ liệu cá nhân của mình.",
+          "citation": "13/2023/NĐ-CP, Điều 9 khoản 1, 2",
+          "affected_text": "Khách hàng có thể đề nghị tra cứu thông tin tài khoản tại quầy giao dịch.",
+          "suggested_text": "Khách hàng có quyền yêu cầu ngân hàng cung cấp và chỉnh sửa dữ liệu cá nhân của mình; ngân hàng phản hồi trong thời hạn quy định qua quầy giao dịch hoặc kênh trực tuyến.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Quy trình mới chỉ cho tra cứu tại quầy, chưa bảo đảm quyền truy cập và chỉnh sửa dữ liệu theo quy định.",
+          "rationale": "Chủ thể dữ liệu có quyền được biết, truy cập và yêu cầu chỉnh sửa dữ liệu cá nhân của mình.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-anh",
+            "days_ago": 16,
+            "reason_tags": ["Thêm thời hạn 72 giờ", "Thêm kênh trực tuyến"],
+            "edited_text": "Khách hàng có quyền yêu cầu ngân hàng cung cấp và chỉnh sửa dữ liệu cá nhân của mình qua quầy giao dịch hoặc kênh trực tuyến; ngân hàng phản hồi trong thời hạn 72 giờ kể từ khi nhận yêu cầu hợp lệ."
+          }
+        },
+        {
+          "id": "demofb-imp-004",
+          "finding_id": "demofb-f-004",
+          "document_id": "QT.QUYENCTDL-2022",
+          "location": "Điều 6: Yêu cầu xóa dữ liệu",
+          "change_clause": "Chủ thể dữ liệu có quyền yêu cầu xóa dữ liệu cá nhân khi không còn cần thiết.",
+          "citation": "13/2023/NĐ-CP, Điều 9 khoản 5",
+          "affected_text": "Quy trình hiện chưa có bước tiếp nhận yêu cầu xóa dữ liệu cá nhân của khách hàng.",
+          "suggested_text": "Ngân hàng tiếp nhận và xử lý yêu cầu xóa dữ liệu cá nhân của khách hàng khi mục đích xử lý đã hoàn thành hoặc khi khách hàng rút lại sự đồng ý, trừ trường hợp pháp luật yêu cầu lưu giữ.",
+          "category": "new_obligation",
+          "severity": "high",
+          "reasoning": "Thiếu hoàn toàn quy trình tiếp nhận quyền xóa dữ liệu, một quyền bắt buộc của chủ thể dữ liệu.",
+          "rationale": "Chủ thể dữ liệu có quyền yêu cầu xóa dữ liệu cá nhân, trừ trường hợp pháp luật quy định khác.",
+          "decision": {
+            "action": "accept",
+            "reviewer_id": "rv-bao",
+            "days_ago": 16,
+            "reason_tags": ["Đúng và đủ"]
+          }
+        },
+        {
+          "id": "demofb-imp-005",
+          "finding_id": "demofb-f-005",
+          "document_id": "QT.XLDLCN-2022",
+          "location": "Điều 9: Xử lý khi lộ, lọt dữ liệu",
+          "change_clause": "Phải thông báo vi phạm dữ liệu cá nhân cho cơ quan quản lý trong 72 giờ.",
+          "citation": "13/2023/NĐ-CP, Điều 23",
+          "affected_text": "Khi phát hiện lộ thông tin khách hàng, bộ phận CNTT báo cáo lãnh đạo đơn vị để xử lý.",
+          "suggested_text": "Khi phát hiện lộ, lọt dữ liệu cá nhân, ngân hàng lập hồ sơ và thông báo cho Bộ Công an trong vòng 72 giờ, đồng thời thông báo cho chủ thể dữ liệu bị ảnh hưởng.",
+          "category": "new_obligation",
+          "severity": "high",
+          "reasoning": "Quy trình nội bộ chỉ báo cáo nội bộ, thiếu nghĩa vụ thông báo cơ quan quản lý trong 72 giờ.",
+          "rationale": "Bên kiểm soát dữ liệu phải thông báo cho cơ quan chuyên trách trong 72 giờ kể từ khi xảy ra vi phạm dữ liệu cá nhân.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-anh",
+            "days_ago": 15,
+            "reason_tags": ["Ghi rõ đầu mối A05", "Bổ sung mẫu thông báo"],
+            "edited_text": "Khi phát hiện lộ, lọt dữ liệu cá nhân, ngân hàng lập hồ sơ theo mẫu và thông báo cho Cục An ninh mạng (A05 - Bộ Công an) trong vòng 72 giờ; trường hợp chậm hơn phải nêu lý do, đồng thời thông báo cho chủ thể dữ liệu bị ảnh hưởng."
+          }
+        },
+        {
+          "id": "demofb-imp-006",
+          "finding_id": "demofb-f-006",
+          "document_id": "QC.BM-KH-2021",
+          "location": "Điều 7: Tổ chức bảo vệ dữ liệu",
+          "change_clause": "Phải chỉ định bộ phận/nhân sự bảo vệ dữ liệu cá nhân.",
+          "citation": "13/2023/NĐ-CP, Điều 28, 29",
+          "affected_text": "Phòng Công nghệ thông tin chịu trách nhiệm bảo mật hệ thống và dữ liệu.",
+          "suggested_text": "Ngân hàng chỉ định bộ phận và nhân sự bảo vệ dữ liệu cá nhân, chịu trách nhiệm điều phối tuân thủ và làm đầu mối với cơ quan quản lý, độc lập với Phòng Công nghệ thông tin.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Chưa chỉ định chức năng bảo vệ dữ liệu cá nhân theo yêu cầu; trách nhiệm hiện chỉ gắn với an toàn hệ thống.",
+          "rationale": "Bên kiểm soát dữ liệu phải chỉ định bộ phận và nhân sự có chức năng bảo vệ dữ liệu cá nhân.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 14,
+            "reason_tags": ["Giao Khối Pháp chế & Tuân thủ"],
+            "edited_text": "Ngân hàng chỉ định nhân sự bảo vệ dữ liệu cá nhân thuộc Khối Pháp chế & Tuân thủ, làm đầu mối với cơ quan quản lý và điều phối tuân thủ, phối hợp nhưng độc lập với Phòng Công nghệ thông tin."
+          }
+        },
+        {
+          "id": "demofb-imp-007",
+          "finding_id": "demofb-f-007",
+          "document_id": "QT.XLDLCN-2022",
+          "location": "Điều 11: Nhật ký xử lý dữ liệu",
+          "change_clause": "Phải ghi và lưu nhật ký hoạt động xử lý dữ liệu cá nhân.",
+          "citation": "13/2023/NĐ-CP, Điều 38",
+          "affected_text": "Hệ thống chưa yêu cầu bắt buộc ghi nhật ký cho từng hoạt động xử lý dữ liệu cá nhân.",
+          "suggested_text": "Ngân hàng ghi và lưu nhật ký các hoạt động xử lý dữ liệu cá nhân, gồm mục đích, thời điểm, người thực hiện và phạm vi dữ liệu, phục vụ kiểm tra và chứng minh tuân thủ.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Thiếu yêu cầu bắt buộc ghi nhật ký hoạt động xử lý dữ liệu cá nhân phục vụ chứng minh tuân thủ.",
+          "rationale": "Bên kiểm soát dữ liệu phải lập và lưu nhật ký hoạt động xử lý dữ liệu cá nhân.",
+          "decision": {
+            "action": "accept",
+            "reviewer_id": "rv-anh",
+            "days_ago": 14,
+            "reason_tags": ["Đúng và đủ"]
+          }
+        },
+        {
+          "id": "demofb-imp-008",
+          "finding_id": "demofb-f-008",
+          "document_id": "QC.CHUYENDL-2022",
+          "location": "Điều 2: Chuyển dữ liệu ra nước ngoài",
+          "change_clause": "Chuyển dữ liệu cá nhân ra nước ngoài phải lập hồ sơ đánh giá tác động.",
+          "citation": "13/2023/NĐ-CP, Điều 25",
+          "affected_text": "Việc chia sẻ dữ liệu với đối tác nước ngoài thực hiện theo thỏa thuận bảo mật giữa hai bên.",
+          "suggested_text": "Trước khi chuyển dữ liệu cá nhân ra nước ngoài, ngân hàng lập hồ sơ đánh giá tác động chuyển dữ liệu và lưu tại đơn vị để xuất trình khi được yêu cầu.",
+          "category": "new_obligation",
+          "severity": "high",
+          "reasoning": "Chỉ dựa trên thỏa thuận bảo mật song phương, thiếu hồ sơ đánh giá tác động chuyển dữ liệu ra nước ngoài bắt buộc.",
+          "rationale": "Việc chuyển dữ liệu cá nhân ra nước ngoài phải lập hồ sơ đánh giá tác động và gửi cơ quan chuyên trách.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 13,
+            "reason_tags": ["Thêm nghĩa vụ gửi A05", "Chốt mẫu hồ sơ"],
+            "edited_text": "Trước khi chuyển dữ liệu cá nhân ra nước ngoài, ngân hàng lập hồ sơ đánh giá tác động chuyển dữ liệu theo mẫu của Bộ Công an, gửi cơ quan chuyên trách trong 60 ngày kể từ khi xử lý và lưu tại đơn vị để xuất trình khi được yêu cầu."
+          }
+        },
+        {
+          "id": "demofb-imp-009",
+          "finding_id": "demofb-f-009",
+          "document_id": "QC.LUUTRU-2020",
+          "location": "Điều 8: Thời hạn lưu trữ",
+          "change_clause": "Dữ liệu cá nhân chỉ lưu trong thời gian cần thiết cho mục đích xử lý.",
+          "citation": "13/2023/NĐ-CP, Điều 3 khoản 7",
+          "affected_text": "Hồ sơ khách hàng được lưu trữ vĩnh viễn trên hệ thống để phục vụ tra soát.",
+          "suggested_text": "Dữ liệu cá nhân chỉ được lưu trong thời gian cần thiết cho mục đích xử lý; khi mục đích hoàn thành, dữ liệu được xóa hoặc ẩn danh, trừ thời hạn lưu giữ do pháp luật chuyên ngành quy định.",
+          "category": "conflict",
+          "severity": "high",
+          "reasoning": "Quy định lưu trữ vĩnh viễn mâu thuẫn với nguyên tắc hạn chế thời gian lưu trữ dữ liệu cá nhân.",
+          "rationale": "Dữ liệu cá nhân chỉ được lưu trong khoảng thời gian phù hợp với mục đích xử lý.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-anh",
+            "days_ago": 12,
+            "reason_tags": ["Chốt thời hạn 10 năm theo Luật Kế toán"],
+            "edited_text": "Dữ liệu cá nhân chỉ được lưu trong thời gian cần thiết cho mục đích xử lý; với hồ sơ kế toán, lưu tối thiểu 10 năm theo pháp luật chuyên ngành, sau đó được xóa hoặc ẩn danh."
+          }
+        },
+        {
+          "id": "demofb-imp-010",
+          "finding_id": "demofb-f-010",
+          "document_id": "QT.DONGY-2022",
+          "location": "Điều 8: Dữ liệu của trẻ em",
+          "change_clause": "Xử lý dữ liệu trẻ em dưới 7 tuổi phải có sự đồng ý của cha, mẹ.",
+          "citation": "13/2023/NĐ-CP, Điều 20",
+          "affected_text": "Quy trình mở tài khoản thanh toán cho khách hàng tổ chức và khách hàng cá nhân từ đủ 15 tuổi.",
+          "suggested_text": "Khi xử lý dữ liệu của trẻ em dưới 7 tuổi, ngân hàng phải lấy sự đồng ý của cha, mẹ hoặc người giám hộ và xác minh độ tuổi.",
+          "category": "new_obligation",
+          "severity": "low",
+          "reasoning": "Điều khoản về dữ liệu trẻ em có thể áp dụng khi có khách hàng là trẻ em.",
+          "rationale": "Việc xử lý dữ liệu cá nhân của trẻ em phải có sự đồng ý của cha, mẹ hoặc người giám hộ.",
+          "decision": {
+            "action": "reject",
+            "reviewer_id": "rv-bao",
+            "days_ago": 12,
+            "reason_tags": ["Ngoài phạm vi biểu mẫu", "Không có đối tượng dưới 7 tuổi"]
+          }
+        },
+        {
+          "id": "demofb-imp-011",
+          "finding_id": "demofb-f-011",
+          "document_id": "BM.MO-TK-2021",
+          "location": "Mục 4: Đăng ký tiếp thị",
+          "change_clause": "Phải cho phép khách hàng từ chối tiếp thị trực tiếp.",
+          "citation": "13/2023/NĐ-CP, Điều 21",
+          "affected_text": "Khách hàng đồng ý nhận thông tin sản phẩm, dịch vụ của ngân hàng qua tin nhắn và thư điện tử.",
+          "suggested_text": "Khách hàng có thể chọn đồng ý hoặc từ chối nhận thông tin tiếp thị qua tin nhắn và thư điện tử, và có thể thay đổi lựa chọn này bất kỳ lúc nào.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Biểu mẫu mặc định đồng ý tiếp thị, chưa cho khách hàng quyền từ chối theo quy định.",
+          "rationale": "Chủ thể dữ liệu có quyền phản đối việc xử lý dữ liệu cho mục đích tiếp thị trực tiếp.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-anh",
+            "days_ago": 11,
+            "reason_tags": ["Ô chọn không tích sẵn", "Thêm hướng dẫn hủy"],
+            "edited_text": "Khách hàng chủ động tích chọn đồng ý nhận thông tin tiếp thị qua tin nhắn và thư điện tử (ô mặc định không tích sẵn), và có thể hủy đăng ký bất kỳ lúc nào theo hướng dẫn trong mỗi thông báo."
+          }
+        },
+        {
+          "id": "demofb-imp-012",
+          "finding_id": "demofb-f-012",
+          "document_id": "BM.MO-TK-2021",
+          "location": "Mục 6: Điều khoản bảo mật",
+          "change_clause": "Dẫn chiếu văn bản pháp luật về bảo vệ dữ liệu phải cập nhật.",
+          "citation": "13/2023/NĐ-CP, Điều 3",
+          "affected_text": "Việc bảo vệ thông tin khách hàng thực hiện theo Nghị định 52/2013/NĐ-CP và quy định nội bộ.",
+          "suggested_text": "Việc bảo vệ dữ liệu cá nhân của khách hàng thực hiện theo Nghị định 13/2023/NĐ-CP và quy định nội bộ của ngân hàng.",
+          "category": "outdated_reference",
+          "severity": "medium",
+          "reasoning": "Biểu mẫu dẫn chiếu văn bản cũ không còn là căn cứ chính về bảo vệ dữ liệu cá nhân.",
+          "rationale": "Nghị định 13/2023/NĐ-CP là căn cứ hiện hành về bảo vệ dữ liệu cá nhân, thay cho dẫn chiếu cũ.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 10,
+            "reason_tags": ["Giữ cả dẫn chiếu TMĐT"],
+            "edited_text": "Việc bảo vệ dữ liệu cá nhân của khách hàng thực hiện theo Nghị định 13/2023/NĐ-CP, pháp luật về thương mại điện tử có liên quan và quy định nội bộ của ngân hàng."
+          }
+        },
+        {
+          "id": "demofb-imp-013",
+          "finding_id": "demofb-f-013",
+          "document_id": "QC.CHUYENDL-2022",
+          "location": "Điều 5: Hợp đồng với bên xử lý",
+          "change_clause": "Hợp đồng với bên xử lý dữ liệu phải ràng buộc nghĩa vụ bảo vệ dữ liệu.",
+          "citation": "13/2023/NĐ-CP, Điều 38 khoản 3",
+          "affected_text": "Đối tác cung cấp dịch vụ cam kết bảo mật thông tin theo thỏa thuận chung.",
+          "suggested_text": "Hợp đồng với bên xử lý dữ liệu phải quy định rõ phạm vi, mục đích xử lý, nghĩa vụ bảo vệ dữ liệu, nghĩa vụ thông báo vi phạm và việc xóa, trả lại dữ liệu khi kết thúc hợp đồng.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Cam kết bảo mật chung chưa đủ các điều khoản ràng buộc bên xử lý theo quy định.",
+          "rationale": "Bên kiểm soát phải ràng buộc bên xử lý dữ liệu bằng hợp đồng quy định rõ trách nhiệm bảo vệ dữ liệu.",
+          "decision": {
+            "action": "accept",
+            "reviewer_id": "rv-anh",
+            "days_ago": 9,
+            "reason_tags": ["Đúng và đủ"]
+          }
+        },
+        {
+          "id": "demofb-imp-014",
+          "finding_id": "demofb-f-014",
+          "document_id": "QT.QUYENCTDL-2022",
+          "location": "Điều 9: Tiếp nhận khiếu nại",
+          "change_clause": "Phải có cơ chế tiếp nhận và xử lý khiếu nại về dữ liệu cá nhân.",
+          "citation": "13/2023/NĐ-CP, Điều 9 khoản 7",
+          "affected_text": "Khiếu nại của khách hàng được xử lý theo quy trình chăm sóc khách hàng chung.",
+          "suggested_text": "Ngân hàng thiết lập kênh tiếp nhận và xử lý khiếu nại liên quan đến dữ liệu cá nhân, phản hồi trong thời hạn quy định và lưu hồ sơ xử lý.",
+          "category": "new_obligation",
+          "severity": "low",
+          "reasoning": "Khiếu nại về dữ liệu cá nhân chưa có cơ chế riêng và thời hạn phản hồi rõ ràng.",
+          "rationale": "Chủ thể dữ liệu có quyền khiếu nại, tố cáo liên quan đến xử lý dữ liệu cá nhân của mình.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 8,
+            "reason_tags": ["Thời hạn 30 ngày"],
+            "edited_text": "Ngân hàng thiết lập kênh tiếp nhận và xử lý khiếu nại liên quan đến dữ liệu cá nhân, phản hồi trong 30 ngày kể từ khi nhận khiếu nại hợp lệ và lưu hồ sơ xử lý."
+          }
+        },
+        {
+          "id": "demofb-imp-015",
+          "finding_id": "demofb-f-015",
+          "document_id": "QT.XLDLCN-2022",
+          "location": "Điều 13: Quyết định tự động",
+          "change_clause": "Phải thông báo khi xử lý dữ liệu bằng quyết định tự động.",
+          "citation": "13/2023/NĐ-CP, Điều 13",
+          "affected_text": "Việc phân loại hồ sơ khách hàng do cán bộ tín dụng thực hiện và phê duyệt thủ công.",
+          "suggested_text": "Ngân hàng thông báo cho khách hàng khi áp dụng quyết định tự động trong xử lý dữ liệu cá nhân và cho phép khách hàng yêu cầu xem xét lại.",
+          "category": "new_obligation",
+          "severity": "low",
+          "reasoning": "Có thể phát sinh xử lý tự động cần thông báo cho chủ thể dữ liệu.",
+          "rationale": "Chủ thể dữ liệu được biết khi dữ liệu của mình bị xử lý thông qua quyết định tự động.",
+          "decision": {
+            "action": "reject",
+            "reviewer_id": "rv-anh",
+            "days_ago": 8,
+            "reason_tags": ["Quy trình này là thủ công", "Không có xử lý tự động"]
+          }
+        },
+        {
+          "id": "demofb-imp-016",
+          "finding_id": "demofb-f-016",
+          "document_id": "QC.BM-KH-2021",
+          "location": "Điều 10: Biện pháp bảo vệ",
+          "change_clause": "Áp dụng biện pháp bảo vệ dữ liệu phù hợp mức độ rủi ro.",
+          "citation": "13/2023/NĐ-CP, Điều 26, 27",
+          "affected_text": "Thông tin khách hàng được bảo vệ bằng mật khẩu và phân quyền truy cập.",
+          "suggested_text": "Ngân hàng áp dụng biện pháp kỹ thuật và tổ chức phù hợp mức độ rủi ro để bảo vệ dữ liệu cá nhân, gồm mã hóa, phân quyền truy cập và giám sát truy cập bất thường.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Biện pháp hiện tại chưa gắn với đánh giá mức độ rủi ro và chưa gồm mã hóa, giám sát bất thường.",
+          "rationale": "Bên kiểm soát phải áp dụng biện pháp bảo vệ dữ liệu cá nhân tương xứng với mức độ rủi ro.",
+          "decision": {
+            "action": "accept",
+            "reviewer_id": "rv-bao",
+            "days_ago": 7,
+            "reason_tags": ["Đúng và đủ"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "demofb-vbpl-tt08",
+      "number": "08/2024/TT-NHNN",
+      "title": "Thông tư quy định về an toàn, bảo mật cho việc cung cấp dịch vụ trực tuyến trong ngành Ngân hàng",
+      "issuer": "Ngân hàng Nhà nước Việt Nam",
+      "issued_date": "2024-06-28",
+      "effective_date": "2025-01-01",
+      "summary": "Yêu cầu về an toàn, bảo mật hệ thống thông tin khi cung cấp dịch vụ ngân hàng trực tuyến.",
+      "text": "Thông tư 08/2024/TT-NHNN quy định yêu cầu quản lý truy cập, ghi nhật ký, mã hóa, ứng cứu sự cố, sao lưu và quản lý dịch vụ thuê ngoài đối với hệ thống thông tin cung cấp dịch vụ trực tuyến.",
+      "status": "done",
+      "impacts": [
+        {
+          "id": "demofb-imp-017",
+          "finding_id": "demofb-f-017",
+          "document_id": "QT.PHANQUYEN-2021",
+          "location": "Điều 4: Truy cập đặc quyền",
+          "change_clause": "Tài khoản đặc quyền phải xác thực đa yếu tố.",
+          "citation": "08/2024/TT-NHNN, Điều 7",
+          "affected_text": "Quản trị viên hệ thống đăng nhập bằng tài khoản và mật khẩu được cấp riêng.",
+          "suggested_text": "Tài khoản đặc quyền (quản trị hệ thống, quản trị cơ sở dữ liệu) phải sử dụng xác thực đa yếu tố và chỉ truy cập qua kênh quản trị được kiểm soát.",
+          "category": "new_obligation",
+          "severity": "high",
+          "reasoning": "Truy cập đặc quyền chỉ dùng mật khẩu, chưa đáp ứng yêu cầu xác thực đa yếu tố.",
+          "rationale": "Hệ thống phải áp dụng xác thực đa yếu tố đối với truy cập của tài khoản quản trị, đặc quyền.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 7,
+            "reason_tags": ["Thêm bastion/PAM"],
+            "edited_text": "Tài khoản đặc quyền (quản trị hệ thống, quản trị cơ sở dữ liệu) phải sử dụng xác thực đa yếu tố và chỉ truy cập qua máy chủ trung gian (bastion/PAM) được ghi nhật ký đầy đủ."
+          }
+        },
+        {
+          "id": "demofb-imp-018",
+          "finding_id": "demofb-f-018",
+          "document_id": "QT.PHANQUYEN-2021",
+          "location": "Điều 6: Rà soát quyền truy cập",
+          "change_clause": "Phải rà soát quyền truy cập định kỳ.",
+          "citation": "08/2024/TT-NHNN, Điều 8",
+          "affected_text": "Quyền truy cập được cấp theo đề nghị của đơn vị và thu hồi khi nhân sự nghỉ việc.",
+          "suggested_text": "Ngân hàng rà soát quyền truy cập hệ thống định kỳ tối thiểu mỗi quý, thu hồi quyền không còn phù hợp và lưu biên bản rà soát.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Chỉ thu hồi quyền khi nghỉ việc, thiếu rà soát định kỳ quyền truy cập đang hoạt động.",
+          "rationale": "Hệ thống phải được rà soát quyền truy cập định kỳ để phát hiện và thu hồi quyền không còn phù hợp.",
+          "decision": {
+            "action": "accept",
+            "reviewer_id": "rv-anh",
+            "days_ago": 6,
+            "reason_tags": ["Đúng và đủ"]
+          }
+        },
+        {
+          "id": "demofb-imp-019",
+          "finding_id": "demofb-f-019",
+          "document_id": "QC.ATTT-2020",
+          "location": "Điều 12: Lưu nhật ký",
+          "change_clause": "Nhật ký hệ thống phải lưu tối thiểu 12 tháng.",
+          "citation": "08/2024/TT-NHNN, Điều 11",
+          "affected_text": "Nhật ký truy cập hệ thống được lưu giữ tối thiểu 6 tháng.",
+          "suggested_text": "Nhật ký truy cập và hoạt động hệ thống được lưu giữ tối thiểu 12 tháng và bảo đảm toàn vẹn, phục vụ điều tra sự cố.",
+          "category": "conflict",
+          "severity": "medium",
+          "reasoning": "Thời hạn lưu nhật ký nội bộ (6 tháng) thấp hơn mức tối thiểu 12 tháng theo Thông tư.",
+          "rationale": "Nhật ký hệ thống phải được lưu giữ tối thiểu 12 tháng để phục vụ tra cứu, điều tra.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 6,
+            "reason_tags": ["Ghi rõ chống sửa nhật ký"],
+            "edited_text": "Nhật ký truy cập và hoạt động hệ thống được lưu giữ tối thiểu 12 tháng trên phương tiện chống chỉnh sửa, bảo đảm toàn vẹn và phục vụ điều tra sự cố."
+          }
+        },
+        {
+          "id": "demofb-imp-020",
+          "finding_id": "demofb-f-020",
+          "document_id": "QT.SUCO-2021",
+          "location": "Điều 3: Báo cáo sự cố",
+          "change_clause": "Dẫn chiếu quy định báo cáo sự cố an toàn thông tin phải cập nhật.",
+          "citation": "08/2024/TT-NHNN, Điều 15",
+          "affected_text": "Việc báo cáo sự cố an toàn thông tin thực hiện theo Thông tư 18/2018/TT-NHNN.",
+          "suggested_text": "Việc báo cáo sự cố an toàn thông tin thực hiện theo Thông tư 08/2024/TT-NHNN; sự cố nghiêm trọng được báo cáo Ngân hàng Nhà nước theo thời hạn quy định.",
+          "category": "outdated_reference",
+          "severity": "medium",
+          "reasoning": "Quy trình dẫn chiếu thông tư cũ đã được thay thế về yêu cầu báo cáo sự cố.",
+          "rationale": "Thông tư 08/2024/TT-NHNN là căn cứ hiện hành cho việc báo cáo sự cố an toàn thông tin.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-anh",
+            "days_ago": 5,
+            "reason_tags": ["Chốt mốc 4 giờ / 24 giờ"],
+            "edited_text": "Việc báo cáo sự cố an toàn thông tin thực hiện theo Thông tư 08/2024/TT-NHNN; sự cố nghiêm trọng được báo cáo Ngân hàng Nhà nước trong vòng 4 giờ kể từ khi phát hiện và báo cáo đầy đủ trong 24 giờ."
+          }
+        },
+        {
+          "id": "demofb-imp-021",
+          "finding_id": "demofb-f-021",
+          "document_id": "QC.MATMA-2021",
+          "location": "Điều 5: Mã hóa dữ liệu",
+          "change_clause": "Dữ liệu nhạy cảm phải được mã hóa khi lưu trữ.",
+          "citation": "08/2024/TT-NHNN, Điều 10",
+          "affected_text": "Dữ liệu nhạy cảm được mã hóa khi truyền trên đường truyền công cộng.",
+          "suggested_text": "Dữ liệu nhạy cảm phải được mã hóa cả khi truyền và khi lưu trữ, sử dụng thuật toán và độ dài khóa đáp ứng tiêu chuẩn hiện hành.",
+          "category": "new_obligation",
+          "severity": "high",
+          "reasoning": "Hiện chỉ mã hóa khi truyền, thiếu yêu cầu mã hóa dữ liệu nhạy cảm khi lưu trữ.",
+          "rationale": "Dữ liệu nhạy cảm phải được mã hóa khi lưu trữ và khi truyền trên môi trường mạng.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 4,
+            "reason_tags": ["Nêu chuẩn AES-256"],
+            "edited_text": "Dữ liệu nhạy cảm phải được mã hóa cả khi truyền và khi lưu trữ bằng thuật toán tối thiểu AES-256 hoặc tương đương, khóa mã hóa được quản lý tập trung."
+          }
+        },
+        {
+          "id": "demofb-imp-022",
+          "finding_id": "demofb-f-022",
+          "document_id": "QC.MATMA-2021",
+          "location": "Điều 7: Vòng đời khóa",
+          "change_clause": "Khóa mã hóa phải được thay đổi định kỳ.",
+          "citation": "08/2024/TT-NHNN, Điều 10 khoản 3",
+          "affected_text": "Khóa mã hóa được thay đổi định kỳ 12 tháng/lần và khi nghi ngờ lộ khóa.",
+          "suggested_text": "Khóa mã hóa phải được thay đổi định kỳ và thu hồi ngay khi nghi ngờ bị lộ.",
+          "category": "new_obligation",
+          "severity": "low",
+          "reasoning": "Thông tư yêu cầu thay đổi khóa mã hóa định kỳ.",
+          "rationale": "Khóa mã hóa phải có chính sách vòng đời, thay đổi định kỳ và thu hồi khi bị lộ.",
+          "decision": {
+            "action": "reject",
+            "reviewer_id": "rv-anh",
+            "days_ago": 4,
+            "reason_tags": ["Đã tuân thủ sẵn", "Điều khoản hiện hành đã đáp ứng"]
+          }
+        },
+        {
+          "id": "demofb-imp-023",
+          "finding_id": "demofb-f-023",
+          "document_id": "QC.THUENGOAI-2022",
+          "location": "Điều 4: Đánh giá đối tác",
+          "change_clause": "Phải đánh giá rủi ro an toàn thông tin trước khi thuê ngoài.",
+          "citation": "08/2024/TT-NHNN, Điều 18",
+          "affected_text": "Đối tác cung cấp dịch vụ CNTT được lựa chọn theo quy trình mua sắm của ngân hàng.",
+          "suggested_text": "Trước khi ký hợp đồng thuê ngoài dịch vụ công nghệ thông tin, ngân hàng đánh giá rủi ro an toàn thông tin của đối tác và đưa yêu cầu bảo mật vào hợp đồng.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Quy trình mua sắm chưa bắt buộc đánh giá rủi ro an toàn thông tin của đối tác thuê ngoài.",
+          "rationale": "Phải đánh giá rủi ro an toàn thông tin đối với bên thứ ba trước khi sử dụng dịch vụ thuê ngoài.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 3,
+            "reason_tags": ["Thêm quyền kiểm tra đối tác"],
+            "edited_text": "Trước khi ký hợp đồng thuê ngoài dịch vụ công nghệ thông tin, ngân hàng đánh giá rủi ro an toàn thông tin của đối tác, đưa yêu cầu bảo mật và quyền kiểm tra, giám sát của ngân hàng vào hợp đồng."
+          }
+        },
+        {
+          "id": "demofb-imp-024",
+          "finding_id": "demofb-f-024",
+          "document_id": "QT.SAOLUU-2021",
+          "location": "Điều 6: Kiểm thử phục hồi",
+          "change_clause": "Phải kiểm thử phục hồi dữ liệu từ bản sao lưu định kỳ.",
+          "citation": "08/2024/TT-NHNN, Điều 13",
+          "affected_text": "Dữ liệu hệ thống được sao lưu hằng ngày và lưu tại trung tâm dữ liệu dự phòng.",
+          "suggested_text": "Ngân hàng sao lưu dữ liệu định kỳ và kiểm thử phục hồi từ bản sao lưu tối thiểu mỗi năm một lần, lưu kết quả kiểm thử.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Có sao lưu nhưng chưa có yêu cầu kiểm thử khả năng phục hồi định kỳ.",
+          "rationale": "Phải định kỳ kiểm thử khả năng phục hồi dữ liệu từ bản sao lưu.",
+          "decision": {
+            "action": "accept",
+            "reviewer_id": "rv-anh",
+            "days_ago": 3,
+            "reason_tags": ["Đúng và đủ"]
+          }
+        },
+        {
+          "id": "demofb-imp-025",
+          "finding_id": "demofb-f-025",
+          "document_id": "QT.SAOLUU-2021",
+          "location": "Điều 8: Mục tiêu phục hồi",
+          "change_clause": "Phải xác định mục tiêu thời gian và điểm phục hồi (RTO/RPO).",
+          "citation": "08/2024/TT-NHNN, Điều 14",
+          "affected_text": "Hệ thống được khôi phục sớm nhất có thể khi xảy ra sự cố.",
+          "suggested_text": "Ngân hàng xác định và tuân thủ mục tiêu thời gian phục hồi (RTO) và điểm phục hồi (RPO) cho từng hệ thống quan trọng, được phê duyệt và kiểm thử định kỳ.",
+          "category": "conflict",
+          "severity": "medium",
+          "reasoning": "Quy định 'sớm nhất có thể' không đo lường được, chưa đáp ứng yêu cầu xác định RTO/RPO cụ thể.",
+          "rationale": "Phải xác định mục tiêu thời gian phục hồi và điểm phục hồi cho hệ thống thông tin quan trọng.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-bao",
+            "days_ago": 2,
+            "reason_tags": ["Chốt RTO 4 giờ / RPO 15 phút"],
+            "edited_text": "Ngân hàng xác định mục tiêu thời gian phục hồi (RTO) tối đa 4 giờ và điểm phục hồi (RPO) tối đa 15 phút cho hệ thống dịch vụ trực tuyến quan trọng, được phê duyệt và kiểm thử định kỳ."
+          }
+        },
+        {
+          "id": "demofb-imp-026",
+          "finding_id": "demofb-f-026",
+          "document_id": "QC.ATTT-2020",
+          "location": "Điều 15: Dò quét lỗ hổng",
+          "change_clause": "Phải định kỳ dò quét và xử lý lỗ hổng bảo mật.",
+          "citation": "08/2024/TT-NHNN, Điều 12",
+          "affected_text": "Hệ thống được kiểm tra bảo mật khi có thay đổi lớn về kiến trúc.",
+          "suggested_text": "Ngân hàng định kỳ dò quét lỗ hổng bảo mật hệ thống dịch vụ trực tuyến và xử lý lỗ hổng theo mức độ nghiêm trọng trong thời hạn quy định.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Chỉ kiểm tra khi thay đổi lớn, thiếu dò quét lỗ hổng định kỳ và thời hạn xử lý theo mức độ.",
+          "rationale": "Phải định kỳ đánh giá, dò quét và khắc phục lỗ hổng bảo mật của hệ thống.",
+          "decision": {
+            "action": "edit",
+            "reviewer_id": "rv-anh",
+            "days_ago": 2,
+            "reason_tags": ["Quét hằng quý", "Vá lỗ hổng nghiêm trọng trong 15 ngày"],
+            "edited_text": "Ngân hàng dò quét lỗ hổng bảo mật hệ thống dịch vụ trực tuyến tối thiểu mỗi quý và khi có thay đổi lớn; lỗ hổng mức nghiêm trọng được xử lý trong 15 ngày kể từ khi phát hiện."
+          }
+        },
+        {
+          "id": "demofb-imp-027",
+          "finding_id": "demofb-f-027",
+          "document_id": "QT.PHANQUYEN-2021",
+          "location": "Điều 9: Phân tách nhiệm vụ",
+          "change_clause": "Phải phân tách nhiệm vụ trong quy trình thanh toán.",
+          "citation": "08/2024/TT-NHNN, Điều 9",
+          "affected_text": "Giao dịch thanh toán được khởi tạo và phê duyệt theo hạn mức phân cấp của đơn vị.",
+          "suggested_text": "Người khởi tạo và người phê duyệt giao dịch thanh toán phải là hai cá nhân khác nhau, bảo đảm nguyên tắc phân tách nhiệm vụ.",
+          "category": "new_obligation",
+          "severity": "medium",
+          "reasoning": "Quy định hạn mức chưa làm rõ nguyên tắc phân tách người khởi tạo và người phê duyệt.",
+          "rationale": "Phải bảo đảm nguyên tắc phân tách nhiệm vụ giữa khởi tạo và phê duyệt giao dịch.",
+          "decision": {
+            "action": "reject",
+            "reviewer_id": "rv-bao",
+            "days_ago": 1,
+            "reason_tags": ["Thuộc quy chế thanh toán", "Ngoài phạm vi văn bản này"]
+          }
+        },
+        {
+          "id": "demofb-imp-028",
+          "finding_id": "demofb-f-028",
+          "document_id": "QC.ATTT-2020",
+          "location": "Điều 18: Nâng cao nhận thức",
+          "change_clause": "Phải đào tạo nhận thức an toàn thông tin định kỳ.",
+          "citation": "08/2024/TT-NHNN, Điều 6",
+          "affected_text": "Nhân viên mới được phổ biến quy định an toàn thông tin khi nhận việc.",
+          "suggested_text": "Ngân hàng tổ chức đào tạo, nâng cao nhận thức an toàn thông tin cho nhân viên tối thiểu mỗi năm một lần, không chỉ khi nhận việc.",
+          "category": "new_obligation",
+          "severity": "low",
+          "reasoning": "Chỉ phổ biến khi nhận việc, thiếu đào tạo nhận thức an toàn thông tin định kỳ hằng năm.",
+          "rationale": "Phải định kỳ đào tạo, nâng cao nhận thức về an toàn thông tin cho người sử dụng.",
+          "decision": {
+            "action": "accept",
+            "reviewer_id": "rv-anh",
+            "days_ago": 1,
+            "reason_tags": ["Đúng và đủ"]
+          }
+        }
+      ]
+    }
+  ]
+}
