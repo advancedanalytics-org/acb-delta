@@ -1,4 +1,4 @@
-# acb-delta — Hướng dẫn sử dụng
+# RIA: Regulatory Impact Analysis — Hướng dẫn sử dụng
 
 Khi một văn bản pháp luật (VBPL) mới được ban hành, hệ thống tự động tìm những văn bản nội bộ của ngân hàng bị ảnh hưởng, đề xuất nội dung chỉnh sửa, để cán bộ thẩm định phê duyệt (có người trong vòng lặp), và theo dõi chất lượng theo thời gian.
 
@@ -20,12 +20,12 @@ Sau khi đăng nhập, thanh điều hướng bên trái gồm 5 mục: **Hộp 
 
 ## 2. Các bước sử dụng
 
-Ví dụ dưới đây dùng **Luật 91/2025/QH15 — Bảo vệ dữ liệu cá nhân** trong mục [Văn bản pháp luật đi kèm](#3-văn-bản-pháp-luật-đi-kèm).
+Ví dụ dưới đây dùng **Nghị định 165/2025/NĐ-CP — Quy định chi tiết một số điều và biện pháp thi hành Luật Dữ liệu** trong mục [Văn bản pháp luật đi kèm](#3-văn-bản-pháp-luật-đi-kèm).
 
 ### Bước 1 — Tải lên văn bản pháp luật mới
 1. Vào **Hộp thư VBPL**.
 2. Bấm **Tải lên VBPL**.
-3. Kéo‑thả hoặc chọn tệp PDF `luat-91-2025-qh15-bao-ve-du-lieu-ca-nhan.pdf`. Có thể nhập Số hiệu / Tiêu đề, hoặc để trống cho hệ thống tự nhận diện.
+3. Kéo‑thả hoặc chọn tệp PDF `nghi-dinh-165-2025-nd-cp-quy-dinh-chi-tiet-luat-du-lieu.pdf`. Có thể nhập Số hiệu / Tiêu đề, hoặc để trống cho hệ thống tự nhận diện.
 4. Bấm **Tải lên & Xử lý**. Hệ thống bóc tách văn bản, tách theo Chương/Điều/Khoản và phân tích tác động tới các văn bản nội bộ.
 
 ### Bước 2 — Thẩm định đề xuất (có người phê duyệt)
@@ -46,15 +46,13 @@ Ví dụ dưới đây dùng **Luật 91/2025/QH15 — Bảo vệ dữ liệu c�
 
 ## 3. Văn bản pháp luật đi kèm
 
-Có thể dùng ngay các văn bản trong thư mục [`docs/van-ban-phap-luat/`](docs/van-ban-phap-luat/):
+Có thể dùng ngay văn bản trong thư mục [`docs/van-ban-phap-luat/`](docs/van-ban-phap-luat/):
 
 | Văn bản | Nội dung | Tệp |
 |---|---|---|
-| Luật 91/2025/QH15 | Bảo vệ dữ liệu cá nhân | [luat-91-2025-qh15-bao-ve-du-lieu-ca-nhan.pdf](docs/van-ban-phap-luat/luat-91-2025-qh15-bao-ve-du-lieu-ca-nhan.pdf) |
-| Nghị định 13/2023/NĐ-CP | Bảo vệ dữ liệu cá nhân | [nghi-dinh-13-2023-nd-cp-bao-ve-du-lieu-ca-nhan.pdf](docs/van-ban-phap-luat/nghi-dinh-13-2023-nd-cp-bao-ve-du-lieu-ca-nhan.pdf) |
-| Luật 134/2025/QH15 | Trí tuệ nhân tạo | [luat-134-2025-qh15-tri-tue-nhan-tao.pdf](docs/van-ban-phap-luat/luat-134-2025-qh15-tri-tue-nhan-tao.pdf) |
+| Nghị định 165/2025/NĐ-CP (30/6/2025) | Quy định chi tiết một số điều và biện pháp thi hành Luật Dữ liệu | [nghi-dinh-165-2025-nd-cp-quy-dinh-chi-tiet-luat-du-lieu.pdf](docs/van-ban-phap-luat/nghi-dinh-165-2025-nd-cp-quy-dinh-chi-tiet-luat-du-lieu.pdf) |
 
-Gợi ý: bắt đầu với **Luật 91/2025/QH15** để xem nhanh luồng từ tải lên đến thẩm định.
+Tải tệp này lên ở [Bước 1](#bước-1--tải-lên-văn-bản-pháp-luật-mới) để xem toàn bộ luồng từ tải lên đến thẩm định.
 
 ## Tài liệu kỹ thuật
 
