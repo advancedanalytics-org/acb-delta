@@ -27,7 +27,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-anh",
-            "days_ago": 18,
+            "days_ago": 4,
             "reason_tags": ["Dẫn chiếu phụ lục mục đích", "Làm rõ quyền rút lại"],
             "edited_text": "Khách hàng đồng ý cho ngân hàng xử lý dữ liệu cá nhân theo từng mục đích liệt kê tại Phụ lục 01; sự đồng ý thể hiện bằng hình thức có thể kiểm chứng và khách hàng có quyền rút lại đối với từng mục đích bất kỳ lúc nào mà không ảnh hưởng tới dịch vụ đã cung cấp."
           }
@@ -48,7 +48,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-bao",
-            "days_ago": 17,
+            "days_ago": 4,
             "reason_tags": ["Liệt kê đúng nhóm nhạy cảm", "Bỏ ví dụ thừa"],
             "edited_text": "Thông tin mật của khách hàng gồm dữ liệu tài khoản và dữ liệu cá nhân nhạy cảm theo Điều 2 khoản 4 Nghị định 13/2023/NĐ-CP, được áp dụng biện pháp bảo vệ ở mức cao hơn so với dữ liệu cá nhân cơ bản."
           }
@@ -69,7 +69,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-anh",
-            "days_ago": 16,
+            "days_ago": 4,
             "reason_tags": ["Thêm thời hạn 72 giờ", "Thêm kênh trực tuyến"],
             "edited_text": "Khách hàng có quyền yêu cầu ngân hàng cung cấp và chỉnh sửa dữ liệu cá nhân của mình qua quầy giao dịch hoặc kênh trực tuyến; ngân hàng phản hồi trong thời hạn 72 giờ kể từ khi nhận yêu cầu hợp lệ."
           }
@@ -90,7 +90,7 @@
           "decision": {
             "action": "accept",
             "reviewer_id": "rv-bao",
-            "days_ago": 16,
+            "days_ago": 4,
             "reason_tags": ["Đúng và đủ"]
           }
         },
@@ -110,7 +110,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-anh",
-            "days_ago": 15,
+            "days_ago": 4,
             "reason_tags": ["Ghi rõ đầu mối A05", "Bổ sung mẫu thông báo"],
             "edited_text": "Khi phát hiện lộ, lọt dữ liệu cá nhân, ngân hàng lập hồ sơ theo mẫu và thông báo cho Cục An ninh mạng (A05 - Bộ Công an) trong vòng 72 giờ; trường hợp chậm hơn phải nêu lý do, đồng thời thông báo cho chủ thể dữ liệu bị ảnh hưởng."
           }
@@ -131,7 +131,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-bao",
-            "days_ago": 14,
+            "days_ago": 4,
             "reason_tags": ["Giao Khối Pháp chế & Tuân thủ"],
             "edited_text": "Ngân hàng chỉ định nhân sự bảo vệ dữ liệu cá nhân thuộc Khối Pháp chế & Tuân thủ, làm đầu mối với cơ quan quản lý và điều phối tuân thủ, phối hợp nhưng độc lập với Phòng Công nghệ thông tin."
           }
@@ -152,7 +152,7 @@
           "decision": {
             "action": "accept",
             "reviewer_id": "rv-anh",
-            "days_ago": 14,
+            "days_ago": 4,
             "reason_tags": ["Đúng và đủ"]
           }
         },
@@ -172,7 +172,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-bao",
-            "days_ago": 13,
+            "days_ago": 4,
             "reason_tags": ["Thêm nghĩa vụ gửi A05", "Chốt mẫu hồ sơ"],
             "edited_text": "Trước khi chuyển dữ liệu cá nhân ra nước ngoài, ngân hàng lập hồ sơ đánh giá tác động chuyển dữ liệu theo mẫu của Bộ Công an, gửi cơ quan chuyên trách trong 60 ngày kể từ khi xử lý và lưu tại đơn vị để xuất trình khi được yêu cầu."
           }
@@ -193,7 +193,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-anh",
-            "days_ago": 12,
+            "days_ago": 4,
             "reason_tags": ["Chốt thời hạn 10 năm theo Luật Kế toán"],
             "edited_text": "Dữ liệu cá nhân chỉ được lưu trong thời gian cần thiết cho mục đích xử lý; với hồ sơ kế toán, lưu tối thiểu 10 năm theo pháp luật chuyên ngành, sau đó được xóa hoặc ẩn danh."
           }
@@ -214,7 +214,7 @@
           "decision": {
             "action": "reject",
             "reviewer_id": "rv-bao",
-            "days_ago": 12,
+            "days_ago": 4,
             "reason_tags": ["Ngoài phạm vi biểu mẫu", "Không có đối tượng dưới 7 tuổi"]
           }
         },
@@ -234,7 +234,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-anh",
-            "days_ago": 11,
+            "days_ago": 4,
             "reason_tags": ["Ô chọn không tích sẵn", "Thêm hướng dẫn hủy"],
             "edited_text": "Khách hàng chủ động tích chọn đồng ý nhận thông tin tiếp thị qua tin nhắn và thư điện tử (ô mặc định không tích sẵn), và có thể hủy đăng ký bất kỳ lúc nào theo hướng dẫn trong mỗi thông báo."
           }
@@ -255,7 +255,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-bao",
-            "days_ago": 10,
+            "days_ago": 3,
             "reason_tags": ["Giữ cả dẫn chiếu TMĐT"],
             "edited_text": "Việc bảo vệ dữ liệu cá nhân của khách hàng thực hiện theo Nghị định 13/2023/NĐ-CP, pháp luật về thương mại điện tử có liên quan và quy định nội bộ của ngân hàng."
           }
@@ -276,7 +276,7 @@
           "decision": {
             "action": "accept",
             "reviewer_id": "rv-anh",
-            "days_ago": 9,
+            "days_ago": 3,
             "reason_tags": ["Đúng và đủ"]
           }
         },
@@ -296,7 +296,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-bao",
-            "days_ago": 8,
+            "days_ago": 3,
             "reason_tags": ["Thời hạn 30 ngày"],
             "edited_text": "Ngân hàng thiết lập kênh tiếp nhận và xử lý khiếu nại liên quan đến dữ liệu cá nhân, phản hồi trong 30 ngày kể từ khi nhận khiếu nại hợp lệ và lưu hồ sơ xử lý."
           }
@@ -317,7 +317,7 @@
           "decision": {
             "action": "reject",
             "reviewer_id": "rv-anh",
-            "days_ago": 8,
+            "days_ago": 3,
             "reason_tags": ["Quy trình này là thủ công", "Không có xử lý tự động"]
           }
         },
@@ -337,7 +337,7 @@
           "decision": {
             "action": "accept",
             "reviewer_id": "rv-bao",
-            "days_ago": 7,
+            "days_ago": 3,
             "reason_tags": ["Đúng và đủ"]
           }
         }
@@ -370,7 +370,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-bao",
-            "days_ago": 7,
+            "days_ago": 3,
             "reason_tags": ["Thêm bastion/PAM"],
             "edited_text": "Tài khoản đặc quyền (quản trị hệ thống, quản trị cơ sở dữ liệu) phải sử dụng xác thực đa yếu tố và chỉ truy cập qua máy chủ trung gian (bastion/PAM) được ghi nhật ký đầy đủ."
           }
@@ -391,7 +391,7 @@
           "decision": {
             "action": "accept",
             "reviewer_id": "rv-anh",
-            "days_ago": 6,
+            "days_ago": 3,
             "reason_tags": ["Đúng và đủ"]
           }
         },
@@ -411,7 +411,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-bao",
-            "days_ago": 6,
+            "days_ago": 3,
             "reason_tags": ["Ghi rõ chống sửa nhật ký"],
             "edited_text": "Nhật ký truy cập và hoạt động hệ thống được lưu giữ tối thiểu 12 tháng trên phương tiện chống chỉnh sửa, bảo đảm toàn vẹn và phục vụ điều tra sự cố."
           }
@@ -432,7 +432,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-anh",
-            "days_ago": 5,
+            "days_ago": 3,
             "reason_tags": ["Chốt mốc 4 giờ / 24 giờ"],
             "edited_text": "Việc báo cáo sự cố an toàn thông tin thực hiện theo Thông tư 08/2024/TT-NHNN; sự cố nghiêm trọng được báo cáo Ngân hàng Nhà nước trong vòng 4 giờ kể từ khi phát hiện và báo cáo đầy đủ trong 24 giờ."
           }
@@ -453,7 +453,7 @@
           "decision": {
             "action": "edit",
             "reviewer_id": "rv-bao",
-            "days_ago": 4,
+            "days_ago": 3,
             "reason_tags": ["Nêu chuẩn AES-256"],
             "edited_text": "Dữ liệu nhạy cảm phải được mã hóa cả khi truyền và khi lưu trữ bằng thuật toán tối thiểu AES-256 hoặc tương đương, khóa mã hóa được quản lý tập trung."
           }
@@ -474,7 +474,7 @@
           "decision": {
             "action": "reject",
             "reviewer_id": "rv-anh",
-            "days_ago": 4,
+            "days_ago": 3,
             "reason_tags": ["Đã tuân thủ sẵn", "Điều khoản hiện hành đã đáp ứng"]
           }
         },
