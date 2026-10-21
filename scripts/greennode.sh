@@ -103,7 +103,7 @@ cmd_deploy() {
     fi
 
     # Stop and remove existing containers and volumes before starting fresh
-    # sudo $COMPOSE_CMD down -v || true
+    sudo $COMPOSE_CMD down -v || true
 
     # Build and start all services (frontend listens on 80/443; other services are internal)
     sudo $COMPOSE_CMD up -d --build --wait
