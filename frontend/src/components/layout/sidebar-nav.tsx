@@ -30,12 +30,12 @@ export function SidebarNav() {
       )}
     >
       <div className={cn('flex h-14 items-center gap-2 border-b border-sidebar-border', compact ? 'justify-center' : 'justify-center md:justify-start md:px-4')}>
-        <span className="grid size-8 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-          Δ
+        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-white p-1 shadow-sm ring-1 ring-black/5">
+          <img src="/brand/acb-symbol.png" alt="ACB" className="size-full object-contain" draggable={false} />
         </span>
         <div className={cn('leading-tight max-md:sr-only', compact && 'sr-only')}>
-          <p className="text-sm font-semibold">Delta</p>
-          <p className="text-xs text-muted-foreground">Phân tích tác động pháp lý</p>
+          <p className="text-sm font-semibold">RIA</p>
+          <p className="text-xs text-muted-foreground">Regulatory Impact Analysis</p>
         </div>
       </div>
       <ul className={cn('flex flex-col gap-1', compact ? 'p-2' : 'p-2 md:p-3')}>
