@@ -110,6 +110,9 @@ cmd_deploy() {
 
     # Seed the illustrative demo evaluation runs so the dashboard is populated (insert when empty)
     sudo $COMPOSE_CMD exec -T api python -m app.evaluation.demo_seed || true
+    # Seed the illustrative demo feedback corpus so the RLHF panel (built from reviewer decisions)
+    # is populated (insert when absent; never touches real decisions)
+    sudo $COMPOSE_CMD exec -T api python -m app.evaluation.demo_feedback_seed || true
     sudo $COMPOSE_CMD ps"
 
   check_models

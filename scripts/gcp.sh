@@ -132,6 +132,9 @@ cmd_deploy() {
     # Populate the evaluation dashboard with the illustrative demo runs so it is never empty on a
     # fresh database. Idempotent: skips when eval_runs already has a run (never drops a real run).
     sudo $COMPOSE_GCP exec -T api python -m app.evaluation.demo_seed || true
+    # Populate the RLHF panel (built from reviewer decisions) with the illustrative demo feedback
+    # corpus. Idempotent: skips when already seeded; never touches real decisions.
+    sudo $COMPOSE_GCP exec -T api python -m app.evaluation.demo_feedback_seed || true
     sudo ./scripts/run.sh status"
   check_models
   # CI logs are public for this repo: print only the URL there, never the password.
