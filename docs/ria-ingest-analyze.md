@@ -218,6 +218,8 @@ Cần đo lại trên gold set (mục 19) trước khi chốt.
 
 Đổi `EMBEDDING_MODEL` thì phải chạy lại seed. Vector cũ vẫn nằm trong bảng dưới `embedding_version` cũ và không bị trộn với vector mới.
 
+**Ingest lại văn bản nội bộ sau khi sửa parser** (`ingest_internal`): file PDF trùng checksum chỉ bị bỏ qua ("Nội dung tệp không có thay đổi…") khi phiên bản đó được parse bởi đúng code parser hiện tại. `document_version.parser_version` lưu fingerprint (sha256 rút gọn) của `legal_parser.py`, `obligations.py` và `textutil.py`; khi code này đổi (ví dụ bỏ footer `DOC-259 · Phiên bản 1.0 · Trang 2`), tải lại đúng file đó sẽ parse lại và thay điều khoản, nghĩa vụ, view của phiên bản. Dòng cũ chưa có fingerprint (`NULL`) luôn được parse lại một lần. Finding, gói review và bản sửa đã tạo từ text cũ không tự đổi: cần chạy lại phân tích và review cho các văn bản pháp quy liên quan.
+
 ## Chạy thử
 
 ```sh

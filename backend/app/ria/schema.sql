@@ -192,3 +192,7 @@ CREATE TABLE IF NOT EXISTS llm_cache (
 -- Document-level findings from the knowledge graph (an internal document cites a law the
 -- regulation replaces) belong to no single obligation.
 ALTER TABLE impact_finding ALTER COLUMN obligation_id DROP NOT NULL;
+
+-- Fingerprint of the parser code that produced a version's clauses (internal ingest). A re-upload
+-- of an unchanged PDF is parsed again when it differs; NULL (older rows) always re-parses once.
+ALTER TABLE document_version ADD COLUMN IF NOT EXISTS parser_version text;

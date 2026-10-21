@@ -25,12 +25,20 @@ import pymupdf
 from sqlalchemy import text
 
 from app.db import get_engine
+from app.ria import legal_parser, obligations, textutil
 from app.ria.indexing import build_index_views
 from app.ria.legal_parser import extract_references, parse_pdf
 from app.ria.obligations import ClauseInput, extract_obligations
 from app.ria.schema import ensure_schema
 
 logger = logging.getLogger(__name__)
+
+# Fingerprint of the code that turns a PDF into clauses and obligations. Stored on each version:
+# re-uploading an unchanged PDF is skipped only when it was parsed by this same code, so a parser
+# fix (e.g. dropping page footers) reaches documents ingested before it.
+PARSER_VERSION = hashlib.sha256(
+    b"".join(Path(m.__file__).read_bytes() for m in (legal_parser, obligations, textutil))
+).hexdigest()[:12]
 
 _CURRENT_INGEST_JOB: dict = {
     "is_processing": False,
@@ -180,7 +188,8 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
         existing = (
             conn.execute(
                 text(
-                    "SELECT v.version_id, v.document_id, v.file_name, d.title, d.doc_type, "
+                    "SELECT v.version_id, v.document_id, v.file_name, v.parser_version, d.title, "
+                    "d.doc_type, "
                     "(SELECT count(*) FROM clause WHERE version_id = v.version_id) AS clause_count "
                     "FROM document_version v "
                     "JOIN document d USING (document_id) "
@@ -191,7 +200,15 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
             .mappings()
             .first()
         )
-        if existing:
+        if existing and existing["parser_version"] != PARSER_VERSION:
+            logger.info(
+                "[%s] Same file as %s but parsed by older code (%s → %s). Re-parsing.",
+                path.name,
+                existing["version_id"],
+                existing["parser_version"],
+                PARSER_VERSION,
+            )
+        elif existing:
             existing_doc_id = existing["document_id"]
             existing_title = existing["title"]
             existing_file = existing["file_name"]
@@ -273,16 +290,17 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
             text(
                 "INSERT INTO document_version (version_id, document_id, version_label, status, "
                 "valid_from, checksum, processing_status, page_count, content, source_uri, "
-                "file_name) "
+                "file_name, parser_version) "
                 "VALUES (:v, :d, :label, 'effective', :vf, :c, 'PARSED', :pages, :content, "
-                ":src, :name) "
+                ":src, :name, :pv) "
                 "ON CONFLICT (version_id) DO UPDATE SET "
                 "status = 'effective', processing_status = 'PARSED', "
                 "valid_from = EXCLUDED.valid_from, page_count = EXCLUDED.page_count, "
                 "content = COALESCE(EXCLUDED.content, document_version.content), "
                 "source_uri = EXCLUDED.source_uri, "
                 "checksum = EXCLUDED.checksum, "
-                "file_name = EXCLUDED.file_name"
+                "file_name = EXCLUDED.file_name, "
+                "parser_version = EXCLUDED.parser_version"
             ),
             {
                 "v": version_id,
@@ -294,6 +312,7 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
                 "content": parsed.text,
                 "src": source_uri,
                 "name": path.name,
+                "pv": PARSER_VERSION,
             },
         )
 
@@ -461,70 +480,73 @@ def _do_ingest_internal_pdf(path: Path) -> dict:
             flush=True,
         )
 
-        # 9. Sync into LangChain PGVector tables (documents & document_chunks)
+        # 9. Sync into LangChain PGVector tables (documents & document_chunks). Optional, so it
+        # runs in a savepoint: a failure here must not roll back the RIA ingest above.
         try:
-            conn.execute(
-                text(
-                    "INSERT INTO documents (id, code, title, doc_type, issuer, effective_date, "
-                    "page_count, pdf_url, created_at) "
-                    "VALUES (:id, :code, :title, 'internal', :issuer, :vf, :pages, :url, NOW()) "
-                    "ON CONFLICT (id) DO UPDATE SET "
-                    "title = EXCLUDED.title, page_count = EXCLUDED.page_count, "
-                    "effective_date = EXCLUDED.effective_date"
-                ),
-                {
-                    "id": document_id,
-                    "code": document_id,
-                    "title": meta["title"],
-                    "issuer": meta["issuer"],
-                    "vf": meta["valid_from"],
-                    "pages": parsed.page_count,
-                    "url": str(path),
-                },
-            )
-            conn.execute(
-                text("DELETE FROM document_chunks WHERE doc_id = :d"),
-                {"d": document_id},
-            )
-            chunk_rows = []
-            for row in clause_rows:
-                bbox_val = "[]"
-                if row["bbox"] and row["bbox"] != "[]":
-                    raw_boxes = json.loads(row["bbox"])
-                    if raw_boxes:
-                        bbox_val = json.dumps(raw_boxes[0][1:])
-                chunk_rows.append(
-                    {
-                        "id": row["id"],
-                        "doc_id": document_id,
-                        "doc_type": "internal",
-                        "issuer": meta["issuer"],
-                        "effective_date": meta["valid_from"],
-                        "article_path": row["num"],
-                        "page": row["page"] or 1,
-                        "bbox": bbox_val,
-                        "text": row["text"],
-                        "meta": json.dumps(
-                            {
-                                "level": row["level"],
-                                "heading": row["heading"],
-                                "version_id": version_id,
-                            }
-                        ),
-                    }
-                )
-            if chunk_rows:
+            with conn.begin_nested():
                 conn.execute(
                     text(
-                        "INSERT INTO document_chunks (id, doc_id, doc_type, issuer, "
-                        "effective_date, article_path, page, bbox, text, chunk_metadata, "
-                        "created_at) "
-                        "VALUES (:id, :doc_id, :doc_type, :issuer, :effective_date, "
-                        ":article_path, :page, CAST(:bbox AS json), :text, "
-                        "CAST(:meta AS json), NOW())"
+                        "INSERT INTO documents (id, code, title, doc_type, issuer, effective_date, "
+                        "page_count, pdf_url, created_at) "
+                        "VALUES (:id, :code, :title, 'internal', :issuer, :vf, :pages, :url, "
+                        "NOW()) "
+                        "ON CONFLICT (id) DO UPDATE SET "
+                        "title = EXCLUDED.title, page_count = EXCLUDED.page_count, "
+                        "effective_date = EXCLUDED.effective_date"
                     ),
-                    chunk_rows,
+                    {
+                        "id": document_id,
+                        "code": document_id,
+                        "title": meta["title"],
+                        "issuer": meta["issuer"],
+                        "vf": meta["valid_from"],
+                        "pages": parsed.page_count,
+                        "url": str(path),
+                    },
                 )
+                conn.execute(
+                    text("DELETE FROM document_chunks WHERE doc_id = :d"),
+                    {"d": document_id},
+                )
+                chunk_rows = []
+                for row in clause_rows:
+                    bbox_val = "[]"
+                    if row["bbox"] and row["bbox"] != "[]":
+                        raw_boxes = json.loads(row["bbox"])
+                        if raw_boxes:
+                            bbox_val = json.dumps(raw_boxes[0][1:])
+                    chunk_rows.append(
+                        {
+                            "id": row["id"],
+                            "doc_id": document_id,
+                            "doc_type": "internal",
+                            "issuer": meta["issuer"],
+                            "effective_date": meta["valid_from"],
+                            "article_path": row["num"],
+                            "page": row["page"] or 1,
+                            "bbox": bbox_val,
+                            "text": row["text"],
+                            "meta": json.dumps(
+                                {
+                                    "level": row["level"],
+                                    "heading": row["heading"],
+                                    "version_id": version_id,
+                                }
+                            ),
+                        }
+                    )
+                if chunk_rows:
+                    conn.execute(
+                        text(
+                            "INSERT INTO document_chunks (id, doc_id, doc_type, issuer, "
+                            "effective_date, article_path, page, bbox, text, chunk_metadata, "
+                            "created_at) "
+                            "VALUES (:id, :doc_id, :doc_type, :issuer, :effective_date, "
+                            ":article_path, :page, CAST(:bbox AS json), :text, "
+                            "CAST(:meta AS json), NOW())"
+                        ),
+                        chunk_rows,
+                    )
         except Exception as exc:
             logger.debug("LangChain PGVector tables sync optional: %s", exc)
 
