@@ -16,6 +16,7 @@ import type {
   Reviewer,
   UploadVbplInput,
   Vbpl,
+  VbplClauseGroup,
 } from '@/api/types'
 
 /** Readiness returns 503 with the same JSON body when a dependency fails, so read the body anyway. */
@@ -207,6 +208,18 @@ export const liveApi: ApiClient = {
       vbplId,
       decision: impact.decision && { ...impact.decision, vbplId },
     }))
+  },
+
+  getImpactVbplClauses: async (impactId: string): Promise<VbplClauseGroup[]> => {
+    try {
+      const res = await fetch(`/api/impacts/${encodeURIComponent(impactId)}/vbpl-clauses`)
+      if (res.ok) {
+        return (await res.json()) as VbplClauseGroup[]
+      }
+    } catch {
+      // Backend unreachable: the popup just omits the clause breakdown.
+    }
+    return []
   },
 
   listDocuments: async (): Promise<InternalDocument[]> => {

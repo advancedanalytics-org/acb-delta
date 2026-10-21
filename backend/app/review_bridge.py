@@ -18,7 +18,7 @@ from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import exists, select, text, update
+from sqlalchemy import bindparam, exists, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 from app import agent_client
@@ -205,6 +205,78 @@ def load_findings(analyze_job_id: str) -> list[dict]:
         findings = [dict(r) for r in rows]
     findings.sort(key=review_order)
     return findings
+
+
+def cited_vbpl_clauses(obligation_ids: list[str]) -> list[dict]:
+    """The real VBPL clauses behind an impact's obligations, grouped by their article (Điều).
+
+    Each obligation points at one regulation clause (`obligation.source_clause_id`), the same clause
+    whose numbering the impact's `citation` string already lists. For every article those clauses
+    sit under, return the article's numbering + heading (as parsed from the VBPL by the legal
+    parser) and the cited clause numberings under it, e.g. Điều 12 → ["12.3.d", "12.3.c"], in
+    document order. RIA tables are read, never mocked; returns [] when there is nothing to resolve
+    (e.g. a non-RIA /invoke impact) or the database is unreachable, so the caller renders nothing
+    rather than failing.
+    """
+    ids = [o for o in dict.fromkeys(obligation_ids) if o]
+    if not ids:
+        return []
+    try:
+        with get_engine().connect() as conn:
+            rows = (
+                conn.execute(
+                    text(
+                        "WITH RECURSIVE anc AS ("
+                        "  SELECT c.clause_id, c.parent_id, c.numbering, c.level, c.heading,"
+                        "         c.ordinal, c.clause_id AS leaf_id, c.numbering AS leaf_numbering,"
+                        "         c.ordinal AS leaf_ordinal"
+                        "  FROM obligation o JOIN clause c ON c.clause_id = o.source_clause_id"
+                        "  WHERE o.obligation_id IN :ids"
+                        "  UNION ALL"
+                        "  SELECT p.clause_id, p.parent_id, p.numbering, p.level, p.heading,"
+                        "         p.ordinal, anc.leaf_id, anc.leaf_numbering, anc.leaf_ordinal"
+                        "  FROM clause p JOIN anc ON p.clause_id = anc.parent_id"
+                        ")"
+                        " SELECT DISTINCT leaf_id, leaf_numbering, leaf_ordinal,"
+                        "        numbering AS article_numbering, heading AS article_heading,"
+                        "        ordinal AS article_ordinal"
+                        " FROM anc WHERE level = 'article'"
+                    ).bindparams(bindparam("ids", expanding=True)),
+                    {"ids": ids},
+                )
+                .mappings()
+                .all()
+            )
+    except Exception:  # RIA tables missing / DB down: show nothing, never break the popup.
+        log.warning("cited_vbpl_clauses lookup failed", exc_info=True)
+        return []
+    return group_cited_by_article(rows)
+
+
+def group_cited_by_article(rows) -> list[dict]:
+    """Collapse the (article, cited clause) rows into one entry per article, in document order.
+
+    Each row carries an article (`article_numbering`/`article_heading`/`article_ordinal`) and one
+    cited clause under it (`leaf_numbering`/`leaf_ordinal`). Articles are ordered by their ordinal
+    and the cited clauses within each by theirs; duplicates are dropped. Pure over `rows` so it is
+    tested without a database.
+    """
+    groups: dict[str, dict] = {}
+    for r in rows:
+        g = groups.setdefault(
+            r["article_numbering"],
+            {"title": r["article_heading"], "ordinal": r["article_ordinal"], "clauses": {}},
+        )
+        # Keep each cited clause once, remembering its order in the document.
+        g["clauses"].setdefault(r["leaf_numbering"], r["leaf_ordinal"])
+    return [
+        {
+            "article_numbering": numbering,
+            "article_title": g["title"],
+            "clauses": [n for n, _ in sorted(g["clauses"].items(), key=lambda kv: (kv[1], kv[0]))],
+        }
+        for numbering, g in sorted(groups.items(), key=lambda kv: (kv[1]["ordinal"], kv[0]))
+    ]
 
 
 def review_order(f: dict) -> tuple:

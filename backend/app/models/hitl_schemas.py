@@ -136,6 +136,14 @@ class DecisionCreate(CamelModel):
         return self
 
 
+class VbplClauseGroup(CamelModel):
+    """One impact's cited VBPL clauses, grouped by their article (Điều) for the review popup."""
+
+    article_numbering: str
+    article_title: str | None
+    clauses: list[str]
+
+
 class FeedbackRow(CamelModel):
     """One decided impact as a label for KHOA-02 (docs/amendment-review-contract.md §4)."""
 

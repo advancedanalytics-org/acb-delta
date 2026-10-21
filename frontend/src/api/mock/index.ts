@@ -227,6 +227,8 @@ export const mockApi: ApiClient = {
     }
     return delay(items)
   },
+  // The cited-clause breakdown is resolved live from the RIA tables; the mock has none.
+  getImpactVbplClauses: () => delay([]),
   listDocuments: () => delay(documents),
   listAuditTrail: () => delay(buildAuditTrail()),
   listReviewers: () => delay(reviewers),
