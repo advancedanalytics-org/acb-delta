@@ -29,6 +29,17 @@ def list_runs(session: Session) -> list[models.EvalRun]:
     )
 
 
+def clear_runs(session: Session) -> int:
+    """Delete every run. Returns how many were removed.
+
+    Only the demo seeder's `--replace` uses this, to swap a stale single run for the demo set;
+    nothing in the normal flow ever drops measured runs.
+    """
+    removed = session.query(models.EvalRun).delete()
+    session.commit()
+    return removed
+
+
 def save_run(
     session: Session,
     *,

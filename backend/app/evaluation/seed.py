@@ -11,7 +11,9 @@ deploy hook (`scripts/gcp.sh`) is safe to run before any baseline has been recor
 
 The seed files are exactly what `app.evaluation.ria_runner --save` writes: the `POST /api/eval/runs`
 body of a real measured run. Numbers here are never hand-written -- `AGENTS.md` forbids fabricated
-eval results (mock data is allowed only for internal documents).
+eval results (mock data is allowed only for internal documents). The hackathon dashboard demo has
+its own clearly-labelled `app.evaluation.demo_seed` (illustrative numbers in `demo_runs/`); this
+module and `baseline_run.json` stay for real measured runs only.
 
 Usage (from backend/): uv run python -m app.evaluation.seed [run.json ...]
 With no argument it uses the committed baseline next to this module, when present. Pass several
