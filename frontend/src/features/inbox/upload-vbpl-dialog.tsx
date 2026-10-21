@@ -142,7 +142,7 @@ export function UploadVbplDialog() {
         <DialogHeader>
           <DialogTitle>Tải lên Văn bản Pháp luật (VBPL)</DialogTitle>
           <DialogDescription>
-            Tải lên file PDF từ NHNN để hệ thống tự động bóc tách (PyMuPDF), chunking theo Điều/Khoản và ingest vào Vector DB (Tối đa 20 trang).
+            Tải lên file PDF từ NHNN để hệ thống tự động bóc tách (Tối đa 20 trang).
           </DialogDescription>
         </DialogHeader>
 
