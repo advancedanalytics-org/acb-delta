@@ -108,8 +108,8 @@ cmd_deploy() {
     # Build and start all services (frontend listens on 80/443; other services are internal)
     sudo $COMPOSE_CMD up -d --build --wait
 
-    # Seed baseline evaluation run so the dashboard is populated
-    sudo $COMPOSE_CMD exec -T api python -m app.evaluation.seed || true
+    # Seed the illustrative demo evaluation runs so the dashboard is populated (insert when empty)
+    sudo $COMPOSE_CMD exec -T api python -m app.evaluation.demo_seed || true
     sudo $COMPOSE_CMD ps"
 
   check_models
