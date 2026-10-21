@@ -85,6 +85,13 @@ export interface Impact {
   decision?: Decision
 }
 
+/** Cited VBPL clauses of one impact, grouped by article (Điều) for the review popup. */
+export interface VbplClauseGroup {
+  articleNumbering: string
+  articleTitle: string | null
+  clauses: string[]
+}
+
 export type DecisionAction = 'accept' | 'edit' | 'reject'
 
 export interface Reviewer {

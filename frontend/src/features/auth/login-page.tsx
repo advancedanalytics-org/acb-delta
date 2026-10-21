@@ -79,10 +79,10 @@ export function LoginPage() {
             Hệ thống nội bộ
           </span>
           <h1 className="mt-4 text-[2rem] leading-tight font-semibold tracking-tight">
-            Phân tích tác động pháp lý bằng AI
+            Regulatory Impact Analysis bằng AI
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-white/80">
-            Khi có văn bản pháp luật mới, Delta tìm ngay những văn bản nội bộ bị ảnh hưởng, đề xuất
+            Khi có văn bản pháp luật mới, RIA tìm ngay những văn bản nội bộ bị ảnh hưởng, đề xuất
             chỉnh sửa và để chuyên viên duyệt — nhanh, có kiểm soát.
           </p>
           <ul className="mt-7 space-y-3.5">
@@ -120,16 +120,14 @@ export function LoginPage() {
                 <AcbWordmark className="h-6" />
               </span>
               <div className="h-6 w-px bg-border" aria-hidden />
-              <div className="flex items-center gap-2">
-                <span className="grid size-7 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-                  Δ
-                </span>
-                <span className="text-sm font-semibold">Delta</span>
+              <div className="leading-tight">
+                <p className="text-sm font-semibold">RIA</p>
+                <p className="text-xs text-muted-foreground">Regulatory Impact Analysis</p>
               </div>
             </div>
 
             <h2 className="mt-7 text-2xl font-semibold tracking-tight">Đăng nhập</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Hệ thống phân tích tác động pháp lý nội bộ.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Hệ thống Regulatory Impact Analysis nội bộ.</p>
 
             <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
               <div className="space-y-1.5">

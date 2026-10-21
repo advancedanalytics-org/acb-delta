@@ -7,6 +7,7 @@ import { TextDiff } from '@/components/text-diff'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useImpactVbplClauses } from '@/hooks/queries'
 import { formatDateTime } from '@/lib/format'
 import { actionLabel, reasonTags } from '@/lib/labels'
 
@@ -33,6 +34,9 @@ export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDet
   // A failed or skipped draft has no AI text: the reviewer can edit or reject, not accept.
   const hasProposal = Boolean(impact.finalText ?? impact.suggestedText)
   const [tags, setTags] = useState<string[]>([])
+  // The articles + clauses behind the citation, resolved from the real VBPL (empty while loading
+  // or for impacts with no RIA findings).
+  const { data: vbplClauses } = useImpactVbplClauses(impact.id)
 
   const decide = (action: DecisionAction) => {
     if (disabled) return
@@ -83,6 +87,22 @@ export function ImpactDetail({ impact, document, onDecide, disabled }: ImpactDet
         <Section title="Điều khoản VBPL mới">
           <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground whitespace-pre-line">{impact.changeClause}</p>
           <p className="mt-2 text-xs text-muted-foreground">Trích dẫn: {impact.citation}</p>
+          {vbplClauses && vbplClauses.length > 0 && (
+            <ul className="mt-1 space-y-1">
+              {vbplClauses.map((group) => {
+                const subClauses = group.clauses.filter((c) => c !== group.articleNumbering)
+                return (
+                  <li key={group.articleNumbering} className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      Điều {group.articleNumbering}
+                      {group.articleTitle ? ` — ${group.articleTitle}` : ''}
+                    </span>
+                    {subClauses.length > 0 && <> (khoản {subClauses.join(', ')})</>}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </Section>
 
         <Section title="Đoạn hiện hành bị ảnh hưởng">

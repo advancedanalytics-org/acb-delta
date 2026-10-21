@@ -16,6 +16,7 @@ import type {
   Reviewer,
   UploadVbplInput,
   Vbpl,
+  VbplClauseGroup,
 } from '@/api/types'
 
 /** Everything the screens need from the backend. Live API queries the real database and AI pipelines. */
@@ -25,6 +26,8 @@ export interface ApiClient {
   /** Delete a VBPL so its file can be uploaded again. Only a department head (`canDelete`) may. */
   deleteVbpl(vbpl: Vbpl, reviewerId: string): Promise<void>
   listImpacts(vbplId: string): Promise<Impact[]>
+  /** Cited VBPL clauses of one impact, grouped by article; [] when it has no RIA findings. */
+  getImpactVbplClauses(impactId: string): Promise<VbplClauseGroup[]>
   listDocuments(): Promise<InternalDocument[]>
   /** Newest first. */
   listAuditTrail(): Promise<AuditEntry[]>

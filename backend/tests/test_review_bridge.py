@@ -197,6 +197,28 @@ def test_category_types():
     assert "EQUIVALENT" not in review_bridge.TYPE_BY_CATEGORY
 
 
+def test_group_cited_by_article_orders_and_dedupes():
+    # One row per (article, cited clause); articles out of order and a duplicate clause.
+    rows = [
+        {"article_numbering": "17", "article_heading": "Xử lý vi phạm", "article_ordinal": 17,
+         "leaf_numbering": "17.5", "leaf_ordinal": 50},
+        {"article_numbering": "12", "article_heading": "Bảo vệ dữ liệu", "article_ordinal": 12,
+         "leaf_numbering": "12.3.c", "leaf_ordinal": 31},
+        {"article_numbering": "12", "article_heading": "Bảo vệ dữ liệu", "article_ordinal": 12,
+         "leaf_numbering": "12.3.d", "leaf_ordinal": 30},
+        {"article_numbering": "12", "article_heading": "Bảo vệ dữ liệu", "article_ordinal": 12,
+         "leaf_numbering": "12.3.d", "leaf_ordinal": 30},
+    ]  # fmt: skip
+    groups = review_bridge.group_cited_by_article(rows)
+    # Articles by their ordinal; cited clauses within by theirs; the duplicate kept once.
+    assert groups == [
+        {"article_numbering": "12", "article_title": "Bảo vệ dữ liệu",
+         "clauses": ["12.3.d", "12.3.c"]},
+        {"article_numbering": "17", "article_title": "Xử lý vi phạm", "clauses": ["17.5"]},
+    ]  # fmt: skip
+    assert review_bridge.group_cited_by_article([]) == []
+
+
 # --- full flow on Postgres ---
 
 
@@ -746,3 +768,38 @@ def test_head_of_department_deletes_reviewed_regulation_with_its_decisions(ria_c
     assert all(
         r["version_id"] != row["version_id"] for r in ria_client.get("/api/regulations").json()
     )
+
+
+def _citation_numberings(citation: str) -> set[str]:
+    """Clause numberings out of a citation like '99/2026/TT-NHNN, điều khoản 2.1, 2.3'."""
+    out: set[str] = set()
+    for part in citation.split(";"):
+        _, sep, tail = part.partition("điều khoản")
+        if sep:
+            out.update(n.strip() for n in tail.split(",") if n.strip())
+    return out
+
+
+@needs_db
+def test_impact_vbpl_clauses_groups_citation_by_article(ria_client, drafter):
+    """The popup endpoint regroups an impact's cited clauses under their real article (Điều)."""
+    job_id = _analyze(ria_client)
+    body = ria_client.post(f"/api/analyses/{job_id}/review").json()
+    assert _wait(ria_client, body["review_job_id"])["status"] == "succeeded"
+    impacts = ria_client.get(f"/api/vbpls/{body['vbpl_id']}/impacts").json()
+    # RIA-001's obligations sit under "Điều 2. Rà soát hồ sơ khách hàng định kỳ".
+    impact = next(i for i in impacts if i["category"] == "VALUE_CHANGE")
+
+    response = ria_client.get(f"/api/impacts/{impact['id']}/vbpl-clauses")
+    assert response.status_code == 200
+    groups = response.json()
+    assert groups, groups
+
+    # Cited clauses regroup under their article and match exactly the citation's numberings.
+    flat = [clause for group in groups for clause in group["clauses"]]
+    assert set(flat) == _citation_numberings(impact["citation"])
+    article2 = next(g for g in groups if g["articleNumbering"] == "2")
+    assert article2["articleTitle"] and "Rà soát" in article2["articleTitle"]
+    assert all(clause.startswith("2") for clause in article2["clauses"])
+
+    assert ria_client.get("/api/impacts/does-not-exist/vbpl-clauses").status_code == 404

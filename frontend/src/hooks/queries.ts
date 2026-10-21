@@ -16,6 +16,7 @@ import type {
 export const queryKeys = {
   vbpls: ['vbpls'] as const,
   impacts: (vbplId: string) => ['impacts', vbplId] as const,
+  impactVbplClauses: (impactId: string) => ['impact-vbpl-clauses', impactId] as const,
   documents: ['documents'] as const,
   documentClauses: (docId: string) => ['document-clauses', docId] as const,
   ingestInternalStatus: ['ingest-internal-status'] as const,
@@ -53,6 +54,15 @@ export const useImpacts = (vbplId: string | undefined) => {
         : false,
   })
 }
+
+/** The cited VBPL clauses of one impact (grouped by article). Lazy: only while a popup is open. */
+export const useImpactVbplClauses = (impactId: string | undefined) =>
+  useQuery({
+    queryKey: queryKeys.impactVbplClauses(impactId ?? ''),
+    queryFn: () => api.getImpactVbplClauses(impactId!),
+    enabled: Boolean(impactId),
+    staleTime: 5 * 60_000,
+  })
 
 export const useDocuments = () =>
   useQuery({
