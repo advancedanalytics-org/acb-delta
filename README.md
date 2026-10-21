@@ -46,13 +46,14 @@ Ví dụ dưới đây dùng **Nghị định 165/2025/NĐ-CP — Quy định ch
 
 ## 3. Văn bản pháp luật đi kèm
 
-Có thể dùng ngay văn bản trong thư mục [`docs/van-ban-phap-luat/`](docs/van-ban-phap-luat/):
+Có thể dùng ngay các văn bản trong thư mục [`docs/van-ban-phap-luat/`](docs/van-ban-phap-luat/):
 
 | Văn bản | Nội dung | Tệp |
 |---|---|---|
 | Nghị định 165/2025/NĐ-CP (30/6/2025) | Quy định chi tiết một số điều và biện pháp thi hành Luật Dữ liệu | [nghi-dinh-165-2025-nd-cp-quy-dinh-chi-tiet-luat-du-lieu.pdf](docs/van-ban-phap-luat/nghi-dinh-165-2025-nd-cp-quy-dinh-chi-tiet-luat-du-lieu.pdf) |
+| Luật 134/2025/QH15 (10/12/2025) | Trí tuệ nhân tạo | [luat-134-2025-qh15-tri-tue-nhan-tao.pdf](docs/van-ban-phap-luat/luat-134-2025-qh15-tri-tue-nhan-tao.pdf) |
 
-Tải tệp này lên ở [Bước 1](#bước-1--tải-lên-văn-bản-pháp-luật-mới) để xem toàn bộ luồng từ tải lên đến thẩm định.
+Gợi ý: bắt đầu với **Nghị định 165/2025/NĐ-CP**, tải lên ở [Bước 1](#bước-1--tải-lên-văn-bản-pháp-luật-mới) để xem toàn bộ luồng từ tải lên đến thẩm định.
 
 ## Tài liệu kỹ thuật
 
