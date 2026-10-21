@@ -6,6 +6,7 @@ import type { Impact, InternalDocument } from '@/api/types'
 import { ImpactStatusBadge, ImpactTypeLabel, SeverityBadge } from '@/components/status-badges'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { useImpactVbplClauses } from '@/hooks/queries'
 import { categoryMeaning, reasonTags } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -1289,6 +1290,8 @@ function HoverLegalCard({
   // Where "Quay lại" returns to from the reject form.
   const [rejectFrom, setRejectFrom] = useState<'view' | 'edit'>('view')
   const proposal = impact.finalText ?? impact.suggestedText
+  // Cited VBPL articles (Điều + tên) behind the citation; empty for impacts with no RIA findings.
+  const { data: vbplClauses } = useImpactVbplClauses(impact.id)
 
   const openRejectFeedback = (from: 'view' | 'edit') => {
     onSelect?.(impact.id)
@@ -1463,8 +1466,24 @@ function HoverLegalCard({
           <Scale className="size-3.5" />
           <span>Điều khoản VBPL mới</span>
         </div>
-        <div className="rounded-lg border border-primary/25 bg-primary/10 p-2.5 text-xs font-medium leading-relaxed text-foreground shadow-inner whitespace-pre-line">
-          {impact.changeClause}
+        <div className="rounded-lg border border-primary/25 bg-primary/10 p-2.5 text-xs font-medium leading-relaxed text-foreground shadow-inner">
+          {vbplClauses && vbplClauses.length > 0 && (
+            <div className="mb-1.5 space-y-0.5 border-b border-primary/20 pb-1.5">
+              {vbplClauses.map((group) => {
+                const subClauses = group.clauses.filter((c) => c !== group.articleNumbering)
+                return (
+                  <p key={group.articleNumbering} className="font-semibold text-primary">
+                    Điều {group.articleNumbering}
+                    {group.articleTitle ? ` — ${group.articleTitle}` : ''}
+                    {subClauses.length > 0 && (
+                      <span className="font-normal text-muted-foreground"> (khoản {subClauses.join(', ')})</span>
+                    )}
+                  </p>
+                )
+              })}
+            </div>
+          )}
+          <div className="whitespace-pre-line">{impact.changeClause}</div>
         </div>
         {impact.citation && (
           <p className="text-[11px] text-muted-foreground italic">
@@ -1494,6 +1513,9 @@ function HoverLegalCard({
                 <PencilLine className="size-3" />
                 <span>Đề xuất chỉnh sửa từ AI:</span>
               </div>
+              {impact.location && (
+                <p className="text-[11px] font-semibold text-foreground">{impact.location}</p>
+              )}
               <p className="max-h-40 overflow-auto whitespace-pre-wrap rounded border border-primary/25 bg-accent/25 px-2.5 py-1.5 text-xs leading-relaxed">
                 {proposal}
               </p>
@@ -1576,6 +1598,9 @@ function HoverLegalCard({
               <PencilLine className="size-3" />
               <span>Đề xuất chỉnh sửa từ AI:</span>
             </div>
+            {impact.location && (
+              <p className="text-[11px] font-semibold text-foreground">{impact.location}</p>
+            )}
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
